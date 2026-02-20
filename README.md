@@ -1,4 +1,4 @@
-# Nexus Chat
+# Nexus
 
 A self-hosted, real-time communication platform built with React, Node.js, Socket.IO, and WebRTC. Supports servers, channels, voice chat, direct messaging, custom emoji, soundboard, and more.
 
