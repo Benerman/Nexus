@@ -107,17 +107,46 @@ jobs:
           path: tests/e2e/playwright-report/
           retention-days: 30
 
-  # Summary job that waits for all matrix jobs
+  # Summary job that waits for all matrix jobs and notifies Claude
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
     needs: playwright-tests
-    if: always()
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
     steps:
-      - name: Check test results
-        run: |
-          if [ "${{ needs.playwright-tests.result }}" = "failure" ]; then
-            echo "::error::Some Playwright UI tests failed. Check the individual job logs and artifacts for details."
-            exit 1
-          fi
-          echo "All Playwright UI tests passed!"
+      - name: Notify Claude with test results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.playwright-tests.result }}';
+            const passed = result === 'success';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            let body;
+            if (passed) {
+              body = [
+                `@claude All **5 Playwright UI test projects passed** across desktop, mobile, and tablet viewports.`,
+                ``,
+                `**Run:** [${context.runId}](${runUrl})`,
+                ``,
+                `Please review the test results and screenshots in the artifacts and recommend any improvements to the test suite or application code.`,
+              ].join('\n');
+            } else {
+              body = [
+                `@claude **Playwright UI tests failed** in one or more browser/device projects.`,
+                ``,
+                `**Result:** \`${result}\``,
+                `**Run:** [${context.runId}](${runUrl})`,
+                ``,
+                `Please review the failure logs and screenshots in the artifacts, identify the root cause, and recommend code fixes.`,
+              ].join('\n');
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
