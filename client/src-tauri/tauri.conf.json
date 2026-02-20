@@ -10,7 +10,6 @@
     "beforeBuildCommand": "npx cross-env CI=false GENERATE_SOURCEMAP=false react-scripts build"
   },
   "app": {
-    "title": "Nexus",
     "windows": [
       {
         "title": "Nexus",
