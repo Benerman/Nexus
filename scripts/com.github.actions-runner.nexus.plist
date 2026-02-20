@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identifier -->
+    <key>Label</key>
+    <string>com.github.actions-runner.nexus</string>
+
+    <!-- Command to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__RUNNER_DIR__/run.sh</string>
+    </array>
+
+    <!-- Working directory for the runner -->
+    <key>WorkingDirectory</key>
+    <string>__RUNNER_DIR__</string>
+
+    <!-- Start automatically when user logs in -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart if the runner exits unexpectedly -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/github-actions-runner.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/github-actions-runner.error.log</string>
+
+    <!-- Environment variables available to the runner -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+
+    <!-- Run as a background process (lower priority) -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <!-- Wait 30 seconds before restarting after a crash -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+</dict>
+</plist>
