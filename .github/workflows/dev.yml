@@ -137,14 +137,14 @@ jobs:
 
       - name: Create keystore.properties
         run: |
-          cat > client/android/keystore.properties << EOF
+          cat > client/android/keystore.properties << 'EOF'
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=nexus-key
           storeFile=../nexus-release.keystore
           EOF
 
-      - name: Build signed debug APK
+      - name: Build signed release APK
         working-directory: client/android
         run: |
           chmod +x ./gradlew

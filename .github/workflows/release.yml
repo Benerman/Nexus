@@ -155,7 +155,7 @@ jobs:
 
       - name: Create keystore.properties
         run: |
-          cat > client/android/keystore.properties << EOF
+          cat > client/android/keystore.properties << 'EOF'
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=nexus-key
