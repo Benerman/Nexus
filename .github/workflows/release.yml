@@ -153,23 +153,31 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore
 
-      - name: Create keystore.properties
-        run: |
-          cat > client/android/keystore.properties << 'EOF'
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=nexus-key
-          storeFile=../nexus-release.keystore
-          EOF
-
       - name: Build signed release APK
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/nexus-release.keystore \
+            -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
+            -Pandroid.injected.signing.key.alias=nexus-key \
+            -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
+
+      - name: Verify APK exists
+        id: find-apk
+        run: |
+          echo "=== All APK files produced ==="
+          find client/android -name "*.apk" -type f
+          APK_PATH=$(find client/android/app/build/outputs/apk -name "*.apk" -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::No APK file found after build!"
+            exit 1
+          fi
+          echo "Found APK: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          files: client/android/app/build/outputs/apk/release/app-release.apk
+          files: ${{ steps.find-apk.outputs.apk_path }}
