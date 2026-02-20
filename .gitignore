@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build outputs
+client/build/
+dist/
+*.tgz
+
+# Environment files (contain secrets — NEVER commit these)
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+client/.env
+client/.env.*
+!client/.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Archives
+*.zip
+*.tar.gz
+
+# Docker volumes (local data)
+postgres-data/
+redis-data/
+
+# Capacitor native projects (generated, platform-specific)
+client/android/
+client/ios/
+
+# Tauri build artifacts
+client/src-tauri/target/
+
+# Electron build output
+client/dist/
+
+# Rust
+client/src-tauri/target/
+*.rs.bk
+
+# Test coverage
+coverage/
+
+# Keystores and certificates (NEVER commit these)
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+*.cert
+*.crt

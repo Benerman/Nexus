@@ -1,0 +1,448 @@
+/* ── Shared Command Styles ─────────────────────── */
+.cmd-message {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 6px;
+  border-left: 3px solid var(--brand-500);
+  max-width: 400px;
+}
+
+/* ── Dice Roll ────────────────────────────────── */
+.cmd-roll {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-left-color: #3B82F6;
+}
+
+.cmd-roll-dice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cmd-roll-icon {
+  font-size: 28px;
+}
+
+.cmd-roll-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.cmd-roll-result {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+  text-align: center;
+}
+
+.cmd-roll-result.animating {
+  color: var(--text-muted);
+  animation: roll-pulse 0.15s ease-in-out infinite alternate;
+}
+
+.cmd-roll-result.final {
+  color: #57F287;
+  animation: roll-land 0.3s ease-out;
+}
+
+@keyframes roll-pulse {
+  from { opacity: 0.6; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes roll-land {
+  0% { transform: scale(1.3); }
+  60% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+/* ── Coin Flip ────────────────────────────────── */
+.cmd-coinflip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-left-color: #FEE75C;
+}
+
+.cmd-coin {
+  font-size: 40px;
+  transition: transform 0.1s;
+}
+
+.cmd-coin.flipping {
+  animation: coin-flip 0.2s ease-in-out infinite;
+}
+
+@keyframes coin-flip {
+  0% { transform: rotateY(0deg); }
+  50% { transform: rotateY(90deg); }
+  100% { transform: rotateY(180deg); }
+}
+
+.cmd-coinflip-result {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.cmd-coinflip-result.visible {
+  opacity: 1;
+}
+
+/* ── Magic 8-Ball ─────────────────────────────── */
+.cmd-8ball {
+  border-left-color: #9B59B6;
+}
+
+.cmd-8ball-question {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.cmd-8ball-answer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #BB9AF7;
+}
+
+.cmd-8ball-icon {
+  font-size: 24px;
+}
+
+/* ── Choose ───────────────────────────────────── */
+.cmd-choose {
+  border-left-color: #3BA55D;
+}
+
+.cmd-choose-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cmd-choose-option {
+  padding: 4px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.cmd-choose-option.chosen {
+  background: rgba(59, 165, 61, 0.2);
+  color: #57F287;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(87, 242, 135, 0.4);
+}
+
+.cmd-choose-result {
+  font-size: 15px;
+  color: var(--text-normal);
+}
+
+.cmd-choose-result strong {
+  color: #57F287;
+}
+
+/* ── Rock Paper Scissors ──────────────────────── */
+.cmd-rps {
+  border-left-color: #E67E22;
+}
+
+.cmd-rps-matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.cmd-rps-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.cmd-rps-emoji {
+  font-size: 32px;
+}
+
+.cmd-rps-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.cmd-rps-vs {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.cmd-rps-result {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.cmd-rps-result.win {
+  color: #57F287;
+  background: rgba(87, 242, 135, 0.1);
+}
+
+.cmd-rps-result.lose {
+  color: #ED4245;
+  background: rgba(237, 66, 69, 0.1);
+}
+
+.cmd-rps-result.tie {
+  color: #FEE75C;
+  background: rgba(254, 231, 92, 0.1);
+}
+
+/* ── Server Info ──────────────────────────────── */
+.cmd-serverinfo {
+  border-left-color: #3B82F6;
+}
+
+.cmd-serverinfo-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--header-primary);
+  margin-bottom: 10px;
+}
+
+.cmd-serverinfo-grid {
+  display: flex;
+  gap: 20px;
+}
+
+.cmd-serverinfo-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cmd-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.cmd-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+/* ── Remind Me ────────────────────────────────── */
+.cmd-remindme {
+  border-left-color: #FEE75C;
+}
+
+.cmd-remindme-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.cmd-remindme-icon {
+  font-size: 18px;
+}
+
+.cmd-remindme-message {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+}
+
+/* ── Poll ─────────────────────────────────────── */
+.cmd-poll {
+  border-left-color: #3B82F6;
+  max-width: 450px;
+}
+
+.cmd-poll-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cmd-poll-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.cmd-poll-question {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--header-primary);
+  line-height: 1.3;
+}
+
+.cmd-poll-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cmd-poll-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s;
+  color: var(--text-normal);
+  font-size: 14px;
+  text-align: left;
+}
+
+.cmd-poll-option:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.cmd-poll-option.selected {
+  border-color: var(--brand-500);
+}
+
+.cmd-poll-bar {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  pointer-events: none;
+}
+
+.cmd-poll-option.selected .cmd-poll-bar {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.cmd-poll-option-text {
+  position: relative;
+  z-index: 1;
+  font-weight: 500;
+}
+
+.cmd-poll-option-count {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.cmd-poll-footer {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── Criticize / Daily Roast ──────────────────── */
+.cmd-criticize {
+  border-left-color: #E74C3C;
+}
+
+.cmd-criticize.daily {
+  border-left-color: #F39C12;
+  background: linear-gradient(135deg, var(--bg-secondary), rgba(243, 156, 18, 0.05));
+}
+
+.cmd-criticize-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cmd-criticize-icon {
+  font-size: 20px;
+}
+
+.cmd-criticize-target {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--header-primary);
+}
+
+.cmd-criticize-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(231, 76, 60, 0.2);
+  color: #E74C3C;
+  letter-spacing: 0.5px;
+}
+
+.cmd-criticize-badge.stop {
+  background: rgba(149, 165, 166, 0.2);
+  color: var(--text-muted);
+}
+
+.cmd-criticize-roast {
+  font-size: 14px;
+  color: var(--text-normal);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-style: italic;
+}
+
+.cmd-criticize-footer {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Responsive ───────────────────────────────── */
+@media (max-width: 768px) {
+  .cmd-message {
+    max-width: 100%;
+  }
+
+  .cmd-serverinfo-grid {
+    gap: 12px;
+  }
+
+  .cmd-rps-emoji {
+    font-size: 26px;
+  }
+}

@@ -1,0 +1,201 @@
+.server-context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-floating);
+  border-radius: 4px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  min-width: 220px;
+  padding: 6px;
+  animation: contextMenuFadeIn 0.1s ease-out;
+}
+
+.server-context-menu.scm-panel {
+  min-width: 300px;
+  max-width: 380px;
+  padding: 0;
+}
+
+.scm-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--bg-modifier-hover);
+}
+
+.scm-back-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.scm-back-btn:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--text-normal);
+}
+
+.scm-header-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--header-primary);
+}
+
+.scm-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scm-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--header-secondary);
+  letter-spacing: 0.5px;
+}
+
+.scm-description {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.scm-description strong {
+  color: var(--text-normal);
+}
+
+.scm-invite-result {
+  display: flex;
+  gap: 6px;
+}
+
+.scm-invite-input {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-modifier-hover);
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: var(--text-normal);
+  font-size: 13px;
+  font-family: var(--font-code, monospace);
+  outline: none;
+  min-width: 0;
+}
+
+.scm-invite-input:focus {
+  border-color: var(--brand-primary, #3B82F6);
+}
+
+.scm-copy-btn {
+  background: var(--brand-primary, #3B82F6);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.scm-copy-btn:hover {
+  background: #2563EB;
+}
+
+.scm-copy-btn.copied {
+  background: var(--green, #57F287);
+  color: #000;
+}
+
+.scm-action-btn {
+  background: var(--brand-primary, #3B82F6);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.scm-action-btn:hover {
+  background: #2563EB;
+}
+
+.scm-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scm-info-box {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scm-info-row {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.scm-info-row::before {
+  content: "• ";
+  color: var(--text-muted);
+}
+
+.scm-error {
+  font-size: 13px;
+  color: var(--red, #ED4245);
+  padding: 6px 10px;
+  background: rgba(237, 66, 69, 0.1);
+  border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+  .server-context-menu {
+    position: fixed;
+    left: 8px !important;
+    right: 8px;
+    bottom: 60px !important;
+    top: auto !important;
+    width: auto;
+    min-width: 0;
+    border-radius: 12px;
+    padding: 8px;
+  }
+  .server-context-menu.scm-panel {
+    min-width: 0;
+    max-width: none;
+  }
+  .server-context-menu .context-menu-item {
+    padding: 12px 16px;
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .scm-invite-input {
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+  .scm-action-btn {
+    padding: 12px 16px;
+    font-size: 15px;
+    min-height: 44px;
+  }
+  .scm-copy-btn {
+    padding: 10px 16px;
+    font-size: 15px;
+    min-height: 44px;
+  }
+}

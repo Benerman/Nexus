@@ -1,0 +1,413 @@
+.app {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* DM Call voice panel - shown above chat area */
+.dm-call-voice-panel {
+  max-height: 45vh;
+  min-height: 200px;
+  flex-shrink: 0;
+  border-bottom: 2px solid rgba(87, 242, 135, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.dm-call-voice-panel .voice-area {
+  flex: 1;
+  height: 100%;
+}
+
+.global-error {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--red); color: #fff; padding: 8px 24px; border-radius: 6px;
+  font-size: 14px; font-weight: 600; z-index: 9999; animation: popIn 0.2s ease;
+  pointer-events: none;
+}
+
+.connection-banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: var(--yellow, #faa61a); color: #000; text-align: center;
+  padding: 4px 12px; font-size: 13px; font-weight: 600; z-index: 10000;
+  animation: slideDown 0.3s ease;
+}
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
+/* Mobile overlay - hidden by default */
+.mobile-overlay {
+  display: none;
+}
+
+/* Mobile nav bar - hidden by default */
+.mobile-nav-bar {
+  display: none;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .app {
+    flex-direction: column;
+    position: relative;
+    touch-action: pan-y;
+  }
+
+  /* Mobile overlay backdrop */
+  .mobile-overlay {
+    display: block;
+    position: fixed;
+    top: 96px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .server-list {
+    flex-direction: row !important;
+    width: 100% !important;
+    height: 56px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(0,0,0,0.2);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 51;
+    padding: 4px 8px !important;
+  }
+
+  .server-item, .server-list-home, .add-server-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px;
+    font-size: 16px !important;
+  }
+
+  .server-list-separator {
+    width: 2px !important;
+    height: 20px !important;
+    margin: 0 4px !important;
+  }
+
+  /* Sidebar - swipe from left */
+  .sidebar {
+    position: fixed;
+    left: -280px;
+    top: 96px;
+    bottom: 0;
+    width: 280px !important;
+    z-index: 100;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 12px rgba(0,0,0,0.4);
+  }
+
+  .sidebar.mobile-open {
+    left: 0;
+  }
+
+  /* Member list - swipe from right */
+  .member-list {
+    position: fixed !important;
+    right: -240px;
+    top: 96px;
+    bottom: 0;
+    width: 240px !important;
+    z-index: 100;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -4px 0 12px rgba(0,0,0,0.4);
+  }
+
+  .member-list.mobile-open {
+    right: 0;
+  }
+
+  /* Mobile nav bar */
+  .mobile-nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    height: 40px;
+    z-index: 52;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0 4px;
+  }
+  .mobile-nav-left, .mobile-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .mobile-nav-left:active, .mobile-nav-right:active {
+    background: var(--bg-modifier-hover);
+  }
+  .mobile-nav-arrow {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+  .mobile-nav-channel {
+    font-weight: 600;
+    color: var(--text-normal);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-nav-online {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .main-content {
+    position: fixed;
+    top: 96px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    height: auto;
+  }
+
+  /* User panel lives inside the sidebar on mobile, not fixed */
+  .user-panel {
+    position: static;
+    flex-shrink: 0;
+    border-top: 1px solid rgba(0,0,0,0.2);
+  }
+
+  .user-info {
+    flex-direction: row !important;
+    padding: 8px 12px !important;
+  }
+
+  .user-controls {
+    gap: 8px !important;
+  }
+
+  /* Adjust chat area for mobile */
+  .chat-area {
+    padding-bottom: 0;
+    height: 100%;
+  }
+
+  .chat-input-wrap {
+    padding: 8px !important;
+  }
+
+  /* Settings modal handled in SettingsModal.css */
+
+  /* Voice area mobile adjustments */
+  .voice-area {
+    padding-top: 0;
+  }
+
+  .voice-users-grid {
+    gap: 8px !important;
+  }
+
+  .voice-user-tile {
+    width: 100px !important;
+    height: 100px !important;
+  }
+
+  .voice-ctrl-btn {
+    min-width: 60px !important;
+    padding: 8px 12px !important;
+    font-size: 11px !important;
+  }
+
+  .voice-ctrl-icon {
+    font-size: 16px !important;
+  }
+
+  /* User audio controls on mobile - show on tap */
+  .user-audio-controls {
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .user-volume-slider {
+    width: 60px !important;
+  }
+
+  .volume-label {
+    font-size: 10px !important;
+  }
+}
+
+/* Safe area for iPhone notch */
+@supports (padding: env(safe-area-inset-top)) {
+  @media (max-width: 768px) {
+    .server-list {
+      padding-top: env(safe-area-inset-top) !important;
+    }
+    .main-content {
+      padding-bottom: env(safe-area-inset-bottom) !important;
+    }
+  }
+}
+
+/* Landscape phones — apply mobile layout when height is very short */
+@media (max-height: 500px) and (orientation: landscape) {
+  .app {
+    flex-direction: column;
+    position: relative;
+    touch-action: pan-y;
+  }
+  .server-list {
+    flex-direction: row !important;
+    width: 100% !important;
+    height: 52px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(0,0,0,0.2);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 51;
+    padding: 4px 8px !important;
+  }
+  .server-item, .server-list-home, .add-server-btn {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px;
+  }
+  .server-list-separator {
+    width: 2px !important;
+    height: 20px !important;
+    margin: 0 4px !important;
+  }
+  .sidebar {
+    position: fixed;
+    left: -280px;
+    top: 88px;
+    bottom: 0;
+    width: 280px !important;
+    z-index: 100;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 12px rgba(0,0,0,0.4);
+  }
+  .sidebar.mobile-open {
+    left: 0;
+  }
+  .member-list {
+    position: fixed !important;
+    right: -240px;
+    top: 88px;
+    bottom: 0;
+    width: 240px !important;
+    z-index: 100;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -4px 0 12px rgba(0,0,0,0.4);
+  }
+  .member-list.mobile-open {
+    right: 0;
+  }
+  .mobile-nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 52px;
+    left: 0;
+    right: 0;
+    height: 36px;
+    z-index: 52;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0 4px;
+  }
+  .mobile-overlay {
+    display: block;
+    position: fixed;
+    top: 88px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+    backdrop-filter: blur(2px);
+  }
+  .main-content {
+    position: fixed;
+    top: 88px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    height: auto;
+  }
+  /* User panel stays inside sidebar on landscape */
+  .user-panel {
+    position: static;
+    flex-shrink: 0;
+    border-top: 1px solid rgba(0,0,0,0.2);
+  }
+  .user-info {
+    flex-direction: row !important;
+    padding: 6px 12px !important;
+  }
+  .voice-controls {
+    padding: 6px !important;
+    gap: 4px !important;
+  }
+  .voice-ctrl-btn {
+    min-width: 48px !important;
+    padding: 6px 8px !important;
+    font-size: 10px !important;
+  }
+  .voice-ctrl-icon {
+    font-size: 16px !important;
+  }
+}
+
+/* Tablet */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar {
+    width: 200px !important;
+  }
+
+  .voice-users-grid {
+    gap: 8px !important;
+  }
+
+  .voice-user-tile {
+    width: 120px !important;
+    height: 120px !important;
+  }
+}

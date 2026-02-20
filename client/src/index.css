@@ -1,0 +1,81 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #1a1c1f;
+  --bg-secondary: #141618;
+  --bg-tertiary: #111214;
+  --bg-modifier-hover: rgba(255,255,255,0.06);
+  --bg-modifier-active: rgba(255,255,255,0.1);
+  --bg-modifier-selected: rgba(59,130,246,0.3);
+  --bg-floating: #18191c;
+
+  --text-normal: #dcddde;
+  --text-muted: #72767d;
+  --text-link: #00b0f4;
+  --text-positive: #57f287;
+  --text-warning: #faa61a;
+  --text-danger: #ed4245;
+  --header-primary: #ffffff;
+  --header-secondary: #b9bbbe;
+
+  --brand-500: #3B82F6;
+  --brand-600: #2563EB;
+  --brand-experiment: #3B82F6;
+  --brand-primary: #3B82F6;
+  --green: #3ba55c;
+  --red: #ed4245;
+  --yellow: #faa61a;
+
+  --channel-default: #8e9297;
+  --channels-default: #8e9297;
+
+  --interactive-normal: #b9bbbe;
+  --interactive-hover: #dcddde;
+  --interactive-active: #ffffff;
+  --interactive-muted: #4f545c;
+
+  --scrollbar-thin-thumb: #202225;
+  --scrollbar-thin-track: transparent;
+
+  --elevation-low: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05);
+  --elevation-medium: 0 4px 4px rgba(0,0,0,0.16);
+  --elevation-high: 0 8px 16px rgba(0,0,0,0.24);
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-code: 'Courier New', monospace;
+
+  --sidebar-width: 240px;
+  --server-list-width: 72px;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-primary);
+  color: var(--text-normal);
+  -webkit-font-smoothing: antialiased;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thin-thumb); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2d2f33; }
+
+button { font-family: var(--font-body); cursor: pointer; border: none; outline: none; touch-action: manipulation; }
+input, textarea { font-family: var(--font-body); outline: none; border: none; }
+a { touch-action: manipulation; }
+
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes popIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes speaking { 0%,100% { box-shadow: 0 0 0 2px var(--green); } 50% { box-shadow: 0 0 0 4px var(--green); } }

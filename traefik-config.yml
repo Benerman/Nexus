@@ -1,0 +1,120 @@
+# Traefik Dynamic Configuration for Nexus
+# Add this to your Traefik dynamic configuration file on the Traefik server
+
+http:
+  # Routers
+  routers:
+    # API/WebSocket Router (handles Socket.io connections)
+    nexus-api:
+      rule: "Host(`nexus.example.com`) && PathPrefix(`/socket.io`)"
+      entryPoints:
+        - websecure
+      service: nexus-api-service
+      middlewares:
+        - nexus-websocket-headers
+        - nexus-ratelimit
+      tls:
+        certResolver: letsencrypt
+
+    # Frontend Router (handles all other requests)
+    nexus-client:
+      rule: "Host(`nexus.example.com`)"
+      entryPoints:
+        - websecure
+      service: nexus-client-service
+      priority: 1  # Lower priority so /socket.io takes precedence
+      middlewares:
+        - nexus-security-headers
+      tls:
+        certResolver: letsencrypt
+
+  # Services
+  services:
+    # Backend API Service (Node.js + Socket.io)
+    nexus-api-service:
+      loadBalancer:
+        servers:
+          - url: "http://YOUR_SERVER_IP:3001"  # Replace with your server IP:port
+
+        # CRITICAL: Sticky sessions for Socket.io WebSocket connections
+        sticky:
+          cookie:
+            name: nexus_sticky_lb
+            secure: true
+            httpOnly: true
+            sameSite: lax
+
+        # Health check for API service
+        healthCheck:
+          path: /health
+          interval: 10s
+          timeout: 3s
+
+    # Frontend Client Service (Nginx)
+    nexus-client-service:
+      loadBalancer:
+        servers:
+          - url: "http://YOUR_SERVER_IP:3000"  # Replace with your server IP:port
+
+        # Health check for client service
+        healthCheck:
+          path: /
+          interval: 30s
+          timeout: 5s
+
+  # Middlewares
+  middlewares:
+    # WebSocket Headers - Required for Socket.io
+    nexus-websocket-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+          X-Forwarded-Host: "nexus.example.com"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+
+    # Security Headers for Frontend
+    nexus-security-headers:
+      headers:
+        # HSTS
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+
+        # Security headers
+        frameDeny: false
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+        # CSP (adjust for your needs)
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss://nexus.example.com https://nexus.example.com"
+
+    # Rate Limiting (optional but recommended)
+    nexus-ratelimit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+# TCP Configuration (if using TCP routing instead of HTTP)
+# Only use this if you're doing TCP passthrough
+tcp:
+  routers:
+    nexus-tcp:
+      rule: "HostSNI(`nexus.example.com`)"
+      entryPoints:
+        - websecure
+      service: nexus-tcp-service
+      tls:
+        passthrough: false
+        certResolver: letsencrypt
+
+  services:
+    nexus-tcp-service:
+      loadBalancer:
+        servers:
+          - address: "YOUR_SERVER_IP:3001"

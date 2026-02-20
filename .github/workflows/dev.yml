@@ -1,0 +1,144 @@
+name: Dev Build
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SERVER_URL: ${{ vars.SERVER_URL }}
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: dev-build-${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-build-${{ github.run_number }}
+          name: "Dev Build #${{ github.run_number }}"
+          body: |
+            **Development build from `dev` branch**
+
+            Commit: `${{ github.sha }}`
+            Branch: `dev`
+
+            > This is a pre-release build intended for testing.
+          prerelease: true
+          draft: false
+
+  build-tauri:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            args: ""
+            rust_targets: ""
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          - platform: windows-latest
+            args: ""
+            rust_targets: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_URL: ${{ env.SERVER_URL }}
+          GENERATE_SOURCEMAP: false
+        with:
+          projectPath: client
+          tagName: ${{ needs.create-release.outputs.tag }}
+          releaseName: "Dev Build #${{ github.run_number }}"
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
+
+  build-android:
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build React app
+        run: npx cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
+        working-directory: client
+
+      - name: Add Android platform
+        run: npx cap add android
+        working-directory: client
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+        working-directory: client
+
+      - name: Build debug APK
+        working-directory: client/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.tag }}
+          files: client/android/app/build/outputs/apk/debug/app-debug.apk

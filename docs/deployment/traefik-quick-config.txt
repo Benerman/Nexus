@@ -1,0 +1,114 @@
+═══════════════════════════════════════════════════════════════════
+  TRAEFIK REMOTE PROXY - QUICK CONFIGURATION REFERENCE
+═══════════════════════════════════════════════════════════════════
+
+ ADD TO YOUR TRAEFIK DYNAMIC CONFIG:
+
+1. TWO ROUTERS:
+   ┌─────────────────────────────────────────────────────────────┐
+   │ nexus-api (Socket.io/API)                                   │
+   │ Rule: Host(domain) && PathPrefix(/socket.io)               │
+   │ Priority: 10 (higher)                                       │
+   │ Service: nexus-api-service                                  │
+   │ Middleware: nexus-websocket-headers                         │
+   └─────────────────────────────────────────────────────────────┘
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │ nexus-client (Frontend)                                     │
+   │ Rule: Host(domain)                                          │
+   │ Priority: 1 (lower)                                         │
+   │ Service: nexus-client-service                               │
+   │ Middleware: nexus-security-headers                          │
+   └─────────────────────────────────────────────────────────────┘
+
+2. TWO SERVICES:
+   ┌─────────────────────────────────────────────────────────────┐
+   │ nexus-api-service:                                          │
+   │   - URL: http://YOUR_IP:3001                                │
+   │   - STICKY SESSION: YES (nexus_sticky_lb cookie)            │
+   │   - Health: /health                                         │
+   └─────────────────────────────────────────────────────────────┘
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │ nexus-client-service:                                       │
+   │   - URL: http://YOUR_IP:3000                                │
+   │   - Health: /                                               │
+   └─────────────────────────────────────────────────────────────┘
+
+3. MIDDLEWARE (WEBSOCKET):
+   ┌─────────────────────────────────────────────────────────────┐
+   │ nexus-websocket-headers:                                    │
+   │   customRequestHeaders:                                     │
+   │     X-Forwarded-Proto: "https"                              │
+   │     X-Forwarded-Host: "YOUR_DOMAIN"                         │
+   └─────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+ CRITICAL SETTINGS FOR SOCKET.IO:
+
+  ✓ Sticky Sessions:
+    sticky:
+      cookie:
+        name: nexus_sticky_lb
+        secure: true
+        httpOnly: true
+
+  ✓ WebSocket Headers:
+    X-Forwarded-Proto: "https"
+
+  ✓ Path Routing:
+    /socket.io → Backend (port 3001)
+    /* → Frontend (port 3000)
+
+  ✓ Priority:
+    API Router: Higher (10)
+    Client Router: Lower (1)
+
+═══════════════════════════════════════════════════════════════════
+
+ REPLACE THESE VALUES:
+
+  YOUR_DOMAIN      → nexus.example.com
+  YOUR_IP          → YOUR_SERVER_IP (Nexus server IP)
+  certResolver     → letsencrypt (your cert resolver name)
+
+═══════════════════════════════════════════════════════════════════
+
+ TESTING:
+
+  1. DNS Resolution:
+     $ nslookup YOUR_DOMAIN
+     → Should point to Traefik server
+
+  2. Backend Reachable (from Traefik):
+     $ curl http://YOUR_IP:3001/health
+     → {"status":"ok"}
+
+  3. WebSocket Test:
+     $ wscat -c wss://YOUR_DOMAIN/socket.io/?EIO=4&transport=websocket
+     → Should connect
+
+  4. Browser Console:
+     → Should see "transport: websocket" (not polling)
+
+═══════════════════════════════════════════════════════════════════
+
+ SECURITY CHECKLIST:
+
+  □ Sticky sessions enabled
+  □ HTTPS enforced (certResolver)
+  □ X-Forwarded-Proto header set
+  □ Firewall allows Traefik → Nexus ports
+  □ Direct port access blocked from internet
+  □ Rate limiting enabled (optional)
+
+═══════════════════════════════════════════════════════════════════
+
+ FILES:
+
+  traefik-config.yml          → Full Traefik configuration
+  TRAEFIK_REMOTE_CONFIG.md    → Detailed guide
+  .env.traefik.example        → Environment variables
+
+═══════════════════════════════════════════════════════════════════

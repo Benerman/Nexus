@@ -1,0 +1,192 @@
+.server-list {
+  width: 72px; background: var(--bg-tertiary); display: flex; flex-direction: column;
+  align-items: center; padding: 12px 0; gap: 8px; overflow-y: auto; flex-shrink: 0;
+}
+.server-list-home {
+  width: 48px; height: 48px; background: var(--red); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: border-radius 0.2s, background 0.2s; flex-shrink: 0;
+  position: relative;
+}
+.server-list-home:hover, .server-list-home.active { border-radius: 16px; background: #d63638; }
+.home-icon { font-size: 24px; color: #fff; line-height: 1; }
+.server-list-separator { width: 32px; height: 2px; background: var(--bg-modifier-hover); border-radius:1px; flex-shrink:0; }
+.server-item {
+  width: 48px; height: 48px; background: var(--bg-secondary); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  font-weight: 700; font-size: 18px; color: var(--text-normal);
+  transition: border-radius 0.2s, background 0.2s, color 0.2s, filter 0.2s;
+  flex-shrink: 0; position: relative; font-family: var(--font-display);
+}
+.server-item:hover, .server-item.active { border-radius: 16px; background: var(--red); color: #fff; }
+.server-item.has-custom-icon { background: transparent; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4)); }
+.server-item.has-custom-icon:hover, .server-item.has-custom-icon.active { background: transparent; }
+.server-active-pill {
+  position: absolute; left: -12px; top: 50%; transform: translateY(-50%);
+  width: 4px; height: 40px; background: #fff; border-radius: 0 4px 4px 0;
+}
+.add-server-btn { background: var(--bg-secondary); }
+.add-icon { font-size: 28px; color: var(--green); font-weight: 300; line-height: 1; }
+.add-server-btn:hover .add-icon { color: #fff; }
+.server-item-custom-icon {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
+  transition: border-radius 0.2s;
+}
+.server-item.active .server-item-custom-icon,
+.server-item:hover .server-item-custom-icon { border-radius: 16px; }
+
+/* Unread badge (red circle, bottom-right) */
+.server-unread-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: #f04747;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 8px;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-tertiary);
+  line-height: 1;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Muted indicator on server icon */
+.server-muted-indicator {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 10px;
+  line-height: 1;
+  z-index: 1;
+  pointer-events: none;
+  filter: grayscale(0.3);
+}
+
+/* Unread pill indicator (small white dot on left, shorter than active pill) */
+.server-unread-pill {
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 8px;
+  background: #fff;
+  border-radius: 0 4px 4px 0;
+}
+
+/* DM items in server list (promoted + pinned) */
+.server-item.dm-item {
+  width: 40px;
+  height: 40px;
+  overflow: visible;
+}
+.server-item.dm-item .server-item-custom-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.server-item.dm-item:hover { border-radius: 14px; }
+.server-item.dm-item:hover .server-item-custom-icon { border-radius: 14px; }
+
+/* Pin indicator (brand dot, top-right) */
+.dm-pin-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  background: var(--brand-primary, #3B82F6);
+  border-radius: 50%;
+  border: 2px solid var(--bg-tertiary);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dm-pin-indicator::after {
+  content: "\1F4CC";
+  font-size: 7px;
+  line-height: 1;
+}
+
+/* DM context menu */
+.dm-context-menu {
+  background: var(--bg-floating, #18191c);
+  border-radius: 4px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+  padding: 6px;
+  z-index: 10000;
+}
+.dm-ctx-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: var(--interactive-normal, #b9bbbe);
+  font-size: 13px;
+  text-align: left;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.dm-ctx-item:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--interactive-active, #fff);
+}
+
+/* Drag and drop reorder */
+.server-item[draggable="true"] { cursor: grab; }
+.server-item[draggable="true"]:active { cursor: grabbing; }
+.server-item.dragging { opacity: 0.4; }
+.server-item.drag-source { opacity: 0.4; }
+.server-item.drag-over {
+  box-shadow: 0 -3px 0 0 var(--brand-primary, #3B82F6);
+  margin-top: 3px;
+}
+
+@media (max-width: 768px) {
+  /* Active pill on bottom for horizontal layout */
+  .server-active-pill {
+    left: 50% !important;
+    top: auto !important;
+    bottom: -8px;
+    transform: translateX(-50%) !important;
+    width: 24px !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+  }
+  .server-unread-pill {
+    left: 50% !important;
+    top: auto !important;
+    bottom: -6px;
+    transform: translateX(-50%) !important;
+    width: 12px !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+  }
+  .server-unread-badge {
+    bottom: auto;
+    top: -4px;
+    right: -4px;
+  }
+  /* DM items smaller on mobile */
+  .server-item.dm-item {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px;
+  }
+  /* Disable drag on touch */
+  .server-item[draggable="true"] {
+    cursor: pointer;
+    -webkit-user-drag: none;
+  }
+}

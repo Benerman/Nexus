@@ -1,0 +1,29 @@
+.channel-context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-floating);
+  border-radius: 4px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
+  padding: 6px;
+  animation: contextMenuFadeIn 0.1s ease-out;
+}
+
+@media (max-width: 768px) {
+  .channel-context-menu {
+    position: fixed;
+    left: 8px !important;
+    right: 8px;
+    bottom: 8px !important;
+    top: auto !important;
+    width: auto;
+    min-width: 0;
+    border-radius: 12px;
+    padding: 8px;
+  }
+  .channel-context-menu .context-menu-item {
+    padding: 12px 16px;
+    font-size: 16px;
+    min-height: 44px;
+  }
+}

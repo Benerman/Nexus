@@ -1,0 +1,94 @@
+{
+  "name": "nexus",
+  "version": "1.0.0",
+  "private": true,
+  "homepage": "./",
+  "main": "electron/main.js",
+  "dependencies": {
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/keyboard": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@tauri-apps/api": "^2.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.0.1",
+    "react-scripts": "5.0.1",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.0",
+    "socket.io-client": "^4.6.1",
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "cross-env GENERATE_SOURCEMAP=false react-scripts build",
+    "build:web": "cross-env GENERATE_SOURCEMAP=false react-scripts build",
+    "build:mobile": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && npx cap sync",
+    "build:android": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && npx cap sync android",
+    "build:ios": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && npx cap sync ios",
+    "cap:android": "npx cap open android",
+    "cap:ios": "npx cap open ios",
+    "cap:sync": "npx cap sync",
+    "tauri:dev": "npx tauri dev",
+    "tauri:build": "npx tauri build",
+    "build:desktop-tauri": "npx tauri build",
+    "electron:dev": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && electron .",
+    "build:desktop-electron": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && npx electron-builder --publish never"
+  },
+  "build": {
+    "appId": "com.nexus.desktop",
+    "productName": "Nexus",
+    "directories": {
+      "buildResources": "electron"
+    },
+    "files": [
+      "build/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "icon": "electron/icon.png",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "win": {
+      "icon": "electron/icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "linux": {
+      "icon": "electron/icon.png",
+      "category": "Network;Chat",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "eslintConfig": {
+    "extends": ["react-app"],
+    "rules": {
+      "react-hooks/exhaustive-deps": "off"
+    }
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+  }
+}

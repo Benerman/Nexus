@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: nexus-postgres
+    environment:
+      - POSTGRES_DB=nexus_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - nexus-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Server
+  server:
+    build: ./server
+    container_name: nexus-server
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nexus_db
+      - REDIS_URL=redis://redis:6379
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - SESSION_EXPIRY=604800000
+      - REFRESH_EXPIRY=2592000000
+      - MAX_MESSAGE_LENGTH=2000
+      - MAX_ATTACHMENTS=4
+      - MAX_ATTACHMENT_SIZE=10485760
+      - ENABLE_GUEST_MODE=true
+      - RATE_LIMIT_MESSAGES=10
+      - RATE_LIMIT_WINDOW=10000
+      - LOG_LEVEL=info
+      - GIPHY_API_KEY=${GIPHY_API_KEY}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nexus-network
+
+  # Frontend Client
+  client:
+    build: ./client
+    container_name: nexus-client
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_SERVER_URL=http://localhost:3001
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - nexus-network
+
+networks:
+  nexus-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

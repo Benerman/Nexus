@@ -1,0 +1,104 @@
+.url-embed {
+  display: flex;
+  flex-direction: row;
+  background: var(--bg-tertiary);
+  border-left: 4px solid var(--brand-500);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 4px;
+  max-width: 520px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+.url-embed:hover {
+  background: var(--bg-modifier-hover);
+}
+.url-embed.youtube {
+  border-left-color: #ff0000;
+  flex-direction: column;
+}
+.url-embed-image {
+  position: relative;
+  flex-shrink: 0;
+}
+.url-embed:not(.youtube) .url-embed-image {
+  width: 80px;
+  height: 80px;
+}
+.url-embed:not(.youtube) .url-embed-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.url-embed.youtube .url-embed-image {
+  width: 100%;
+  max-height: 300px;
+}
+.url-embed.youtube .url-embed-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.url-embed-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.url-embed-content {
+  padding: 8px 12px;
+  overflow: hidden;
+  min-width: 0;
+}
+.url-embed-site {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.url-embed-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.url-embed-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (max-width: 768px) {
+  .url-embed {
+    max-width: 100%;
+  }
+  .url-embed:not(.youtube) .url-embed-image {
+    width: 60px;
+    height: 60px;
+  }
+  .url-embed.youtube .url-embed-image {
+    max-height: 200px;
+  }
+  .url-embed-content {
+    padding: 6px 10px;
+  }
+  .url-embed-title {
+    font-size: 13px;
+  }
+}

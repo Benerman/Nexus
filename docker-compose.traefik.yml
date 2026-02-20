@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: nexus-postgres
+    environment:
+      - POSTGRES_DB=nexus_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - nexus-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - nexus-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Server
+  server:
+    build: ./server
+    container_name: nexus-server
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nexus_db
+      - REDIS_URL=redis://redis:6379
+      - CLIENT_URL=https://${DOMAIN:-nexus.example.com}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - SESSION_EXPIRY=604800000
+      - REFRESH_EXPIRY=2592000000
+      - MAX_MESSAGE_LENGTH=2000
+      - MAX_ATTACHMENTS=4
+      - MAX_ATTACHMENT_SIZE=10485760
+      - ENABLE_GUEST_MODE=true
+      - RATE_LIMIT_MESSAGES=10
+      - RATE_LIMIT_WINDOW=10000
+      - LOG_LEVEL=info
+      - GIPHY_API_KEY=${GIPHY_API_KEY}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nexus-internal
+      - traefik-public
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+
+      # HTTP Router
+      - "traefik.http.routers.nexus-api.rule=Host(`${DOMAIN:-nexus.example.com}`) && PathPrefix(`/socket.io`, `/api`)"
+      - "traefik.http.routers.nexus-api.entrypoints=websecure"
+      - "traefik.http.routers.nexus-api.tls=true"
+      - "traefik.http.routers.nexus-api.tls.certresolver=letsencrypt"
+
+      # Service configuration
+      - "traefik.http.services.nexus-api.loadbalancer.server.port=3001"
+
+      # WebSocket support - CRITICAL for Socket.io
+      - "traefik.http.routers.nexus-api.middlewares=nexus-headers"
+      - "traefik.http.middlewares.nexus-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+      # Sticky sessions for WebSocket (optional but recommended)
+      - "traefik.http.services.nexus-api.loadbalancer.sticky.cookie=true"
+      - "traefik.http.services.nexus-api.loadbalancer.sticky.cookie.name=nexus_lb"
+
+  # Frontend Client
+  client:
+    build:
+      context: ./client
+      args:
+        - REACT_APP_SERVER_URL=https://${DOMAIN:-nexus.example.com}
+    container_name: nexus-client
+    environment:
+      - REACT_APP_SERVER_URL=https://${DOMAIN:-nexus.example.com}
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - traefik-public
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+
+      # HTTP Router - matches all requests except API/Socket.io
+      - "traefik.http.routers.nexus-client.rule=Host(`${DOMAIN:-nexus.example.com}`)"
+      - "traefik.http.routers.nexus-client.entrypoints=websecure"
+      - "traefik.http.routers.nexus-client.tls=true"
+      - "traefik.http.routers.nexus-client.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nexus-client.priority=1"
+
+      # Service configuration
+      - "traefik.http.services.nexus-client.loadbalancer.server.port=80"
+
+      # Security headers
+      - "traefik.http.routers.nexus-client.middlewares=nexus-security"
+      - "traefik.http.middlewares.nexus-security.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.nexus-security.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.nexus-security.headers.stsPreload=true"
+      - "traefik.http.middlewares.nexus-security.headers.forceSTSHeader=true"
+
+networks:
+  # External network shared with Traefik
+  traefik-public:
+    external: true
+
+  # Internal network for database/redis
+  nexus-internal:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
