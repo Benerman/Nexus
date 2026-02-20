@@ -1,0 +1,16 @@
+{
+  "name": "nexus-e2e-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright UI uptime tests for Nexus",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:desktop": "npx playwright test --project=desktop-chrome",
+    "test:mobile": "npx playwright test --project=mobile-chrome --project=mobile-safari",
+    "test:all": "npx playwright test",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}
