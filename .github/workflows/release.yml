@@ -155,7 +155,7 @@ jobs:
 
       - name: Create keystore.properties
         run: |
-          cat > client/android/keystore.properties << EOF
+          cat > client/android/keystore.properties << 'EOF'
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=nexus-key
@@ -172,4 +172,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          files: client/android/app/build/outputs/apk/release/nexus-release.apk
+          files: client/android/app/build/outputs/apk/release/app-release.apk
