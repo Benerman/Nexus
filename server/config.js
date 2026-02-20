@@ -52,5 +52,11 @@ module.exports = {
   rateLimit: {
     messages: parseInt(process.env.RATE_LIMIT_MESSAGES) || 10,
     window: parseInt(process.env.RATE_LIMIT_WINDOW) || 10000 // 10 seconds
+  },
+
+  webrtc: {
+    stunUrls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',').map(s => s.trim()),
+    turnUrl: process.env.TURN_URL || '',
+    turnSecret: process.env.TURN_SECRET || '',
   }
 };

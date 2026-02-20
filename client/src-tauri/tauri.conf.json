@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,6 +37,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "shortDescription": "A modern chat and voice communication platform",
+    "longDescription": "Nexus is a self-hosted chat and voice communication platform featuring text channels, voice channels with WebRTC, direct messaging, screen sharing, custom emojis, soundboards, and more.",
+    "category": "SocialNetworking",
     "windows": {
       "wix": {
         "language": "en-US"
@@ -46,8 +50,21 @@
     },
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"]
+        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"],
+        "section": "net",
+        "desktopTemplate": null
+      },
+      "appimage": {
+        "bundleMediaFramework": true
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/OWNER/REPO/releases/latest/download/latest.json"
+      ]
     }
   }
 }

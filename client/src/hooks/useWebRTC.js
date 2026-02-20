@@ -1,15 +1,9 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 
-const RTC_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' }
-  ],
-  bundlePolicy: 'max-bundle',
-  rtcpMuxPolicy: 'require'
-};
+const DEFAULT_ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
 
 // Voice connection quality states
 const VOICE_STATUS = {
@@ -79,7 +73,7 @@ async function playVoiceCue(type, customSound, customSoundVolume = 100) {
   }
 }
 
-export function useWebRTC(socket, currentUser) {
+export function useWebRTC(socket, currentUser, activeServerId) {
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
@@ -131,6 +125,8 @@ export function useWebRTC(socket, currentUser) {
   const autoReconnectRef = useRef(null); // Timeout for auto-reconnect
   const reconnectAttemptsRef = useRef(0);
   const currentVoiceChannelRef = useRef(null); // Ref mirror for use in callbacks
+  const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
+  const iceTimeoutsRef = useRef({}); // targetId -> timeout for ICE checking state
 
   const speakingIntervalsRef = useRef({}); // socketId -> intervalId
   const speakingSourcesRef = useRef({});  // socketId -> MediaStreamAudioSourceNode
@@ -187,7 +183,11 @@ export function useWebRTC(socket, currentUser) {
     if (peersRef.current[targetId]) {
       try { peersRef.current[targetId].close(); } catch (_) {}
     }
-    const peer = new RTCPeerConnection(RTC_CONFIG);
+    const peer = new RTCPeerConnection({
+      iceServers: iceServersRef.current,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
+    });
     peersRef.current[targetId] = peer;
 
     // Track whether this peer is making an offer (for glare detection)
@@ -279,6 +279,24 @@ export function useWebRTC(socket, currentUser) {
         setRemoteScreenStreams(prev => { const n = {...prev}; delete n[targetId]; return n; });
         delete analyserRef.current[targetId];
         setActiveSpeakers(prev => { const n = new Set(prev); n.delete(targetId); return n; });
+      }
+    };
+
+    // ICE timeout detection — if stuck in 'checking' for 15s, warn user
+    peer.oniceconnectionstatechange = () => {
+      const iceState = peer.iceConnectionState;
+      if (iceState === 'checking') {
+        iceTimeoutsRef.current[targetId] = setTimeout(() => {
+          if (peer.iceConnectionState === 'checking') {
+            setVoiceStatus(VOICE_STATUS.DEGRADED);
+            setVoiceStatusMessage('Connection is taking longer than expected — you may be behind a restrictive firewall');
+          }
+        }, 15000);
+      } else {
+        if (iceTimeoutsRef.current[targetId]) {
+          clearTimeout(iceTimeoutsRef.current[targetId]);
+          delete iceTimeoutsRef.current[targetId];
+        }
       }
     };
 
@@ -557,6 +575,19 @@ export function useWebRTC(socket, currentUser) {
   }, [isDeafened]);
 
   const initExistingPeers = useCallback((peers) => {
+    if (!peers || peers.length === 0) {
+      // No peers in channel — we're connected, just waiting for others
+      const waitingMessages = [
+        'Waiting for others to join the party...',
+        'You have the stage all to yourself!',
+        'It\'s quiet in here... too quiet.',
+        'First one here! Gold star for punctuality.',
+        'Echo... echo... echo...',
+      ];
+      setVoiceStatus(VOICE_STATUS.CONNECTED);
+      setVoiceStatusMessage(waitingMessages[Math.floor(Math.random() * waitingMessages.length)]);
+      return;
+    }
     const newRemoteStates = {};
     peers.forEach(({ socketId, isMuted, isDeafened }) => {
       if (!peersRef.current[socketId]) peersRef.current[socketId] = createPeer(socketId, true);
@@ -716,11 +747,31 @@ export function useWebRTC(socket, currentUser) {
     return !!audioProcessingRef.current;
   }, []);
 
-  const joinVoice = useCallback(async (channelId) => {
+  const joinVoice = useCallback(async (channelId, serverId) => {
     try {
       setVoiceStatus(VOICE_STATUS.CONNECTING);
       setVoiceStatusMessage('Connecting to voice...');
       reconnectAttemptsRef.current = 0;
+
+      // Fetch fresh ICE config for this server before creating peers
+      // Skip for DM/personal servers (no custom ICE config possible)
+      const sid = serverId || activeServerId;
+      if (socket && sid && !sid.startsWith('personal:')) {
+        try {
+          const iceResult = await new Promise((resolve) => {
+            const timeout = setTimeout(() => resolve(null), 5000);
+            socket.emit('voice:ice-config', { serverId: sid }, (result) => {
+              clearTimeout(timeout);
+              resolve(result);
+            });
+          });
+          if (iceResult?.iceServers?.length > 0) {
+            iceServersRef.current = iceResult.iceServers;
+          }
+        } catch (err) {
+          console.warn('[WebRTC] Failed to fetch ICE config, using defaults:', err);
+        }
+      }
 
       // Use saved input device if available, with noise suppression settings
       // Default to TRUE for browser-level processing — these are efficient and improve quality
@@ -761,7 +812,7 @@ export function useWebRTC(socket, currentUser) {
       setVoiceStatusMessage('');
       alert('Could not access microphone. Please allow microphone access and try again.');
     }
-  }, [socket, startSpeakingDetection, isMuted, setupAudioProcessing]);
+  }, [socket, startSpeakingDetection, isMuted, setupAudioProcessing, activeServerId]);
 
   const leaveVoice = useCallback(() => {
     // 0. Cancel any pending auto-reconnect and quality polling
@@ -801,6 +852,13 @@ export function useWebRTC(socket, currentUser) {
     setVoiceStatus(VOICE_STATUS.DISCONNECTED);
     setVoiceStatusMessage('');
     setVoiceQuality(null);
+
+    // Clean up ICE timeout timers
+    Object.values(iceTimeoutsRef.current).forEach(t => clearTimeout(t));
+    iceTimeoutsRef.current = {};
+
+    // Reset ICE servers to defaults for next join
+    iceServersRef.current = DEFAULT_ICE_SERVERS;
 
     // Clean up all speaking detection intervals and audio sources
     Object.values(speakingIntervalsRef.current).forEach(id => clearInterval(id));
@@ -876,8 +934,32 @@ export function useWebRTC(socket, currentUser) {
     // 4. Emit leave to reset server-side state
     socket.emit('voice:leave');
 
+    // Clean up ICE timeout timers
+    Object.values(iceTimeoutsRef.current).forEach(t => clearTimeout(t));
+    iceTimeoutsRef.current = {};
+
     // 5. Short delay then re-join
     await new Promise(r => setTimeout(r, 500));
+
+    // Fetch fresh ICE config for reconnection
+    // Skip for DM/personal servers (no custom ICE config possible)
+    const sid = activeServerId;
+    if (socket && sid && !sid.startsWith('personal:')) {
+      try {
+        const iceResult = await new Promise((resolve) => {
+          const timeout = setTimeout(() => resolve(null), 5000);
+          socket.emit('voice:ice-config', { serverId: sid }, (result) => {
+            clearTimeout(timeout);
+            resolve(result);
+          });
+        });
+        if (iceResult?.iceServers?.length > 0) {
+          iceServersRef.current = iceResult.iceServers;
+        }
+      } catch (err) {
+        console.warn('[WebRTC] Failed to fetch ICE config for reconnect, using previous:', err);
+      }
+    }
 
     try {
       const savedDevice = localStorage.getItem('nexus_audio_input');
@@ -909,7 +991,7 @@ export function useWebRTC(socket, currentUser) {
       setVoiceStatus(VOICE_STATUS.DEGRADED);
       setVoiceStatusMessage('Reconnection failed — try again');
     }
-  }, [socket, currentVoiceChannel, isMuted, cleanupAudioProcessing, setupAudioProcessing, startSpeakingDetection]);
+  }, [socket, currentVoiceChannel, isMuted, cleanupAudioProcessing, setupAudioProcessing, startSpeakingDetection, activeServerId]);
 
   const toggleMute = useCallback(() => {
     // Cannot unmute while deafened

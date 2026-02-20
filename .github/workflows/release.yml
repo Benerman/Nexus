@@ -150,7 +150,19 @@ jobs:
         run: npx cap sync android
         working-directory: client
 
-      - name: Build release APK
+      - name: Decode keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore
+
+      - name: Create keystore.properties
+        run: |
+          cat > client/android/keystore.properties << EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=nexus-key
+          storeFile=../nexus-release.keystore
+          EOF
+
+      - name: Build signed release APK
         working-directory: client/android
         run: |
           chmod +x ./gradlew
@@ -160,4 +172,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          files: client/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          files: client/android/app/build/outputs/apk/release/nexus-release.apk

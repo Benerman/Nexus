@@ -64,6 +64,9 @@ services:
       - LOG_LEVEL=info
       - GIPHY_API_KEY=${GIPHY_API_KEY}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - STUN_URLS=${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
+      - TURN_URL=${TURN_URL:-}
+      - TURN_SECRET=${TURN_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

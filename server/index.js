@@ -189,6 +189,11 @@ function makeServer(id, name, icon, ownerId, customIcon=null) {
 const COLORS = ['#3B82F6','#57F287','#FEE75C','#EB459E','#ED4245','#60A5FA','#3ba55c','#faa61a'];
 const AVATARS = ['🐺','🦊','🐱','🐸','🦁','🐙','🦄','🐧','🦅','🐉','🦋','🐻'];
 
+// ─── Health check endpoint (used by standalone app setup screen) ─────────────
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', name: 'Nexus' });
+});
+
 // ─── Webhook HTTP endpoint ───────────────────────────────────────────────────
 app.post('/api/webhooks/:webhookId/:token', async (req, res) => {
   const { webhookId, token } = req.params;
@@ -728,9 +733,9 @@ function findServerByChannelId(channelId) {
   return null;
 }
 
-// Rate limiter for soundboard plays (5 per 10 seconds per user)
+// Rate limiter for soundboard plays (10 per 10 seconds per user)
 const soundboardLimiter = new RateLimiterMemory({
-  points: 5,
+  points: 10,
   duration: 10,
 });
 
@@ -892,6 +897,39 @@ function serializeServer(serverId) {
     customEmojis: (srv.customEmojis || []).map(e => ({ id: e.id, name: e.name, contentType: e.content_type || e.contentType, animated: e.animated })),
     emojiSharing: srv.emojiSharing || false
   };
+}
+
+// Generate ephemeral TURN credentials using HMAC-SHA1 (coturn REST API / RFC 5766)
+function generateTurnCredentials(secret, userId) {
+  const ttl = 3600; // 1 hour
+  const timestamp = Math.floor(Date.now() / 1000) + ttl;
+  const username = `${timestamp}:${userId}`;
+  const hmac = crypto.createHmac('sha1', secret);
+  hmac.update(username);
+  const credential = hmac.digest('base64');
+  return { username, credential };
+}
+
+// Build ICE server list for a given server, using per-server overrides or instance defaults
+function buildIceServers(serverId, userId) {
+  const srv = state.servers[serverId];
+  const iceConfig = srv?.iceConfig;
+
+  const stunUrls = iceConfig?.stunUrls?.length > 0
+    ? iceConfig.stunUrls
+    : config.webrtc.stunUrls;
+
+  const turnUrl = iceConfig?.turnUrl || config.webrtc.turnUrl;
+  const turnSecret = iceConfig?.turnSecret || config.webrtc.turnSecret;
+
+  const servers = stunUrls.map(url => ({ urls: url }));
+
+  if (turnUrl && turnSecret) {
+    const { username, credential } = generateTurnCredentials(turnSecret, userId);
+    servers.push({ urls: turnUrl, username, credential });
+  }
+
+  return servers;
 }
 
 function leaveVoice(socket) {
@@ -1460,7 +1498,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('server:update', async ({ serverId, name, icon, description, customIcon, emojiSharing }) => {
+  socket.on('server:update', async ({ serverId, name, icon, description, customIcon, emojiSharing, iceConfig }) => {
     const user = state.users[socket.id];
     if (!user) return;
     const perms = getUserPerms(user.id, serverId);
@@ -1495,13 +1533,68 @@ io.on('connection', (socket) => {
         updates.emoji_sharing = srv.emojiSharing;
       }
 
+      // ICE config — owner-only
+      if (iceConfig !== undefined) {
+        if (srv.ownerId !== user.id) {
+          return socket.emit('error', { message: 'Only the server owner can configure STUN/TURN' });
+        }
+
+        if (iceConfig === null) {
+          // Clear custom config — revert to instance defaults
+          srv.iceConfig = null;
+          updates.ice_config = null;
+        } else {
+          // Validate
+          const stunPattern = /^(stun|stuns):/;
+          const turnPattern = /^(turn|turns):/;
+
+          if (iceConfig.stunUrls !== undefined) {
+            if (!Array.isArray(iceConfig.stunUrls) || !iceConfig.stunUrls.every(u => typeof u === 'string' && stunPattern.test(u))) {
+              return socket.emit('error', { message: 'Invalid STUN URLs — must start with stun: or stuns:' });
+            }
+          }
+          if (iceConfig.turnUrl !== undefined && iceConfig.turnUrl !== '') {
+            if (typeof iceConfig.turnUrl !== 'string' || !turnPattern.test(iceConfig.turnUrl)) {
+              return socket.emit('error', { message: 'Invalid TURN URL — must start with turn: or turns:' });
+            }
+          }
+          // Require a secret if setting a TURN URL and no existing secret is saved
+          const existingSecret = srv.iceConfig?.turnSecret;
+          if (iceConfig.turnUrl && !iceConfig.turnSecret && !existingSecret) {
+            return socket.emit('error', { message: 'TURN shared secret is required when TURN URL is set' });
+          }
+
+          const validatedConfig = {};
+          if (iceConfig.stunUrls?.length > 0) validatedConfig.stunUrls = iceConfig.stunUrls;
+          if (iceConfig.turnUrl) validatedConfig.turnUrl = iceConfig.turnUrl;
+          // Keep existing secret if not provided in this update
+          if (iceConfig.turnSecret) {
+            validatedConfig.turnSecret = iceConfig.turnSecret;
+          } else if (existingSecret && iceConfig.turnUrl) {
+            validatedConfig.turnSecret = existingSecret;
+          }
+
+          srv.iceConfig = Object.keys(validatedConfig).length > 0 ? validatedConfig : null;
+          updates.ice_config = srv.iceConfig ? JSON.stringify(srv.iceConfig) : null;
+        }
+      }
+
       // Update in database
       if (Object.keys(updates).length > 0) {
         await db.updateServer(serverId, updates);
         console.log(`[Server] ${user.username} updated server: ${serverId}`);
       }
 
-      io.emit('server:updated', { server: serializeServer(serverId) });
+      // ICE config changes are NOT broadcast — only acknowledge to caller
+      if (iceConfig !== undefined) {
+        socket.emit('server:ice-config:updated', { serverId, success: true });
+      }
+
+      // Only broadcast server:updated if non-ICE fields changed
+      const hasVisibleChanges = Object.keys(updates).some(k => k !== 'ice_config');
+      if (hasVisibleChanges) {
+        io.emit('server:updated', { server: serializeServer(serverId) });
+      }
     } catch (error) {
       console.error('[Server] Error updating server:', error);
       socket.emit('error', { message: 'Failed to update server' });
@@ -3715,6 +3808,32 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ─── Voice ICE Config ──────────────────────────────────────────────────────────
+  socket.on('voice:ice-config', ({ serverId }, callback) => {
+    const user = state.users[socket.id];
+    if (!user) return callback?.({ error: 'Not authenticated' });
+    const iceServers = buildIceServers(serverId, user.id);
+    callback?.({ iceServers });
+  });
+
+  // Owner-only: fetch raw ICE config for settings UI (never includes secrets in full, but shows structure)
+  socket.on('server:get-ice-config', ({ serverId }, callback) => {
+    const user = state.users[socket.id];
+    if (!user) return callback?.({ error: 'Not authenticated' });
+    const srv = state.servers[serverId];
+    if (!srv) return callback?.({ error: 'Server not found' });
+    if (srv.ownerId !== user.id) return callback?.({ error: 'Owner only' });
+    const iceConfig = srv.iceConfig || null;
+    // Return stunUrls and turnUrl but mask the secret (just indicate it's set)
+    callback?.({
+      iceConfig: iceConfig ? {
+        stunUrls: iceConfig.stunUrls || [],
+        turnUrl: iceConfig.turnUrl || '',
+        hasSecret: !!iceConfig.turnSecret
+      } : null
+    });
+  });
+
   // ─── Voice ────────────────────────────────────────────────────────────────────
   socket.on('voice:join', ({ channelId }) => {
     const user = state.users[socket.id];
@@ -4264,6 +4383,7 @@ async function convertDbMessages(dbMessages, channelId) {
         srv = makeServer(serverId, dbServer.name, dbServer.icon, dbServer.owner_id, dbServer.custom_icon);
         srv.description = dbServer.description || '';
         srv.emojiSharing = dbServer.emoji_sharing || false;
+        srv.iceConfig = dbServer.ice_config || null;
 
         // Clean up any orphaned categories for this server, then persist fresh defaults
         await db.query('DELETE FROM categories WHERE server_id = $1', [serverId]);
@@ -4365,7 +4485,8 @@ async function convertDbMessages(dbMessages, channelId) {
           members: {},
           channels: { text: textChannels, voice: voiceChannels },
           customEmojis: [],
-          emojiSharing: dbServer.emoji_sharing || false
+          emojiSharing: dbServer.emoji_sharing || false,
+          iceConfig: dbServer.ice_config || null
         };
       }
 

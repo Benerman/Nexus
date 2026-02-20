@@ -236,7 +236,7 @@ async function getServersForAccount(accountId) {
  * Update server
  */
 async function updateServer(serverId, updates) {
-  const allowedFields = ['name', 'icon', 'custom_icon', 'description', 'emoji_sharing'];
+  const allowedFields = ['name', 'icon', 'custom_icon', 'description', 'emoji_sharing', 'ice_config'];
   const fields = [];
   const values = [];
   let paramCount = 1;
@@ -1139,7 +1139,7 @@ async function initializeDatabase() {
   // Run incremental migrations
   const fs = require('fs');
   const path = require('path');
-  const migrations = ['002_dm_read_states.sql', '003_group_dms.sql', '004_mentions.sql', '005_command_data.sql', '006_custom_emojis.sql', '007_dm_unique_constraint.sql', '008_webhook_token.sql'];
+  const migrations = ['002_dm_read_states.sql', '003_group_dms.sql', '004_mentions.sql', '005_command_data.sql', '006_custom_emojis.sql', '007_dm_unique_constraint.sql', '008_webhook_token.sql', '009_server_ice_config.sql'];
   for (const migration of migrations) {
     try {
       const migFile = path.join(__dirname, 'migrations', migration);

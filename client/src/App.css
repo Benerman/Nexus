@@ -44,6 +44,14 @@
 }
 @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
 
+.update-banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: var(--green, #3ba55d); color: #fff; text-align: center;
+  padding: 6px 12px; font-size: 13px; font-weight: 600; z-index: 10001;
+  cursor: pointer; animation: slideDown 0.3s ease;
+}
+.update-banner:hover { filter: brightness(1.1); }
+
 /* Mobile overlay - hidden by default */
 .mobile-overlay {
   display: none;

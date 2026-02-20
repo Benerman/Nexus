@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import WebhookDocs from './WebhookDocs';
 import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/socketTimeout';
-import { getServerUrl } from '../config';
+import { getServerUrl, isStandaloneApp } from '../config';
+import { checkForUpdates } from '../utils/updater';
 import './SettingsModal.css';
 import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon, BellIcon, SoundboardIcon, EmojiIcon } from './icons';
 
@@ -320,7 +321,7 @@ function SettingsSidebar({ tabs, tab, setTab }) {
   );
 }
 
-export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, developerMode, onSetDeveloperMode }) {
+export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onChangeServer, developerMode, onSetDeveloperMode }) {
   const [tab, setTabRaw] = useState(initialTab || localStorage.getItem('nexus_settings_last_tab') || 'profile');
   const setTab = (t) => { setTabRaw(t); localStorage.setItem('nexus_settings_last_tab', t); };
   const [profileSaved, setProfileSaved] = useState(false);
@@ -453,6 +454,21 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [emojiSharing, setEmojiSharing] = useState(server?.emojiSharing || false);
   const emojiFileRef = useRef(null);
 
+  // ICE / STUN/TURN config (owner-only)
+  const [iceConfigOpen, setIceConfigOpen] = useState(false);
+  const [iceConfigLoaded, setIceConfigLoaded] = useState(false);
+  const [useCustomIce, setUseCustomIce] = useState(false);
+  const [iceStunUrls, setIceStunUrls] = useState('');
+  const [iceTurnUrl, setIceTurnUrl] = useState('');
+  const [iceTurnSecret, setIceTurnSecret] = useState('');
+  const [iceSaving, setIceSaving] = useState(false);
+  const [iceSaved, setIceSaved] = useState(false);
+
+  // About / Updates
+  const [updateStatus, setUpdateStatus] = useState('');
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+
   // Audio
   const [audioInputDevices, setAudioInputDevices] = useState([]);
   const [audioOutputDevices, setAudioOutputDevices] = useState([]);
@@ -497,6 +513,23 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     socket.on('user:password-changed', handlePasswordChanged);
     return () => { socket.off('webhook:created', h); socket.off('user:password-changed', handlePasswordChanged); };
   }, [socket]);
+
+  // Load ICE config when owner opens Voice/WebRTC section
+  useEffect(() => {
+    if (!iceConfigOpen || iceConfigLoaded || !isOwner || !socket || !server) return;
+    socket.emit('server:get-ice-config', { serverId: server.id }, (result) => {
+      setIceConfigLoaded(true);
+      if (result?.iceConfig) {
+        setUseCustomIce(true);
+        setIceStunUrls((result.iceConfig.stunUrls || []).join('\n'));
+        setIceTurnUrl(result.iceConfig.turnUrl || '');
+        // Secret is masked — show placeholder indicator if set
+        if (result.iceConfig.hasSecret) {
+          setIceTurnSecret('********');
+        }
+      }
+    });
+  }, [iceConfigOpen, iceConfigLoaded, isOwner, socket, server]);
 
   // Load friends list when Friends tab opens
   useEffect(() => {
@@ -1394,7 +1427,8 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       ...(userPerms.manageWebhooks || userPerms.admin ? [{id:'webhooks', label:'Webhooks', icon: <LinkIcon size={16} />}] : []),
       ...(userPerms.manageServer || userPerms.admin ? [{id:'soundboard', label:'Soundboard', icon: <SoundboardIcon size={16} />}] : []),
       ...(userPerms.manageEmojis || userPerms.admin ? [{id:'emojis', label:'Emojis', icon: <EmojiIcon size={16} />}] : []),
-    ] : [])
+    ] : []),
+    {id:'about', label:'About', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>}
   ];
 
   // Ensure user can only view tabs they have permission for
@@ -1743,8 +1777,25 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
               </div>
             </div>
 
-            {/* Logout */}
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            {/* Change Server / Logout */}
+            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {isStandaloneApp() && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--header-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 4 }}>
+                    Server Connection
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+                    Connected to: <span style={{ color: 'var(--text-normal)', fontWeight: 500 }}>{getServerUrl() || 'Default'}</span>
+                  </div>
+                  <button
+                    className="settings-btn"
+                    style={{ background: 'rgba(59,130,246,0.15)', color: '#3B82F6', border: '2px solid rgba(59,130,246,0.2)', fontWeight: 600 }}
+                    onClick={() => { if (window.confirm('This will disconnect you and return to the server setup screen. Continue?')) onChangeServer?.(); }}
+                  >
+                    Change Server
+                  </button>
+                </>
+              )}
               <button
                 className="settings-btn"
                 style={{ background: 'rgba(237,66,69,0.15)', color: 'var(--red)', border: '2px solid rgba(237,66,69,0.2)', fontWeight: 600 }}
@@ -2378,6 +2429,144 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                     }} />
                     <span className="toggle-slider" />
                   </label>
+                </div>
+              )}
+
+              {/* Voice / WebRTC — Owner Only */}
+              {isOwner && (
+                <div className="collapsible-section" style={{ marginTop: 24 }}>
+                  <button className="collapsible-header" onClick={() => setIceConfigOpen(p => !p)}>
+                    <span className={`collapsible-arrow ${iceConfigOpen ? 'open' : ''}`}>&#9654;</span>
+                    <span>Voice / WebRTC</span>
+                  </button>
+                  {iceConfigOpen && (
+                    <div className="collapsible-body" style={{ paddingTop: 12 }}>
+                      <p className="settings-hint" style={{ marginBottom: 12 }}>
+                        Configure custom STUN/TURN relay servers for this server. When disabled, the instance defaults are used.
+                        Custom relay servers can help users behind restrictive firewalls connect to voice.
+                      </p>
+                      <div className="audio-toggle" style={{ marginBottom: 16 }}>
+                        <div>
+                          <div className="audio-toggle-label">Use custom relay servers</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                            Override instance STUN/TURN defaults for this server
+                          </div>
+                        </div>
+                        <label className="toggle-switch">
+                          <input type="checkbox" checked={useCustomIce} onChange={e => {
+                            setUseCustomIce(e.target.checked);
+                            if (!e.target.checked && socket && server) {
+                              // Clear custom config
+                              socket.emit('server:update', { serverId: server.id, iceConfig: null });
+                              setIceStunUrls('');
+                              setIceTurnUrl('');
+                              setIceTurnSecret('');
+                              setIceSaved(true);
+                              setTimeout(() => setIceSaved(false), 2000);
+                            }
+                          }} />
+                          <span className="toggle-slider" />
+                        </label>
+                      </div>
+
+                      {useCustomIce && (
+                        <>
+                          <label className="settings-label">STUN Server URLs (one per line)</label>
+                          <textarea
+                            className="settings-input settings-textarea"
+                            value={iceStunUrls}
+                            onChange={e => setIceStunUrls(e.target.value)}
+                            placeholder={'stun:stun.l.google.com:19302\nstun:stun1.l.google.com:19302'}
+                            rows={3}
+                            style={{ fontFamily: 'monospace', fontSize: 13 }}
+                          />
+                          <p className="settings-hint" style={{ marginBottom: 12 }}>
+                            Each URL must start with <code>stun:</code> or <code>stuns:</code>
+                          </p>
+
+                          <label className="settings-label">TURN Server URL</label>
+                          <input
+                            className="settings-input"
+                            value={iceTurnUrl}
+                            onChange={e => setIceTurnUrl(e.target.value)}
+                            placeholder="turn:turn.example.com:3478"
+                            style={{ fontFamily: 'monospace', fontSize: 13 }}
+                          />
+                          <p className="settings-hint" style={{ marginBottom: 12 }}>
+                            Must start with <code>turn:</code> or <code>turns:</code>
+                          </p>
+
+                          <label className="settings-label">TURN Shared Secret</label>
+                          <input
+                            className="settings-input"
+                            type="password"
+                            value={iceTurnSecret}
+                            onChange={e => setIceTurnSecret(e.target.value)}
+                            placeholder="Shared secret for ephemeral credentials"
+                          />
+                          <p className="settings-hint" style={{ marginBottom: 16 }}>
+                            Used to generate short-lived credentials. The secret itself is never sent to clients.
+                            Changing this will require users to reconnect to voice.
+                          </p>
+
+                          <button
+                            className={`settings-btn ${iceSaved ? '' : 'primary'}`}
+                            disabled={iceSaving}
+                            style={iceSaved ? { background: 'var(--green)', color: '#fff', transition: 'all 0.2s ease' } : {}}
+                            onClick={() => {
+                              if (!socket || !server) return;
+
+                              // Validate
+                              const stunLines = iceStunUrls.split('\n').map(s => s.trim()).filter(Boolean);
+                              const stunPattern = /^(stun|stuns):/;
+                              const turnPattern = /^(turn|turns):/;
+
+                              for (const url of stunLines) {
+                                if (!stunPattern.test(url)) {
+                                  alert(`Invalid STUN URL: "${url}" — must start with stun: or stuns:`);
+                                  return;
+                                }
+                              }
+                              if (iceTurnUrl && !turnPattern.test(iceTurnUrl)) {
+                                alert('Invalid TURN URL — must start with turn: or turns:');
+                                return;
+                              }
+                              if (iceTurnUrl && !iceTurnSecret) {
+                                alert('TURN shared secret is required when a TURN URL is set');
+                                return;
+                              }
+
+                              setIceSaving(true);
+                              const iceConfig = {};
+                              if (stunLines.length > 0) iceConfig.stunUrls = stunLines;
+                              if (iceTurnUrl) iceConfig.turnUrl = iceTurnUrl;
+                              // Only send secret if user actually changed it (not the placeholder)
+                              if (iceTurnSecret && iceTurnSecret !== '********') {
+                                iceConfig.turnSecret = iceTurnSecret;
+                              }
+
+                              // Listen for acknowledgment
+                              const onAck = () => {
+                                setIceSaving(false);
+                                setIceSaved(true);
+                                setTimeout(() => setIceSaved(false), 2000);
+                              };
+                              socket.once('server:ice-config:updated', onAck);
+                              // Timeout fallback in case ack never arrives
+                              setTimeout(() => {
+                                socket.off('server:ice-config:updated', onAck);
+                                setIceSaving(false);
+                              }, 5000);
+
+                              socket.emit('server:update', { serverId: server.id, iceConfig });
+                            }}
+                          >
+                            {iceSaving ? 'Saving...' : iceSaved ? 'Saved' : 'Save ICE Config'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3340,6 +3529,82 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
             </div>
           )}
         </div>
+          {tab==='about' && (
+            <div className="settings-section">
+              <div style={{textAlign:'center', marginBottom: 24}}>
+                <img src="/logo192.png" alt="Nexus" style={{width: 80, height: 80, borderRadius: 16, marginBottom: 12}} />
+                <h2 style={{margin: '0 0 4px', fontSize: 22, color: 'var(--text-primary)'}}>Nexus</h2>
+                <p style={{margin: 0, fontSize: 13, color: 'var(--text-muted)'}}>Your Server, Your Rules</p>
+                <p style={{margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)'}}>Version 1.0.0</p>
+              </div>
+
+              <p style={{fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 20}}>
+                Nexus is a self-hosted chat and voice communication platform featuring text channels,
+                voice channels with WebRTC, direct messaging, screen sharing, custom emojis, soundboards, and more.
+              </p>
+
+              <div style={{display:'flex', flexDirection:'column', gap: 8, marginBottom: 20}}>
+                <a
+                  href="https://github.com/benerman/nexus"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display:'flex', alignItems:'center', gap: 8, padding: '10px 14px',
+                    background:'var(--bg-tertiary)', borderRadius: 8, color:'var(--text-primary)',
+                    textDecoration:'none', fontSize: 14, cursor: 'pointer'
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                  GitHub Repository
+                  <span style={{marginLeft:'auto', fontSize: 12, color:'var(--text-muted)'}}>github.com/benerman/nexus</span>
+                </a>
+              </div>
+
+              {isStandaloneApp() && (
+                <div style={{marginBottom: 20}}>
+                  <h3 style={{fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8}}>Updates</h3>
+                  <button
+                    className="settings-btn primary"
+                    disabled={updateChecking}
+                    onClick={async () => {
+                      setUpdateChecking(true);
+                      setUpdateStatus('');
+                      setUpdateInfo(null);
+                      await checkForUpdates({
+                        onStatus: (msg) => setUpdateStatus(msg),
+                        onUpdateAvailable: (info) => {
+                          setUpdateInfo(info);
+                          setUpdateStatus(`Version ${info.version} is available!`);
+                        },
+                        onError: (msg) => setUpdateStatus(msg || 'Could not check for updates'),
+                      });
+                      setUpdateChecking(false);
+                    }}
+                  >
+                    {updateChecking ? 'Checking...' : 'Check for Updates'}
+                  </button>
+                  {updateStatus && (
+                    <p style={{fontSize: 13, color: 'var(--text-secondary)', marginTop: 8}}>{updateStatus}</p>
+                  )}
+                  {updateInfo && (
+                    <button
+                      className="settings-btn primary"
+                      style={{marginTop: 8}}
+                      onClick={() => updateInfo.install?.()}
+                    >
+                      Download & Install v{updateInfo.version}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div style={{fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: 12}}>
+                <p style={{margin: '0 0 4px'}}>Made with care by the Nexus team.</p>
+                <p style={{margin: 0}}>Licensed under open source.</p>
+              </div>
+            </div>
+          )}
+
         {(() => {
           const saveMap = {
             'profile': { fn: saveProfile, saved: profileSaved, label: 'Save Profile' },

@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import VoiceArea from './components/VoiceArea';
 import LoginScreen from './components/LoginScreen';
+import ServerSetupScreen from './components/ServerSetupScreen';
 import MemberList from './components/MemberList';
 import SettingsModal from './components/SettingsModal';
 import UserContextMenu from './components/UserContextMenu';
@@ -13,10 +14,9 @@ import ServerContextMenu from './components/ServerContextMenu';
 import ChannelContextMenu from './components/ChannelContextMenu';
 import UserProfileModal from './components/UserProfileModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
-import { getServerUrl } from './config';
+import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp } from './config';
+import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
 import './App.css';
-
-const SERVER_URL = getServerUrl();
 const EMPTY_CHANNELS = { text: [], voice: [] };
 
 let renderCount = 0;
@@ -47,6 +47,7 @@ export default function App() {
   const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
   console.log(`[App] RENDER #${renderCount} at ${timestamp}`);
 
+  const [serverSetupNeeded, setServerSetupNeeded] = useState(() => needsServerSetup());
   const [socket, setSocket] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [servers, setServers] = useState([]);
@@ -115,7 +116,10 @@ export default function App() {
   const touchCurrentX = useRef(0);
   const touchCurrentY = useRef(0);
 
-  const webrtc = useWebRTC(socket, currentUser);
+  // Auto-updater state (Tauri only)
+  const [updateAvailable, setUpdateAvailable] = useState(null); // { version, notes, install }
+
+  const webrtc = useWebRTC(socket, currentUser, activeServerId);
   const webrtcRef = useRef(webrtc);
   webrtcRef.current = webrtc;
   const socketRef = useRef(null);
@@ -258,6 +262,16 @@ export default function App() {
     prevPropsRef.current = { socket, currentUser, servers, activeServerId, serverData, activeChannel };
   });
 
+  // Initialize auto-updater (Tauri desktop only)
+  useEffect(() => {
+    if (!isStandaloneApp()) return;
+    const callbacks = {
+      onUpdateAvailable: (info) => setUpdateAvailable(info),
+    };
+    registerMenuUpdateCheck(callbacks);
+    autoCheckOnStartup(callbacks);
+  }, []);
+
   // Auto-select first server if current one was deleted
   useEffect(() => {
     if (!activeServerId && servers.length > 0 && currentUser) {
@@ -393,7 +407,7 @@ export default function App() {
     }
 
     console.log('[App]  Creating new socket connection');
-    const s = io(SERVER_URL, {
+    const s = io(getServerUrl(), {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -686,7 +700,7 @@ export default function App() {
     });
     s.on('voice:joined', ({ peers, screenSharerId }) => {
       if (screenSharerId) setScreenSharerSocketId(screenSharerId);
-      if (peers?.length) webrtcRef.current.initExistingPeers(peers);
+      webrtcRef.current.initExistingPeers(peers || []);
     });
 
     // DM call events
@@ -1531,6 +1545,26 @@ export default function App() {
     setSettingsOpen(false);
   }, []);
 
+  const handleChangeServer = useCallback(() => {
+    // Disconnect, clear auth, clear server URL, show setup screen
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
+      setSocket(null);
+    }
+    localStorage.removeItem('nexus_token');
+    localStorage.removeItem('nexus_username');
+    setServerUrl(null);
+    setCurrentUser(null);
+    setSettingsOpen(false);
+    setServerSetupNeeded(true);
+  }, []);
+
+  if (serverSetupNeeded) {
+    return <ServerSetupScreen onConnect={() => setServerSetupNeeded(false)} />;
+  }
+
   if (!currentUser) {
     if (restoringSession) {
       return <div className="app" style={{ display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-primary, #1e1f22)', color:'var(--text-muted, #949ba4)', height:'100vh' }}>
@@ -1560,6 +1594,11 @@ export default function App() {
       {connectionState !== 'connected' && (
         <div className="connection-banner">
           {connectionState === 'connecting' ? 'Reconnecting...' : 'Disconnected — waiting to reconnect'}
+        </div>
+      )}
+      {updateAvailable && (
+        <div className="update-banner" onClick={() => updateAvailable.install?.()}>
+          Nexus v{updateAvailable.version} is available — click to update
         </div>
       )}
 
@@ -1753,6 +1792,7 @@ export default function App() {
           updateAudioProcessing={webrtc.updateAudioProcessing}
           onClose={() => setSettingsOpen(false)}
           onLogout={handleLogout}
+          onChangeServer={handleChangeServer}
           developerMode={developerMode}
           onSetDeveloperMode={(val) => { setDeveloperMode(val); localStorage.setItem('nexus_developer_mode', val ? 'true' : 'false'); }} />
       )}
