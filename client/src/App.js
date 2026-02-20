@@ -550,7 +550,18 @@ export default function App() {
     });
 
     s.on('channel:history', ({ channelId, messages: msgs, hasMore }) => {
-      setMessages(prev => ({ ...prev, [channelId]: msgs }));
+      setMessages(prev => {
+        const existing = prev[channelId] || [];
+        if (existing.length === 0) {
+          return { ...prev, [channelId]: msgs };
+        }
+        // Merge: keep cached messages, add any new ones from server
+        const existingIds = new Set(existing.map(m => m.id));
+        const newMsgs = msgs.filter(m => !existingIds.has(m.id));
+        if (newMsgs.length === 0) return prev;
+        const merged = [...existing, ...newMsgs].sort((a, b) => a.timestamp - b.timestamp);
+        return { ...prev, [channelId]: merged };
+      });
       setChannelHasMore(prev => ({ ...prev, [channelId]: !!hasMore }));
       // Mark channel as read when history loads (user is viewing it)
       if (msgs.length > 0 && activeChannelRef.current?.id === channelId) {
