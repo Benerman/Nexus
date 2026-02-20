@@ -32,7 +32,10 @@ export default function URLEmbed({ url }) {
 
     const fetchOG = async () => {
       try {
-        const resp = await fetch(`${SERVER_URL}/api/og?url=${encodeURIComponent(url)}`);
+        const token = localStorage.getItem('nexus_token');
+        const resp = await fetch(`${SERVER_URL}/api/og?url=${encodeURIComponent(url)}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
         if (!resp.ok) throw new Error('Failed');
         const json = await resp.json();
         if (!cancelled) {

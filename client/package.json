@@ -21,6 +21,8 @@
     "http-proxy-middleware": "^2.0.6"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
     "@capacitor/cli": "^6.0.0",
     "@tauri-apps/cli": "^2.0.0",
     "cross-env": "^7.0.3",
@@ -37,6 +39,7 @@
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",
     "cap:sync": "npx cap sync",
+    "tauri": "tauri",
     "tauri:dev": "npx tauri dev",
     "tauri:build": "npx tauri build",
     "build:desktop-tauri": "npx tauri build",

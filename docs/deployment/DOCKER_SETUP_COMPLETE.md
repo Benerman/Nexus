@@ -122,7 +122,7 @@ The initial migration creates these tables:
 **Social Features (Ready for Implementation):**
 - `dm_channels` - Direct message channels
 - `friendships` - Friend relationships and blocking
-- `webhooks` - Webhook configurations
+- `webhooks` - Webhook configurations (with token auth, persisted)
 - `invites` - Server invites
 - `reports` - User reports for moderation
 

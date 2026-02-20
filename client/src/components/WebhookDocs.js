@@ -20,8 +20,30 @@ export default function WebhookDocs({ onClose }) {
             <h3>Overview</h3>
             <p>
               Webhooks allow external services to send messages to your channels via HTTP POST requests.
-              Each webhook has a unique URL that can be used to post messages.
+              Each webhook has a unique URL containing a secret token that authenticates the request.
               Accepts Discord-compatible JSON payloads, so existing integrations and bots can work with minimal changes.
+            </p>
+            <p className="note">
+              <strong>Important:</strong> The webhook URL (including the token) is only shown once when the webhook is created.
+              Copy it immediately — there is no way to retrieve the token later. If you lose it, delete the webhook and create a new one.
+            </p>
+          </section>
+
+          {/* Authentication */}
+          <section>
+            <h3>Authentication</h3>
+            <p>
+              Webhooks are authenticated via a secret token embedded in the URL path. No additional headers or API keys are needed.
+            </p>
+            <p>
+              <strong>URL format:</strong> <code>{'http://<host>/api/webhooks/<webhookId>/<token>'}</code>
+            </p>
+            <ul>
+              <li><code>webhookId</code> — UUID identifying the webhook</li>
+              <li><code>token</code> — 64-character hex string (cryptographically random)</li>
+            </ul>
+            <p>
+              Requests with an invalid or missing token will receive a <code>401 Unauthorized</code> response.
             </p>
           </section>
 
@@ -31,13 +53,13 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>HTTP POST Request</span>
-                <button onClick={() => copyToClipboard(`curl -X POST http://localhost:3000/api/webhooks/YOUR_WEBHOOK_ID \\
+                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello from webhook!"}'`)}>
                   Copy
                 </button>
               </div>
-              <pre>{`curl -X POST http://localhost:3000/api/webhooks/YOUR_WEBHOOK_ID \\
+              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello from webhook!"}'`}</pre>
             </div>
@@ -289,13 +311,13 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>Bash</span>
-                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/abc123" \\
+                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello World!"}'`)}>
                   Copy
                 </button>
               </div>
-              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/abc123" \\
+              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello World!"}'`}</pre>
             </div>
@@ -304,7 +326,7 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>Bash</span>
-                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/abc123" \\
+                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "content": "Daily report",
@@ -319,7 +341,7 @@ export default function WebhookDocs({ onClose }) {
                   Copy
                 </button>
               </div>
-              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/abc123" \\
+              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "content": "Daily report",
@@ -342,7 +364,7 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>JavaScript</span>
-                <button onClick={() => copyToClipboard(`const webhookUrl = 'http://localhost:3000/api/webhooks/abc123';
+                <button onClick={() => copyToClipboard(`const webhookUrl = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN';
 
 const payload = {
   content: 'Hello from JavaScript!',
@@ -366,7 +388,7 @@ fetch(webhookUrl, {
                   Copy
                 </button>
               </div>
-              <pre>{`const webhookUrl = 'http://localhost:3000/api/webhooks/abc123';
+              <pre>{`const webhookUrl = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN';
 
 const payload = {
   content: 'Hello from JavaScript!',
@@ -395,7 +417,7 @@ fetch(webhookUrl, {
                 <span>Python</span>
                 <button onClick={() => copyToClipboard(`import requests
 
-webhook_url = 'http://localhost:3000/api/webhooks/abc123'
+webhook_url = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN'
 
 payload = {
     'content': 'Hello from Python!',
@@ -417,7 +439,7 @@ print(f'Response: {response.json()}')`)}>
               </div>
               <pre>{`import requests
 
-webhook_url = 'http://localhost:3000/api/webhooks/abc123'
+webhook_url = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN'
 
 payload = {
     'content': 'Hello from Python!',
@@ -460,9 +482,14 @@ print(f'Response: {response.json()}')`}</pre>
                   <td>Invalid payload (missing content or invalid format)</td>
                 </tr>
                 <tr>
-                  <td><code>404</code></td>
-                  <td>Not Found</td>
-                  <td>Webhook ID doesn't exist</td>
+                  <td><code>401</code></td>
+                  <td>Unauthorized</td>
+                  <td>Invalid webhook ID or token</td>
+                </tr>
+                <tr>
+                  <td><code>429</code></td>
+                  <td>Too Many Requests</td>
+                  <td>Rate limited (10 requests per 10 seconds)</td>
                 </tr>
                 <tr>
                   <td><code>500</code></td>
@@ -489,8 +516,14 @@ print(f'Response: {response.json()}')`}</pre>
           <section>
             <h3>Error Response</h3>
             <div className="code-block">
-              <pre>{`{
-  "error": "content is required and must be a string"
+              <pre>{`// Missing content
+{
+  "error": "content or embeds is required"
+}
+
+// Invalid token
+{
+  "error": "Invalid webhook ID or token"
 }`}</pre>
             </div>
           </section>
@@ -502,8 +535,9 @@ print(f'Response: {response.json()}')`}</pre>
               <li><strong>Content:</strong> Maximum 2000 characters</li>
               <li><strong>Username:</strong> Maximum 32 characters (optional)</li>
               <li><strong>Attachments:</strong> Maximum 4 per message</li>
+              <li><strong>Embeds:</strong> Maximum 10 per message</li>
               <li><strong>Attachment URLs:</strong> Must start with <code>http://</code>, <code>https://</code>, or <code>data:</code></li>
-              <li><strong>Rate Limiting:</strong> 10 messages per 10 seconds (configurable)</li>
+              <li><strong>Rate Limiting:</strong> 10 requests per 10 seconds</li>
             </ul>
           </section>
 
@@ -531,11 +565,14 @@ print(f'Response: {response.json()}')`}</pre>
           <section>
             <h3>💡 Tips</h3>
             <ul>
-              <li>Keep your webhook URL secret - anyone with the URL can post to your channel</li>
-              <li>Use custom usernames to identify different bots or services</li>
-              <li>Use emojis for avatars to make messages visually distinct</li>
-              <li>Test your webhook with curl before integrating into your application</li>
-              <li>Handle errors gracefully in your integration code</li>
+              <li><strong>Keep your webhook URL secret</strong> — the token in the URL is the only authentication. Anyone with the full URL can post to your channel.</li>
+              <li>The token is only shown once at creation time. Copy it immediately or you'll need to create a new webhook.</li>
+              <li>Store webhook URLs in environment variables or secrets managers, not in source code.</li>
+              <li>Use custom usernames to identify different bots or services.</li>
+              <li>Use emojis for avatars to make messages visually distinct.</li>
+              <li>Test your webhook with curl before integrating into your application.</li>
+              <li>Handle errors gracefully — check for 401 (bad token) and 429 (rate limited) responses.</li>
+              <li>Webhooks are persisted to the database and will continue to work after server restarts.</li>
             </ul>
           </section>
         </div>

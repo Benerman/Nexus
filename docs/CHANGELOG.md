@@ -34,11 +34,15 @@
 - Paste/drag-drop up to 4 images per message
 - Images sent as base64 data URLs
 
-##  Webhooks (FIXED)
-- Endpoint now at `/api/webhooks/:id` (was `/webhooks/:id`)
+##  Webhooks (FIXED + SECURED)
+- Endpoint now at `/api/webhooks/:id/:token` (token-authenticated)
+- Cryptographic token (64-char hex) generated at creation, shown once
+- Webhooks persisted to PostgreSQL `webhooks` table (survive restarts)
+- Loaded from DB on server startup and attached to channel objects
 - Proper CORS and express.json middleware
-- POST with `{"content":"message", "username":"BotName"}` 
+- POST with `{"content":"message", "username":"BotName"}`
 - Messages show with BOT badge
+- 401 response for invalid/missing token (previously anyone with UUID could post)
 
 ##  UI Improvements
 - **Toggle right sidebar** to hide member list

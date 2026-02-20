@@ -2967,12 +2967,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   📚 View Documentation
                 </button>
               </div>
-              <p className="settings-hint">POST JSON to a webhook URL to send a message to a channel.</p>
+              <p className="settings-hint">POST JSON to a webhook URL to send a message to a channel. Keep the token secret — anyone with the URL can post.</p>
               <div className="webhook-example-box">
                 <strong>Example curl:</strong>
                 <code className="webhook-curl-example">{`curl -X POST -H "Content-Type: application/json" \\
   -d '{"content":"Hello from webhook!","username":"MyBot"}' \\
-  http://YOUR_SERVER:3000/webhooks/WEBHOOK_ID`}</code>
+  http://YOUR_SERVER:3000/api/webhooks/WEBHOOK_ID/TOKEN`}</code>
               </div>
 
               {createdWebhook && (

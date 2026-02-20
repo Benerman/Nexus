@@ -222,6 +222,32 @@ function getRandomRoast(target) {
   return template.replace(/\{target\}/g, target);
 }
 
+// ─── SSRF Protection ──────────────────────────────────────────────────────────
+/**
+ * Check if a URL points to a private/internal address (SSRF protection).
+ * Returns true if the URL should be blocked.
+ */
+function isPrivateUrl(urlString) {
+  try {
+    const parsed = new URL(urlString);
+    const hostname = parsed.hostname;
+    // Only allow http(s)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return true;
+    // Strip IPv6 brackets for comparison
+    const bare = hostname.replace(/^\[|\]$/g, '');
+    // Block private IPs, localhost, link-local, and metadata endpoints
+    if (/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|169\.254\.|localhost|0\.0\.0\.0)/i.test(bare)) return true;
+    // Block IPv6 loopback and link-local
+    if (bare === '::1' || bare.startsWith('fe80:') || bare.startsWith('fc00:') || bare.startsWith('fd')) return true;
+    if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return true;
+    // Block cloud metadata endpoints
+    if (bare === '169.254.169.254') return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 module.exports = {
   hashPassword,
   hashPasswordLegacy,
@@ -231,6 +257,7 @@ module.exports = {
   DEFAULT_PERMS,
   makeCategory,
   getUserPerms,
+  isPrivateUrl,
   parseMentions,
   parseChannelLinks,
   getUserHighestRolePosition,

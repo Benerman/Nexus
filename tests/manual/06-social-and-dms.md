@@ -78,10 +78,10 @@
 
 ## TC-033: Webhook POST sends message with @mention and #channel rendering
 
-**Preconditions:** A webhook is configured in a text channel
+**Preconditions:** A webhook is configured in a text channel. You have the full webhook URL including the secret token (shown once at creation time).
 
 **Steps:**
-1. Send a POST request to `/api/webhooks/:webhookId` with:
+1. Send a POST request to `/api/webhooks/:webhookId/:token` with:
    ```json
    {
      "content": "Hello @username check #general",
@@ -96,3 +96,31 @@
 - #channel links are parsed and rendered as clickable links
 - Message shows webhook indicator (bot badge or distinct avatar)
 - Attachments and embeds are supported if provided
+
+## TC-034: Webhook token authentication
+
+**Preconditions:** A webhook is configured in a text channel
+
+**Steps:**
+1. POST to `/api/webhooks/:webhookId` (no token in path) with valid content
+2. POST to `/api/webhooks/:webhookId/invalid_token_here` with valid content
+3. POST to `/api/webhooks/:webhookId/:correctToken` with valid content
+
+**Expected Result:**
+- Step 1: 404 (route doesn't match)
+- Step 2: 401 `{"error": "Invalid webhook ID or token"}`
+- Step 3: 200 with message delivered to channel
+
+## TC-035: Webhook persistence across restart
+
+**Preconditions:** A webhook exists in a text channel
+
+**Steps:**
+1. Note the webhook in Settings → Webhooks tab
+2. Restart the server (docker-compose down && docker-compose up -d)
+3. Check Settings → Webhooks tab again
+4. POST to the webhook using the original URL
+
+**Expected Result:**
+- Webhook still appears in the channel's webhook list after restart
+- POST still works with the original URL and token

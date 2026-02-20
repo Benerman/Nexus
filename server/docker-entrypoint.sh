@@ -72,6 +72,7 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS exit_sound_duration REAL DEFAULT 0
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS intro_sound_volume REAL DEFAULT 100;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS exit_sound_volume REAL DEFAULT 100;
 " 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/008_webhook_token.sql 2>/dev/null || true
 echo "✓ Migrations complete"
 
 # Clean up expired tokens on startup

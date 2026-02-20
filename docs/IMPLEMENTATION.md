@@ -24,14 +24,20 @@
 - Line 190: Added key prop to main-content div
 
 #### 3. Webhook Improvements ✓
-**File**: [server/index.js](server/index.js)
+**Files**: [server/index.js](server/index.js), [server/db.js](server/db.js), [server/migrations/008_webhook_token.sql](server/migrations/008_webhook_token.sql)
 - Added comprehensive validation for webhook requests
 - Added logging to debug bot name issues
-- Added support for attachments in webhooks
+- Added support for attachments and embeds in webhooks
 - Better error messages
+- **Token authentication**: Webhooks now use a 64-char cryptographic token in the URL path (`/api/webhooks/:id/:token`)
+- **Database persistence**: Webhooks are saved to PostgreSQL and loaded on server startup
+- Token generated via `crypto.randomBytes(32)`, shown once at creation time
 
 **Changes**:
-- Lines 89-144: Enhanced webhook endpoint with validation, logging, and attachment support
+- Webhook HTTP endpoint: token-authenticated via DB lookup (`db.getWebhookByIdAndToken`)
+- `webhook:create` socket handler: generates token, saves to DB via `db.createWebhook`
+- `webhook:delete` socket handler: removes from DB via `db.deleteWebhook`
+- Server startup: loads webhooks from DB via `db.getWebhooksForServer`
 
 #### 4. GIF Validation & Debugging ✓
 **File**: [client/src/components/ChatArea.js](client/src/components/ChatArea.js)
@@ -95,7 +101,7 @@
 - `messages` - All messages (server + DM)
 - `dm_channels` - Direct message channels
 - `friendships` - Friends and blocking
-- `webhooks` - Webhook configurations
+- `webhooks` - Webhook configurations (with token auth, persisted)
 - `invites` - Server invites
 - `reports` - User reports for moderation
 
@@ -257,9 +263,10 @@
 ### Test Webhooks
 1. Go to Settings → Webhooks
 2. Create a new webhook for a channel
-3. Use curl or Postman to POST to the webhook URL:
+3. Copy the full URL (includes webhook ID and secret token) — it is only shown once
+4. Use curl or Postman to POST to the webhook URL:
    ```bash
-   curl -X POST http://localhost:3000/api/webhooks/WEBHOOK_ID \
+   curl -X POST http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN \
      -H "Content-Type: application/json" \
      -d '{
        "content": "Hello from webhook!",
@@ -269,7 +276,9 @@
        ]
      }'
    ```
-4. **Expected**: Message appears in the channel with bot name and attachment
+5. **Expected**: Message appears in the channel with bot name and attachment
+6. Restart the server and verify the webhook still works (persisted to DB)
+7. POST with an invalid token — **Expected**: 401 Unauthorized
 
 ### Test GIF Upload
 1. Try uploading a GIF larger than 5MB

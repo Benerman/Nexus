@@ -106,17 +106,20 @@ Permissions resolve through role stacking with channel-level overrides.
 - Available in message composer across the server
 
 ### Webhooks
-- Create webhooks per channel with auto-generated URLs
-- HTTP POST endpoint: `POST /api/webhooks/:webhookId`
+- Create webhooks per channel with auto-generated URLs containing a secret token
+- Token-authenticated HTTP POST endpoint: `POST /api/webhooks/:webhookId/:token`
+- Webhooks are persisted to the database and survive server restarts
 - Messages display with BOT badge
 - Built-in documentation with cURL, JavaScript, and Python examples
 - Rate limited (10 requests per 10 seconds)
 
 ```bash
-curl -X POST http://localhost:3001/api/webhooks/YOUR_ID \
+curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
   -H "Content-Type: application/json" \
   -d '{"content": "Hello!", "username": "MyBot", "avatar": "robot"}'
 ```
+
+> **Security:** The webhook URL contains a cryptographic token. Keep it secret — anyone with the full URL can post to your channel. The token is only shown once at creation time.
 
 ### Mobile
 - Responsive layout with 768px breakpoint
@@ -280,7 +283,7 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 | `dm_channels` / `dm_participants` | Direct message channels |
 | `dm_read_states` | Per-user read positions |
 | `friendships` | Friend relationships |
-| `webhooks` | Webhook configurations |
+| `webhooks` | Webhook configurations (with token auth) |
 | `invites` | Server invite links |
 | `custom_emojis` | Per-server custom emoji |
 | `server_bans` / `server_timeouts` | Moderation records |

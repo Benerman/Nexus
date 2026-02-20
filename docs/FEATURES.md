@@ -494,34 +494,46 @@ Server:
 
 - Created via Settings Modal, Webhooks tab
 - Socket event: `webhook:create` with `{serverId, channelId, name}`
-- Auto-generated unique webhook ID
-- URL format: `/api/webhooks/:webhookId`
-- Copy-to-clipboard button for webhook URL
-- Delete webhook via settings
+- Auto-generated unique webhook ID and cryptographic token (32 random bytes, hex-encoded)
+- URL format: `/api/webhooks/:webhookId/:token`
+- Token is shown only once at creation time — copy-to-clipboard button provided
+- Webhooks are persisted to the PostgreSQL `webhooks` table and survive server restarts
+- Loaded from DB on server startup and attached to their channel objects
+- Delete webhook via settings (removes from both in-memory state and DB)
 
 ### 9.2 Webhook Object
 
 ```
-Webhook:
+Webhook (in-memory):
   - id: UUID
-  - name: String
+  - name: String (max 32 chars)
   - channelId: UUID
-  - serverId: UUID
   - createdBy: UUID (user who created it)
   - createdAt: Timestamp
+
+Webhook (database row — additional fields):
+  - token: String (64-char hex, used for authentication)
+  - avatar: String (optional default avatar)
 ```
+
+> **Note:** The token is never sent to clients or included in `channel:updated` events.
+> It is only returned once in the `webhook:created` response as part of the full URL.
 
 ### 9.3 Webhook HTTP Endpoint
 
-- **URL**: `POST /api/webhooks/:webhookId`
-- **Rate Limit**: 10 requests per 10 seconds
+- **URL**: `POST /api/webhooks/:webhookId/:token`
+- **Authentication**: The `:token` path parameter authenticates the request. No other auth headers needed.
+- **Rate Limit**: 10 requests per 10 seconds (shared `/api` rate limiter)
 
 **Request Payload**:
 ```json
 {
-  "content": "Message text (required, max 2000 chars)",
+  "content": "Message text (max 2000 chars). Required if no embeds.",
   "username": "Optional bot name (max 32 chars)",
-  "avatar": "Optional emoji (default: robot emoji)",
+  "avatar": "Optional emoji (default: 🤖)",
+  "avatar_url": "Optional avatar image URL",
+  "embeds": [{"title": "...", "description": "...", "color": 5763719}],
+  "tts": false,
   "attachments": [
     {
       "url": "https://example.com/image.png",
@@ -533,24 +545,41 @@ Webhook:
 ```
 
 **Response Codes**:
-- 200: Success with `{id, success: true, username}`
-- 400: Missing or invalid content
-- 404: Webhook ID not found
+- 200: Success — `{id, success: true, username}`
+- 400: Missing or invalid content / invalid payload
+- 401: Invalid webhook ID or token
 - 429: Rate limited
+
+**Example**:
+```bash
+curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Hello!", "username": "MyBot"}'
+```
 
 ### 9.4 Webhook Message Display
 
 - Messages show with "BOT" badge in chat
 - Custom username displayed instead of real user
-- Avatar emoji shown on message
+- Avatar emoji or image URL shown on message
 - Supports up to 4 validated attachments
+- Supports up to 10 embeds (Discord-compatible format)
 - Content trimmed to 2000 characters
+- @mentions, @roles, and #channel references are parsed and rendered
 
 ### 9.5 Built-in Documentation
 
 - WebhookDocs component with usage examples
 - Code samples for cURL, JavaScript (fetch), and Python (requests)
-- Accessible from the Webhooks settings tab
+- Accessible from the Webhooks settings tab via "View Documentation" button
+
+### 9.6 Security
+
+- Webhook authentication uses a 64-character cryptographic token (32 bytes from `crypto.randomBytes`)
+- Tokens are stored in the database alongside the webhook, never exposed to other clients
+- The full URL (including token) is only shown once at creation time
+- Webhook messages are saved to the database with `is_webhook = true` and `author_id = null`
+- Keep your webhook URL secret — anyone with the full URL can post to the channel
 
 ---
 
@@ -1016,7 +1045,7 @@ All search/filter inputs across the application include a clear (X) button that 
 
 | Method | Endpoint | Auth | Request Body | Response |
 |--------|----------|------|-------------|----------|
-| POST | `/api/webhooks/:webhookId` | None | `{content, username?, avatar?, attachments?}` | `{id, success, username}` |
+| POST | `/api/webhooks/:webhookId/:token` | Token in URL path | `{content, username?, avatar?, avatar_url?, embeds?, tts?, attachments?}` | `{id, success, username}` |
 
 ---
 
@@ -1058,7 +1087,7 @@ All search/filter inputs across the application include a clear (X) button that 
     - `id` (UUID, PK), `user_id` (FK), `friend_id` (FK), `status` ('accepted'|'pending'|'blocked'), `created_at`
 
 12. **webhooks** - Webhook configurations
-    - `id` (UUID, PK), `channel_id` (FK), `server_id` (FK), `created_by` (FK), `name`, `created_at`
+    - `id` (UUID, PK), `channel_id` (FK), `name`, `avatar`, `token` (64-char hex, NOT NULL), `created_by` (FK), `created_at`
 
 13. **reports** - User reports
     - `id` (UUID, PK), `reporter_id` (FK), `reported_id` (FK), `reason`, `created_at`

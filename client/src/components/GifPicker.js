@@ -26,7 +26,10 @@ export default function GifPicker({ onSelect, onClose }) {
       ? `${SERVER_URL}/api/gifs/search?q=${encodeURIComponent(searchQuery)}&limit=${PAGE_SIZE}&offset=${offset}`
       : `${SERVER_URL}/api/gifs/trending?limit=${PAGE_SIZE}&offset=${offset}`;
 
-    fetch(endpoint)
+    const token = localStorage.getItem('nexus_token');
+    fetch(endpoint, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
       .then(r => r.json())
       .then(data => {
         const results = data.results || [];

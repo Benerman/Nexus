@@ -305,12 +305,12 @@ async function getServerMembers(serverId) {
 /**
  * Save a message
  */
-async function saveMessage({ channelId, authorId, content, attachments = [], isWebhook = false, webhookUsername, webhookAvatar, replyTo = null, mentions = null, commandData = null }) {
+async function saveMessage({ id, channelId, authorId, content, attachments = [], isWebhook = false, webhookUsername, webhookAvatar, replyTo = null, mentions = null, commandData = null }) {
   const result = await query(
-    `INSERT INTO messages (channel_id, author_id, content, attachments, is_webhook, webhook_username, webhook_avatar, reply_to, mentions, command_data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO messages (id, channel_id, author_id, content, attachments, is_webhook, webhook_username, webhook_avatar, reply_to, mentions, command_data)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
-    [channelId, authorId, content, JSON.stringify(attachments), isWebhook, webhookUsername, webhookAvatar, replyTo, mentions ? JSON.stringify(mentions) : '{}', commandData ? JSON.stringify(commandData) : null]
+    [id, channelId, authorId, content, JSON.stringify(attachments), isWebhook, webhookUsername, webhookAvatar, replyTo, mentions ? JSON.stringify(mentions) : '{}', commandData ? JSON.stringify(commandData) : null]
   );
   return result.rows[0];
 }
@@ -333,6 +333,17 @@ async function updateMessageReactions(messageId, reactions) {
   const result = await query(
     'UPDATE messages SET reactions = $1 WHERE id = $2 RETURNING *',
     [JSON.stringify(reactions), messageId]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Update a message's content and edited_at timestamp
+ */
+async function updateMessage(messageId, content, editedAt) {
+  const result = await query(
+    'UPDATE messages SET content = $1, edited_at = to_timestamp($2 / 1000.0) WHERE id = $3 RETURNING *',
+    [content, editedAt, messageId]
   );
   return result.rows[0];
 }
@@ -1128,7 +1139,7 @@ async function initializeDatabase() {
   // Run incremental migrations
   const fs = require('fs');
   const path = require('path');
-  const migrations = ['002_dm_read_states.sql', '003_group_dms.sql', '004_mentions.sql', '005_command_data.sql', '006_custom_emojis.sql', '007_dm_unique_constraint.sql'];
+  const migrations = ['002_dm_read_states.sql', '003_group_dms.sql', '004_mentions.sql', '005_command_data.sql', '006_custom_emojis.sql', '007_dm_unique_constraint.sql', '008_webhook_token.sql'];
   for (const migration of migrations) {
     try {
       const migFile = path.join(__dirname, 'migrations', migration);
@@ -1143,6 +1154,78 @@ async function initializeDatabase() {
       }
     }
   }
+}
+
+// ============================================================================
+// WEBHOOK FUNCTIONS
+// ============================================================================
+
+/**
+ * Create a webhook
+ */
+async function createWebhook({ id, channelId, name, avatar, token, createdBy }) {
+  const result = await query(
+    `INSERT INTO webhooks (id, channel_id, name, avatar, token, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [id, channelId, name, avatar || null, token, createdBy]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Get webhooks for a channel
+ */
+async function getWebhooksByChannel(channelId) {
+  const result = await query(
+    'SELECT id, channel_id, name, avatar, created_by, created_at FROM webhooks WHERE channel_id = $1 ORDER BY created_at ASC',
+    [channelId]
+  );
+  return result.rows;
+}
+
+/**
+ * Get webhook by ID
+ */
+async function getWebhookById(webhookId) {
+  const result = await query(
+    'SELECT * FROM webhooks WHERE id = $1',
+    [webhookId]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Get webhook by ID and token (primary auth function)
+ */
+async function getWebhookByIdAndToken(webhookId, token) {
+  const result = await query(
+    'SELECT w.*, c.server_id FROM webhooks w JOIN channels c ON w.channel_id = c.id WHERE w.id = $1 AND w.token = $2',
+    [webhookId, token]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Delete a webhook
+ */
+async function deleteWebhook(webhookId) {
+  await query('DELETE FROM webhooks WHERE id = $1', [webhookId]);
+}
+
+/**
+ * Get all webhooks for a server (joins with channels table)
+ */
+async function getWebhooksForServer(serverId) {
+  const result = await query(
+    `SELECT w.id, w.channel_id, w.name, w.avatar, w.token, w.created_by, w.created_at
+     FROM webhooks w
+     JOIN channels c ON w.channel_id = c.id
+     WHERE c.server_id = $1
+     ORDER BY w.created_at ASC`,
+    [serverId]
+  );
+  return result.rows;
 }
 
 // ============================================================================
@@ -1236,6 +1319,7 @@ module.exports = {
   // Message functions
   saveMessage,
   getChannelMessages,
+  updateMessage,
   updateMessageReactions,
   deleteMessage,
   getMessageById,
@@ -1293,6 +1377,14 @@ module.exports = {
 
   // Account sounds
   getAccountSounds,
+
+  // Webhook functions
+  createWebhook,
+  getWebhooksByChannel,
+  getWebhookById,
+  getWebhookByIdAndToken,
+  deleteWebhook,
+  getWebhooksForServer,
 
   // Custom emoji functions
   getCustomEmojis,

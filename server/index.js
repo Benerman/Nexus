@@ -76,6 +76,21 @@ const rateLimitMiddleware = async (req, res, next) => {
 // Apply rate limiting to API routes
 app.use('/api', rateLimitMiddleware);
 
+// Bearer token auth middleware for protected API routes
+const requireApiAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authorization required' });
+  }
+  const token = authHeader.slice(7);
+  const accountId = await db.validateToken(token);
+  if (!accountId) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+  req.accountId = accountId;
+  next();
+};
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: corsOptions,
@@ -175,8 +190,8 @@ const COLORS = ['#3B82F6','#57F287','#FEE75C','#EB459E','#ED4245','#60A5FA','#3b
 const AVATARS = ['🐺','🦊','🐱','🐸','🦁','🐙','🦄','🐧','🦅','🐉','🦋','🐻'];
 
 // ─── Webhook HTTP endpoint ───────────────────────────────────────────────────
-app.post('/api/webhooks/:webhookId', (req, res) => {
-  const { webhookId } = req.params;
+app.post('/api/webhooks/:webhookId/:token', async (req, res) => {
+  const { webhookId, token } = req.params;
   // Accept standard webhook field names
   const { content, username, avatar, avatar_url, attachments, embeds, tts } = req.body;
 
@@ -190,10 +205,16 @@ app.post('/api/webhooks/:webhookId', (req, res) => {
     return res.status(400).json({ error: 'username must be a string' });
   }
 
-  for (const srv of Object.values(state.servers)) {
-    for (const ch of [...srv.channels.text]) {
-      const wh = (ch.webhooks||[]).find(w => w.id === webhookId);
-      if (wh) {
+  // Authenticate webhook via DB token lookup
+  const wh = await db.getWebhookByIdAndToken(webhookId, token);
+  if (!wh) {
+    return res.status(401).json({ error: 'Invalid webhook ID or token' });
+  }
+
+  const srv = state.servers[wh.server_id];
+  if (srv) {
+    const ch = srv.channels.text.find(c => c.id === wh.channel_id);
+    if (ch) {
         // Validate and process attachments
         const validAttachments = (attachments || [])
           .slice(0, 4)
@@ -258,16 +279,33 @@ app.post('/api/webhooks/:webhookId', (req, res) => {
         if (state.messages[ch.id].length > 500) state.messages[ch.id] = state.messages[ch.id].slice(-500);
         io.to(`text:${ch.id}`).emit('message:new', msg);
 
+        // Save webhook message to database
+        try {
+          await db.saveMessage({
+            id: msg.id,
+            channelId: ch.id,
+            authorId: null,
+            content: msg.content,
+            attachments: validAttachments,
+            isWebhook: true,
+            webhookUsername: displayUsername,
+            webhookAvatar: displayAvatar,
+            replyTo: null,
+            mentions: webhookMentions
+          });
+        } catch (error) {
+          console.error('[Webhook] Error saving webhook message to database:', error);
+        }
+
         const preview = hasContent ? content.slice(0, 50) + (content.length > 50 ? '...' : '') : `[${validEmbeds.length} embed(s)]`;
         console.log(`[Webhook] ${displayUsername} (${webhookId}) posted to #${ch.name}: ${preview}`);
 
         return res.json({ id: msg.id, success: true, username: displayUsername });
-      }
     }
   }
 
-  console.warn(`[Webhook] Webhook ID not found: ${webhookId}`);
-  res.status(404).json({ error: 'Webhook not found' });
+  console.warn(`[Webhook] Channel not loaded in state for webhook: ${webhookId}`);
+  res.status(404).json({ error: 'Webhook channel not found' });
 });
 
 // ─── Auth endpoints ───────────────────────────────────────────────────────────
@@ -439,7 +477,7 @@ app.post('/api/server/:serverId/icon', async (req, res) => {
 // ─── GIF Search (Giphy) ───────────────────────────────────────────────────────
 const GIPHY_API_KEY = process.env.GIPHY_API_KEY;
 
-app.get('/api/gifs/search', async (req, res) => {
+app.get('/api/gifs/search', requireApiAuth, async (req, res) => {
   if (!GIPHY_API_KEY) return res.json({ results: [] });
   const { q } = req.query;
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
@@ -467,7 +505,7 @@ app.get('/api/gifs/search', async (req, res) => {
   }
 });
 
-app.get('/api/gifs/trending', async (req, res) => {
+app.get('/api/gifs/trending', requireApiAuth, async (req, res) => {
   if (!GIPHY_API_KEY) return res.json({ results: [] });
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
@@ -499,24 +537,38 @@ const OG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const OG_CACHE_MAX = 1000;
 
 // SSRF protection: block private/internal IP ranges
+// (also exported from utils.js for testability — keep both in sync)
 function isPrivateUrl(urlString) {
-  try {
-    const parsed = new URL(urlString);
-    const hostname = parsed.hostname;
-    // Block private IPs, localhost, link-local, and metadata endpoints
-    if (/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|169\.254\.|::1|localhost|0\.0\.0\.0)/i.test(hostname)) return true;
-    if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return true;
-    // Block cloud metadata endpoints
-    if (hostname === '169.254.169.254') return true;
-    // Only allow http(s)
-    if (!['http:', 'https:'].includes(parsed.protocol)) return true;
-    return false;
-  } catch {
-    return true;
-  }
+  return utils.isPrivateUrl(urlString);
 }
 
-app.get('/api/og', async (req, res) => {
+/**
+ * Fetch with SSRF redirect protection: uses redirect:'manual',
+ * validates redirect target against isPrivateUrl, follows at most one safe redirect.
+ */
+async function safeFetch(url, options = {}) {
+  const resp = await fetch(url, { ...options, redirect: 'manual' });
+
+  // If no redirect, return as-is
+  if (resp.status < 300 || resp.status >= 400) return resp;
+
+  // Handle redirect
+  const location = resp.headers.get('location');
+  if (!location) return resp;
+
+  // Resolve relative redirects
+  const redirectUrl = new URL(location, url).toString();
+
+  // Validate redirect target against SSRF
+  if (isPrivateUrl(redirectUrl)) {
+    throw new Error('Redirect target blocked by SSRF protection');
+  }
+
+  // Follow the single safe redirect (no further redirects allowed)
+  return fetch(redirectUrl, { ...options, redirect: 'manual' });
+}
+
+app.get('/api/og', requireApiAuth, async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'URL required' });
 
@@ -546,7 +598,7 @@ app.get('/api/og', async (req, res) => {
       const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
-      const resp = await fetch(oembedUrl, { signal: controller.signal });
+      const resp = await safeFetch(oembedUrl, { signal: controller.signal });
       clearTimeout(timeout);
       if (resp.ok) {
         const json = await resp.json();
@@ -574,7 +626,7 @@ app.get('/api/og', async (req, res) => {
     // General OG fetch
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       signal: controller.signal,
       headers: { 'User-Agent': 'NexusBot/1.0 (OpenGraph Fetcher)' },
       size: 50000 // limit response size
@@ -1952,7 +2004,7 @@ io.on('connection', (socket) => {
   });
 
   // ─── Webhooks ─────────────────────────────────────────────────────────────────
-  socket.on('webhook:create', ({ serverId, channelId, name }) => {
+  socket.on('webhook:create', async ({ serverId, channelId, name }) => {
     const user = state.users[socket.id];
     if (!user) return;
     const perms = getUserPerms(user.id, serverId);
@@ -1961,16 +2013,27 @@ io.on('connection', (socket) => {
     if (!srv) return;
     const ch = srv.channels.text.find(c => c.id === channelId);
     if (!ch) return;
-    
-    const webhook = { id: uuidv4(), name: (name||'Webhook').slice(0,32), channelId, createdBy: user.id, createdAt: Date.now() };
+
+    const webhookId = uuidv4();
+    const token = crypto.randomBytes(32).toString('hex');
+    const webhookName = (name||'Webhook').slice(0,32);
+
+    try {
+      await db.createWebhook({ id: webhookId, channelId, name: webhookName, avatar: null, token, createdBy: user.id });
+    } catch (err) {
+      console.error('[Webhook] Failed to save webhook to DB:', err.message);
+      return socket.emit('error', { message: 'Failed to create webhook' });
+    }
+
+    const webhook = { id: webhookId, name: webhookName, channelId, createdBy: user.id, createdAt: Date.now() };
     if (!ch.webhooks) ch.webhooks = [];
     ch.webhooks.push(webhook);
-    const url = `/api/webhooks/${webhook.id}`;
+    const url = `/api/webhooks/${webhookId}/${token}`;
     socket.emit('webhook:created', { webhook: { ...webhook, url } });
     io.emit('channel:updated', { serverId, channel: ch, channels: srv.channels, categories: srv.categories });
   });
 
-  socket.on('webhook:delete', ({ serverId, channelId, webhookId }) => {
+  socket.on('webhook:delete', async ({ serverId, channelId, webhookId }) => {
     const user = state.users[socket.id];
     if (!user) return;
     const perms = getUserPerms(user.id, serverId);
@@ -1978,6 +2041,13 @@ io.on('connection', (socket) => {
     const srv = state.servers[serverId];
     const ch = srv?.channels.text.find(c => c.id === channelId);
     if (!ch) return;
+
+    try {
+      await db.deleteWebhook(webhookId);
+    } catch (err) {
+      console.error('[Webhook] Failed to delete webhook from DB:', err.message);
+    }
+
     ch.webhooks = (ch.webhooks||[]).filter(w => w.id !== webhookId);
     io.emit('channel:updated', { serverId, channel: ch, channels: srv.channels, categories: srv.categories });
   });
@@ -2614,7 +2684,7 @@ io.on('connection', (socket) => {
 
           try {
             await db.saveMessage({
-              channelId, authorId: user.id, content: msg.content, attachments: [],
+              id: msg.id, channelId, authorId: user.id, content: msg.content, attachments: [],
               isWebhook: false, replyTo: msg.replyTo || null,
               mentions: msg.mentions, commandData: pollData
             });
@@ -2648,7 +2718,7 @@ io.on('connection', (socket) => {
 
           try {
             await db.saveMessage({
-              channelId, authorId: user.id, content: msg.content,
+              id: msg.id, channelId, authorId: user.id, content: msg.content,
               attachments: msg.attachments, isWebhook: false,
               replyTo: msg.replyTo || null, mentions: msg.mentions,
               commandData: result.commandData
@@ -2732,6 +2802,7 @@ io.on('connection', (socket) => {
     // Save to database
     try {
       await db.saveMessage({
+        id: msg.id,
         channelId,
         authorId: user.id,
         content: msg.content,
@@ -4253,6 +4324,25 @@ async function convertDbMessages(dbMessages, channelId) {
           }
         }
 
+        // Load webhooks from DB and attach to channel objects
+        try {
+          const dbWebhooks = await db.getWebhooksForServer(serverId);
+          for (const dbWh of dbWebhooks) {
+            const ch = textChannels.find(c => c.id === dbWh.channel_id);
+            if (ch) {
+              ch.webhooks.push({
+                id: dbWh.id,
+                name: dbWh.name,
+                channelId: dbWh.channel_id,
+                createdBy: dbWh.created_by,
+                createdAt: new Date(dbWh.created_at).getTime()
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`[Server] Error loading webhooks for server ${serverId}:`, err.message);
+        }
+
         srv = {
           id: serverId,
           name: dbServer.name,
@@ -4393,6 +4483,24 @@ async function convertDbMessages(dbMessages, channelId) {
         }
       }
     }
+
+    // Clean up expired tokens on startup
+    try {
+      const cleaned = await db.cleanupExpiredTokens();
+      if (cleaned > 0) console.log(`[Auth] Cleaned up ${cleaned} expired tokens on startup`);
+    } catch (err) {
+      console.error('[Auth] Failed to clean up expired tokens:', err.message);
+    }
+
+    // Schedule hourly token cleanup
+    setInterval(async () => {
+      try {
+        const cleaned = await db.cleanupExpiredTokens();
+        if (cleaned > 0) console.log(`[Auth] Cleaned up ${cleaned} expired tokens`);
+      } catch (err) {
+        console.error('[Auth] Token cleanup error:', err.message);
+      }
+    }, 60 * 60 * 1000);
 
     httpServer.listen(PORT, () => console.log(`Nexus server running on port ${PORT}`));
   } catch (error) {
