@@ -1,6 +1,6 @@
 # Nexus Test Suite
 
-**Total: 88+ tests** — 48 automated (Jest) + 40 manual test cases + Playwright UI uptime suite
+**Total: 225 unit tests + 86 Playwright UI tests + 40 manual test cases**
 
 ## Setup
 
@@ -16,13 +16,20 @@ npm test
 tests/
 ├── README.md                           # This file
 ├── jest.config.js                      # Jest configuration
+├── babel.config.js                     # Babel config for ES module transform
 │
-├── automated/                          # Jest unit tests (48 tests)
-│   ├── validation.test.js              # 15 tests — input validation functions
-│   ├── utils.test.js                   # 18 tests — utility functions (hash, token, duration, etc.)
-│   └── permissions.test.js             # 15 tests — permission system + parsing
+├── automated/                          # Jest unit tests (225 tests, ~96% coverage)
+│   ├── validation.test.js              # 65 tests — all 17 validators + RateLimiter
+│   ├── utils.test.js                   # 55 tests — hash, token, perms, mentions, SSRF
+│   ├── permissions.test.js             # 15 tests — permission system + parsing
+│   ├── security.test.js                # 25 tests — SSRF, tokens, bearer extraction
+│   ├── config.test.js                  # 18 tests — server config defaults & env vars
+│   ├── default-sounds.test.js          # 16 tests — WAV sound generation & structure
+│   └── client/                         # Client-side module tests
+│       ├── config.test.js              # 15 tests — server URL resolution & platform detection
+│       └── socketTimeout.test.js       # 16 tests — socket emit wrappers & timeouts
 │
-├── e2e/                                # Playwright UI uptime tests
+├── e2e/                                # Playwright UI uptime tests (86 tests)
 │   ├── playwright.config.js            # Playwright configuration
 │   ├── package.json                    # E2E test dependencies
 │   ├── helpers/                        # Test utilities and screenshot helpers
@@ -50,30 +57,62 @@ tests/
     └── 08-ui-consistency.md            # TC-038 to TC-040 (3 tests)
 ```
 
-## Automated Tests
+## Automated Unit Tests (Jest)
 
-Automated tests cover server-side logic that can be unit tested without a running server or database.
+225 tests covering server-side and client-side logic. Run with coverage:
 
-### validation.test.js (15 tests)
-Tests the `server/validation.js` module:
-- `validateUsername` — valid/invalid username formats
+```bash
+npx jest --config tests/jest.config.js --coverage
+```
+
+### Coverage Summary
+
+| File | Statements | Branches | Functions | Lines |
+|------|-----------|----------|-----------|-------|
+| server/validation.js | 97.58% | 100% | 95.65% | 96.84% |
+| server/utils.js | 94.82% | 85.41% | 91.3% | 98.91% |
+| server/config.js | 35.71% | 88.63% | 50% | 38.46% |
+| server/default-sounds.js | 98.55% | 58.13% | 100% | 99.47% |
+| client/src/config.js | 100% | 95.83% | 100% | 100% |
+| client/src/utils/socketTimeout.js | 100% | 100% | 100% | 100% |
+| **Overall** | **95.78%** | **88.85%** | **95.34%** | **96.88%** |
+
+### validation.test.js (65 tests)
+Tests all 17 exported validators from `server/validation.js`:
+- `validateUsername` — valid/invalid username formats, type checking
 - `validatePassword` — password length requirements
 - `validateMessage` — content length and newline limits
+- `validateServerName` — server name length bounds
 - `validateChannelName` — lowercase alphanumeric format
+- `validateRoleName` — role name length bounds
+- `validateEmail` — email format validation
+- `sanitizeInput` — trim, truncation, non-string handling
 - `validateColor` — hex color code format
 - `validateUUID` — UUID format validation
-- `RateLimiter` — rate limiting within window and blocking when exceeded
+- `validateAttachment` — HTTP/data URI validation
+- `validateParticipantIds` — array validation, duplicate detection, UUID format
+- `sanitizeGroupDMName` — XSS sanitization, length limits, empty handling
+- `validateChannelId` — UUID channel ID validation
+- `validateMessageId` — optional UUID message ID validation
+- `requireAuth` — guest vs registered user authorization
+- `RateLimiter` — rate limiting, cleanup, expiry
 
-### utils.test.js (18 tests)
-Tests the `server/utils.js` module (extracted from index.js):
-- `hashPassword` — deterministic hashing, salt differentiation
-- `makeToken` — 64-char hex generation, uniqueness
+### utils.test.js (55 tests)
+Tests all exports from `server/utils.js`:
+- `hashPassword` — async bcrypt hashing
+- `hashPasswordLegacy` — deterministic HMAC-SHA256 hashing
+- `verifyPassword` — async bcrypt compare + legacy hash rejection
+- `BCRYPT_ROUNDS` — constant validation
+- `makeToken` — 64-char hex token generation, uniqueness
 - `parseDuration` — time string parsing (s/m/h/d/w)
+- `CRITICIZE_ROASTS` — template structure validation
 - `getRandomRoast` — template replacement
 - `DEFAULT_PERMS` — permission key completeness and defaults
 - `makeCategory` — category object creation with UUID
-- `parseMentions` — @username and @everyone detection
-- `parseChannelLinks` — #channel-name detection
+- `getUserHighestRolePosition` — owner, member, non-member position
+- `parseMentions` — @username, @everyone, @role detection
+- `parseChannelLinks` — #channel-name and voice channel detection
+- `isPrivateUrl` — SSRF protection (private IPs, localhost, metadata, IPv6)
 
 ### permissions.test.js (15 tests)
 Tests the permission system with mock server objects:
@@ -81,6 +120,44 @@ Tests the permission system with mock server objects:
 - `getUserHighestRolePosition` — owner infinity, member positions, non-member fallback
 - `parseMentions` — role mention detection
 - `parseChannelLinks` — channel link detection in permission context
+
+### security.test.js (25 tests)
+Security-focused tests:
+- `isPrivateUrl` — SSRF protection across all private IP ranges and protocols
+- Webhook token generation — crypto.randomBytes format validation
+- Bearer token extraction — header parsing edge cases
+- `makeToken` — token format and uniqueness
+
+### config.test.js (18 tests)
+Tests `server/config.js` default values and environment variable overrides:
+- Server config (port, env, logLevel)
+- Database config (url, ssl)
+- Security config (jwtSecret, session/refresh expiry)
+- Features config (message length, attachments, guest mode)
+- Rate limit config
+- WebRTC config (STUN/TURN)
+- Redis and client URLs
+
+### default-sounds.test.js (16 tests)
+Tests `server/default-sounds.js` programmatic WAV generation:
+- Sound count (16 sounds)
+- Property structure validation
+- WAV data URI format
+- RIFF header binary validation (PCM, mono, 22050Hz, 16-bit)
+- Sound metadata (names, emojis, pages, durations)
+
+### client/config.test.js (15 tests)
+Tests `client/src/config.js` with mocked window/localStorage:
+- `getServerUrl` — 5-level priority chain (localStorage → Electron → Tauri → env → empty)
+- `setServerUrl` — localStorage save/remove, trailing slash stripping
+- `isStandaloneApp` — Electron, Tauri, Capacitor detection
+- `hasServerUrl` / `needsServerSetup` — convenience wrappers
+
+### client/socketTimeout.test.js (16 tests)
+Tests `client/src/utils/socketTimeout.js` with mocked socket:
+- `TIMEOUT_MSG` — constant validation
+- `emitWithTimeout` — null socket, data/no-data emit, success/timeout callbacks
+- `emitWithLoadingTimeout` — fire-and-forget with timer, clearable timeout
 
 ## Manual Tests
 

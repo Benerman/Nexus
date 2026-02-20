@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const { isPrivateUrl, makeToken } = require('../../server/utils');
-const { v4: uuidv4 } = require('uuid');
 
 // ─── SSRF Protection: isPrivateUrl ──────────────────────────────────────────
 
@@ -86,7 +85,7 @@ describe('Webhook token generation', () => {
   });
 
   test('webhook ID is valid UUID format', () => {
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
     expect(uuidRegex.test(id)).toBe(true);
   });
