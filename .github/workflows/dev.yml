@@ -83,7 +83,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SERVER_URL: ${{ env.SERVER_URL }}
+          CI: false
+          REACT_APP_SERVER_URL: ${{ env.SERVER_URL }}
           GENERATE_SOURCEMAP: false
         with:
           projectPath: client
@@ -120,7 +121,7 @@ jobs:
         working-directory: client
 
       - name: Build React app
-        run: npx cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
+        run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
         working-directory: client
 
       - name: Add Android platform

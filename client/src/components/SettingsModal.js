@@ -1411,13 +1411,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   return (
     <div className="settings-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="settings-modal">
-        <button className={`settings-close-btn ${isMac ? 'mac' : 'win'}`} onClick={onClose} title="Close Settings">
-          ✕
-        </button>
         <SettingsSidebar tabs={tabs} tab={tab} setTab={setTab} />
 
-
         <div className="settings-content">
+          <button className={`settings-close-btn ${isMac ? 'mac' : 'win'}`} onClick={onClose} title="Close Settings">
+            ✕
+          </button>
           {actionError && (
             <div style={{
               background: '#ED4245', color: '#fff', padding: '8px 16px', borderRadius: 4,

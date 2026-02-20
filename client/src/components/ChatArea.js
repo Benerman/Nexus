@@ -288,6 +288,7 @@ const ChatArea = React.memo(function ChatArea({
   const [replyingTo, setReplyingTo] = useState(null); // message being replied to
   const [highlightedMessageId, setHighlightedMessageId] = useState(null); // message to highlight
   const [mobileActionsId, setMobileActionsId] = useState(null); // message id with visible actions on mobile
+  const mobileActionsTimerRef = useRef(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [addMemberSearch, setAddMemberSearch] = useState('');
@@ -354,11 +355,20 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [messages, channel?.id]);
 
+  // Auto-focus the message input when switching to a DM channel
+  useEffect(() => {
+    if (channel?.isDM && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [channel?.id]);
+
   // Lazy loading: fetch older messages when scrolling to top
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     isNearBottomRef.current = checkNearBottom();
+    // Hide mobile actions on scroll
+    setMobileActionsId(prev => prev ? null : prev);
     // Load older messages when within 50px of the top
     if (container.scrollTop < 50 && hasMore && !loadingOlder && channel?.id && messages.length > 0) {
       setLoadingOlder(true);
@@ -818,9 +828,16 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, []), 500);
 
-  // Toggle mobile actions visibility on tap
+  // Toggle mobile actions visibility on tap (auto-hides after 4 seconds)
   const handleMobileTap = useCallback((msgId) => {
-    setMobileActionsId(prev => prev === msgId ? null : msgId);
+    if (mobileActionsTimerRef.current) clearTimeout(mobileActionsTimerRef.current);
+    setMobileActionsId(prev => {
+      const next = prev === msgId ? null : msgId;
+      if (next) {
+        mobileActionsTimerRef.current = setTimeout(() => setMobileActionsId(null), 4000);
+      }
+      return next;
+    });
   }, []);
 
   const addFiles = useCallback(async (files) => {

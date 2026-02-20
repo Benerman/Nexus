@@ -74,17 +74,15 @@
   line-height: 1;
   transition: all 0.15s;
   z-index: 10;
+  top: 12px;
+  right: 12px;
 }
 .settings-close-btn:hover {
   background: var(--red);
   color: #fff;
 }
-.settings-close-btn.win {
-  top: 12px;
-  right: 12px;
-}
 .settings-close-btn.mac {
-  top: 12px;
+  right: auto;
   left: 12px;
 }
 
@@ -892,19 +890,18 @@
   .settings-close-btn {
     display: flex !important;
     position: absolute;
-    top: calc(env(safe-area-inset-top, 0px) + 6px);
-    right: 8px;
+    top: 10px;
+    right: 16px;
     left: auto;
-    z-index: 1010;
-    width: 40px;
-    height: 40px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
     background: var(--bg-tertiary);
     border: 1px solid rgba(255,255,255,0.1);
   }
   .settings-close-btn.mac {
-    top: calc(env(safe-area-inset-top, 0px) + 6px);
     left: auto;
-    right: 8px;
+    right: 16px;
   }
   /* Toggle switches bigger on touch */
   .perm-toggle input {

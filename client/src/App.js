@@ -811,6 +811,9 @@ export default function App() {
         setActiveChannel(channel);
         setActiveChannelType('text');
         s.emit('channel:join', { channelId: channel.id });
+        // Close side panels so the chat area is fully visible and input is accessible
+        setMobileSidebarOpen(false);
+        setMobileMemberListOpen(false);
       }
     });
 
@@ -1382,9 +1385,9 @@ export default function App() {
     }
   }, [activeChannel]);
 
-  // Delete a DM channel permanently
+  // Delete a DM conversation for the current user only (hides it and clears messages from their view)
   const handleDeleteDM = useCallback((channelId) => {
-    if (!window.confirm('Permanently delete this conversation and all messages? This cannot be undone.')) return;
+    if (!window.confirm('Delete this conversation? Messages will be cleared from your view, but not for other participants.')) return;
     if (socketRef.current) socketRef.current.emit('dm:delete', { channelId });
     // Same local cleanup as archive
     setPinnedDMs(prev => {

@@ -2492,8 +2492,22 @@ io.on('connection', (socket) => {
       }
     }
 
-    const history = (state.messages[channelId]||[]).slice(-30);
-    socket.emit('channel:history', { channelId, messages: history, hasMore: (state.messages[channelId]||[]).length > 30 });
+    let history = (state.messages[channelId]||[]).slice(-30);
+
+    // For DM channels, filter out messages before the user's delete timestamp
+    const user = state.users[socket.id];
+    if (user) {
+      try {
+        const account = await db.getAccountById(user.id);
+        const deletedDMs = account?.settings?.deleted_dms || {};
+        if (deletedDMs[channelId]) {
+          const deletedAt = deletedDMs[channelId];
+          history = history.filter(m => m.timestamp > deletedAt);
+        }
+      } catch (err) { /* ignore — show all messages if settings lookup fails */ }
+    }
+
+    socket.emit('channel:history', { channelId, messages: history, hasMore: (state.messages[channelId]||[]).length > history.length });
   });
 
   // Lazy load older messages
@@ -2535,6 +2549,16 @@ io.on('connection', (socket) => {
           console.warn('[Messages] DB fetch for older messages failed:', err.message);
         }
       }
+      // For DM channels, filter out messages before the user's delete timestamp
+      try {
+        const account = await db.getAccountById(user.id);
+        const deletedDMs = account?.settings?.deleted_dms || {};
+        if (deletedDMs[channelId]) {
+          const deletedAt = deletedDMs[channelId];
+          olderMsgs = olderMsgs.filter(m => m.timestamp > deletedAt);
+        }
+      } catch (err) { /* ignore */ }
+
       if (typeof callback === 'function') callback({ messages: olderMsgs, hasMore: olderMsgs.length >= limit });
     } catch (err) {
       console.error('[Messages] Error fetching older messages:', err.message);
@@ -2733,6 +2757,22 @@ io.on('connection', (socket) => {
         const otherUserId = dmChannel.participant_1 === user.id
           ? dmChannel.participant_2
           : dmChannel.participant_1;
+
+        // Un-hide the DM for the recipient if they had it hidden/deleted
+        try {
+          const otherAccount = await db.getAccountById(otherUserId);
+          const otherSettings = otherAccount?.settings || {};
+          const otherHidden = otherSettings.hidden_dms || [];
+          if (otherHidden.includes(channelId)) {
+            const updatedHidden = otherHidden.filter(id => id !== channelId);
+            await db.pool.query(
+              'UPDATE accounts SET settings = COALESCE(settings, \'{}\'::jsonb) || $1::jsonb WHERE id = $2',
+              [JSON.stringify({ hidden_dms: updatedHidden }), otherUserId]
+            );
+          }
+        } catch (err) {
+          console.warn('[DM] Error un-hiding DM for recipient:', err.message);
+        }
 
         // Find the other participant's socket
         const otherUserSocketId = Object.keys(state.users).find(socketId =>
@@ -3066,8 +3106,13 @@ io.on('connection', (socket) => {
       // Get all DM channels for user
       const dmChannels = await db.getDMChannelsForUser(user.id);
 
+      // Filter out hidden DMs
+      const account = await db.getAccountById(user.id);
+      const hiddenDMs = account?.settings?.hidden_dms || [];
+      const visibleChannels = dmChannels.filter(dm => !hiddenDMs.includes(dm.id));
+
       // Build DM list with participant info and last message
-      const dmList = await Promise.all(dmChannels.map(async (dmChannel) => {
+      const dmList = await Promise.all(visibleChannels.map(async (dmChannel) => {
         // ✅ Phase 2: Use plain UUID, no 'dm:' prefix
         const channelId = dmChannel.id;
 
@@ -3136,19 +3181,6 @@ io.on('connection', (socket) => {
       console.error('[DM] Error fetching DM list:', error);
       socket.emit('error', { message: 'Failed to fetch DM list' });
     }
-  });
-
-  socket.on('dm:close', async ({ channelId }) => {
-    const user = state.users[socket.id];
-    if (!user || user.isGuest) {
-      return socket.emit('error', { message: 'DMs require authentication' });
-    }
-
-    // Leave the DM room
-    socket.leave(`text:${channelId}`);
-
-    socket.emit('dm:closed', { channelId });
-    console.log(`[DM] ${user.username} closed DM ${channelId}`);
   });
 
   // Mark DM as read
@@ -3236,21 +3268,42 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Delete a DM channel permanently
+  // Delete a DM channel for the requesting user only (per-user hide + message clearing)
   socket.on('dm:delete', async ({ channelId }) => {
     const user = state.users[socket.id];
     if (!user) return;
     try {
       const isParticipant = await db.isParticipantInDM(channelId, user.id);
       if (!isParticipant) return socket.emit('error', { message: 'Not a participant' });
-      // Delete messages, read states, then the channel
-      await db.pool.query('DELETE FROM dm_read_states WHERE channel_id = $1', [channelId]);
-      await db.pool.query('DELETE FROM messages WHERE channel_id = $1', [channelId]);
-      await db.pool.query('DELETE FROM dm_participants WHERE channel_id = $1', [channelId]);
-      await db.pool.query('DELETE FROM dm_channels WHERE id = $1', [channelId]);
-      // Clean from in-memory state
-      delete state.messages[channelId];
-      console.log(`[DM] ${user.username} deleted DM ${channelId}`);
+
+      // Store delete timestamp and hide the DM — per-user only
+      const account = await db.getAccountById(user.id);
+      const settings = account?.settings || {};
+      const hiddenDMs = settings.hidden_dms || [];
+      const deletedDMs = settings.deleted_dms || {};
+
+      // Record when this user "deleted" the conversation (messages before this are hidden for them)
+      deletedDMs[channelId] = Date.now();
+      if (!hiddenDMs.includes(channelId)) {
+        hiddenDMs.push(channelId);
+      }
+
+      await db.pool.query(
+        'UPDATE accounts SET settings = COALESCE(settings, \'{}\'::jsonb) || $1::jsonb WHERE id = $2',
+        [JSON.stringify({ hidden_dms: hiddenDMs, deleted_dms: deletedDMs }), user.id]
+      );
+
+      // Clear read state for this user only
+      await db.pool.query(
+        'DELETE FROM dm_read_states WHERE channel_id = $1 AND user_id = $2',
+        [channelId, user.id]
+      );
+
+      // Leave the DM room
+      socket.leave(`text:${channelId}`);
+
+      socket.emit('dm:deleted', { channelId });
+      console.log(`[DM] ${user.username} deleted DM ${channelId} (per-user)`);
     } catch (error) {
       console.error('[DM] Error deleting DM:', error);
       socket.emit('error', { message: 'Failed to delete conversation' });

@@ -25,7 +25,7 @@ module.exports = {
 
   database: {
     url: process.env.DATABASE_URL || `postgresql://postgres:${process.env.POSTGRES_PASSWORD || 'postgres'}@localhost:5432/nexus_db`,
-    ssl: isProduction
+    ssl: process.env.DATABASE_SSL === 'true'
   },
 
   redis: {
