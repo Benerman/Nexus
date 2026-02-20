@@ -58,6 +58,7 @@ jobs:
     needs: prepare
     permissions:
       contents: write
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -67,10 +68,10 @@ jobs:
             rust_targets: ""
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
-            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            rust_targets: "aarch64-apple-darwin"
           - platform: macos-latest
             args: "--target x86_64-apple-darwin"
-            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            rust_targets: "x86_64-apple-darwin"
           - platform: windows-latest
             args: ""
             rust_targets: ""
@@ -88,6 +89,11 @@ jobs:
         with:
           targets: ${{ matrix.rust_targets }}
 
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri -> target
+
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -99,7 +105,7 @@ jobs:
         working-directory: client
 
       - name: Build with Tauri
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI: false
@@ -107,6 +113,7 @@ jobs:
           GENERATE_SOURCEMAP: false
         with:
           projectPath: client
+          tauriScript: npx tauri
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: "Nexus v${{ needs.prepare.outputs.version }}"
           releaseDraft: false
