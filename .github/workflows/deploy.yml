@@ -116,8 +116,7 @@ jobs:
             if [ "$i" -eq 10 ]; then
               echo "Server did not respond after 10 attempts. Checking logs..."
               ${{ steps.docker-check.outputs.compose_cmd }} logs server
-              echo ""
-              echo "Note: The server may still be initializing. Check 'docker compose logs -f server' on the host."
+              exit 1
             fi
             echo "Waiting for server... (attempt $i/10)"
             sleep 5
@@ -133,6 +132,7 @@ jobs:
             if [ "$i" -eq 5 ]; then
               echo "Client did not respond. Checking logs..."
               ${{ steps.docker-check.outputs.compose_cmd }} logs client
+              exit 1
             fi
             echo "Waiting for client... (attempt $i/5)"
             sleep 3
