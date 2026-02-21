@@ -52,6 +52,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nexus_db
       - REDIS_URL=redis://redis:6379
       - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
       - SESSION_EXPIRY=604800000
       - REFRESH_EXPIRY=2592000000

@@ -1,11 +1,10 @@
 name: Release Build
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: release-build-${{ github.ref }}
+  group: release-build
   cancel-in-progress: true
 
 env:
@@ -13,7 +12,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     outputs:
@@ -21,6 +20,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Read version from package.json
         id: version
@@ -54,7 +57,47 @@ jobs:
           draft: false
           make_latest: true
 
-  build-tauri:
+  build-tauri-linux:
+    needs: prepare
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify Linux dependencies
+        run: |
+          pkg-config --exists webkit2gtk-4.1 appindicator3-0.1 librsvg-2.0 && echo "All dependencies found" || { echo "Missing dependencies — install: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf"; exit 1; }
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: false
+          REACT_APP_SERVER_URL: ${{ env.SERVER_URL }}
+          GENERATE_SOURCEMAP: false
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: client
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: "Nexus v${{ needs.prepare.outputs.version }}"
+          releaseDraft: false
+          prerelease: false
+
+  build-tauri-desktop:
     needs: prepare
     permissions:
       contents: write
@@ -63,9 +106,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-22.04
-            args: ""
-            rust_targets: ""
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
             rust_targets: "aarch64-apple-darwin"
@@ -111,6 +151,8 @@ jobs:
           CI: false
           REACT_APP_SERVER_URL: ${{ env.SERVER_URL }}
           GENERATE_SOURCEMAP: false
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: client
           tauriScript: npx tauri
@@ -217,7 +259,7 @@ jobs:
 
   build-android:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     steps:

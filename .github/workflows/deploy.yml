@@ -1,0 +1,148 @@
+name: Deploy to Local Server
+
+on:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout latest code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Verify Docker is available
+        id: docker-check
+        run: |
+          docker --version
+          if docker compose version > /dev/null 2>&1; then
+            echo "compose_cmd=docker compose" >> "$GITHUB_OUTPUT"
+            docker compose version
+          elif docker-compose --version > /dev/null 2>&1; then
+            echo "compose_cmd=docker-compose" >> "$GITHUB_OUTPUT"
+            docker-compose --version
+          else
+            echo "ERROR: Neither 'docker compose' nor 'docker-compose' found."
+            exit 1
+          fi
+
+      - name: Ensure .env file exists
+        run: |
+          if [ ! -f .env ]; then
+            echo "No .env file found. Copying from .env.example..."
+            cp .env.example .env
+            echo ""
+            echo "WARNING: .env was created from .env.example."
+            echo "You should update it with real secrets before first use."
+            echo "At minimum, set JWT_SECRET and POSTGRES_PASSWORD."
+          fi
+
+      - name: Stop and remove existing containers
+        run: |
+          ${{ steps.docker-check.outputs.compose_cmd }} down --remove-orphans 2>/dev/null || true
+          # Force-remove Nexus containers to avoid 'ContainerConfig' errors
+          # caused by Docker Engine / Compose version mismatches
+          for c in nexus-server nexus-client nexus-postgres nexus-redis; do
+            docker rm -f "$c" 2>/dev/null || true
+          done
+
+      - name: Build and deploy with Docker Compose
+        run: |
+          ${{ steps.docker-check.outputs.compose_cmd }} up -d --build --force-recreate
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to start..."
+          sleep 10
+
+          # Check PostgreSQL
+          for i in 1 2 3 4 5 6; do
+            if docker exec nexus-postgres pg_isready -U postgres > /dev/null 2>&1; then
+              echo "PostgreSQL is ready."
+              break
+            fi
+            if [ "$i" -eq 6 ]; then
+              echo "PostgreSQL failed to start."
+              ${{ steps.docker-check.outputs.compose_cmd }} logs postgres
+              exit 1
+            fi
+            echo "Waiting for PostgreSQL... (attempt $i/6)"
+            sleep 5
+          done
+
+          # Check Redis
+          for i in 1 2 3 4 5 6; do
+            if docker exec nexus-redis redis-cli ping 2>/dev/null | grep -q PONG; then
+              echo "Redis is ready."
+              break
+            fi
+            if [ "$i" -eq 6 ]; then
+              echo "Redis failed to start."
+              ${{ steps.docker-check.outputs.compose_cmd }} logs redis
+              exit 1
+            fi
+            echo "Waiting for Redis... (attempt $i/6)"
+            sleep 5
+          done
+
+      - name: Verify server is responding
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -sf http://localhost:3001 > /dev/null 2>&1 || curl -sf http://localhost:3001/api > /dev/null 2>&1; then
+              echo "Server is responding on port 3001."
+              break
+            fi
+            if [ "$i" -eq 10 ]; then
+              echo "Server did not respond after 10 attempts. Checking logs..."
+              ${{ steps.docker-check.outputs.compose_cmd }} logs server
+              echo ""
+              echo "Note: The server may still be initializing. Check 'docker compose logs -f server' on the host."
+            fi
+            echo "Waiting for server... (attempt $i/10)"
+            sleep 5
+          done
+
+      - name: Verify client is responding
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Client is responding on port 3000."
+              break
+            fi
+            if [ "$i" -eq 5 ]; then
+              echo "Client did not respond. Checking logs..."
+              ${{ steps.docker-check.outputs.compose_cmd }} logs client
+            fi
+            echo "Waiting for client... (attempt $i/5)"
+            sleep 3
+          done
+
+      - name: Clean up old Docker images
+        run: |
+          docker image prune -f || true
+
+      - name: Deployment summary
+        run: |
+          echo ""
+          echo "========================================="
+          echo "  Nexus deployed successfully!"
+          echo "========================================="
+          echo ""
+          echo "  Commit:  ${{ github.sha }}"
+          echo "  Branch:  ${{ github.ref_name }}"
+          echo "  Client:  http://localhost:3000"
+          echo "  Server:  http://localhost:3001"
+          echo ""
+          echo "  Commands:"
+          echo "    Logs:    docker compose logs -f"
+          echo "    Stop:    docker compose down"
+          echo "    Status:  docker compose ps"
+          echo ""
