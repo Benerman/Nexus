@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [desktop-chrome, desktop-firefox, mobile-chrome, mobile-safari, tablet]
+        project: [desktop-chrome, desktop-firefox, mobile-chrome, mobile-safari, tablet, desktop-simulation]
 
     steps:
       - name: Checkout repository
@@ -74,11 +74,37 @@ jobs:
             sleep 2
           done
 
+      - name: Start client dev server (desktop simulation)
+        if: matrix.project == 'desktop-simulation'
+        working-directory: client
+        run: npm start &
+        env:
+          PORT: 3000
+          BROWSER: none
+
+      - name: Wait for client dev server (desktop simulation)
+        if: matrix.project == 'desktop-simulation'
+        run: |
+          for i in $(seq 1 60); do
+            if curl -s http://localhost:3000 > /dev/null 2>&1; then
+              echo "Client dev server is ready"
+              break
+            fi
+            echo "Waiting for client... ($i/60)"
+            sleep 2
+          done
+
       - name: Run Playwright tests (${{ matrix.project }})
         working-directory: tests/e2e
-        run: npx playwright test --project=${{ matrix.project }}
+        run: |
+          if [ "${{ matrix.project }}" = "desktop-simulation" ]; then
+            npx playwright test --config=playwright.desktop.config.js
+          else
+            npx playwright test --project=${{ matrix.project }}
+          fi
         env:
           BASE_URL: http://localhost:3000
+          DESKTOP_SIMULATION: ${{ matrix.project == 'desktop-simulation' && '1' || '' }}
           CI: true
 
       - name: Upload test results
@@ -88,6 +114,7 @@ jobs:
           name: playwright-results-${{ matrix.project }}
           path: |
             tests/e2e/test-results/
+            tests/e2e/test-results-desktop/
             tests/e2e/playwright-report/
           retention-days: 30
 
@@ -127,7 +154,7 @@ jobs:
             let body;
             if (passed) {
               body = [
-                `@claude All **5 Playwright UI test projects passed** across desktop, mobile, and tablet viewports.`,
+                `@claude All **6 Playwright UI test projects passed** across desktop, desktop-simulation, mobile, and tablet viewports.`,
                 ``,
                 `**Run:** [${context.runId}](${runUrl})`,
                 ``,
