@@ -43,7 +43,23 @@ postgres-data/
 redis-data/
 
 # Capacitor native projects (generated, platform-specific)
-client/android/
+client/android/*
+!client/android/app/
+client/android/app/*
+!client/android/app/src/
+client/android/app/src/*
+!client/android/app/src/main/
+client/android/app/src/main/*
+!client/android/app/src/main/AndroidManifest.xml
+!client/android/app/src/main/java/
+client/android/app/src/main/java/*
+!client/android/app/src/main/java/com/
+client/android/app/src/main/java/com/*
+!client/android/app/src/main/java/com/nexus/
+client/android/app/src/main/java/com/nexus/*
+!client/android/app/src/main/java/com/nexus/app/
+client/android/app/src/main/java/com/nexus/app/*
+!client/android/app/src/main/java/com/nexus/app/MainActivity.java
 client/ios/
 
 # Tauri build artifacts

@@ -4,6 +4,26 @@ const path = require('path');
 
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
 
+const DESKTOP_SIMULATION = !!process.env.DESKTOP_SIMULATION;
+
+/**
+ * Inject Tauri desktop simulation globals before any navigation.
+ * When DESKTOP_SIMULATION env var is set, this makes the app believe
+ * it's running inside a Tauri webview so server-setup and other
+ * standalone-only code paths are exercised.
+ */
+async function injectDesktopSimulation(page) {
+  if (!DESKTOP_SIMULATION) return;
+  if (page._desktopSimInjected) return;
+  page._desktopSimInjected = true;
+  await page.addInitScript(() => {
+    window.__TAURI_INTERNALS__ = {
+      metadata: { currentWindow: { label: 'main' } },
+      invoke: async () => {},
+    };
+  });
+}
+
 /**
  * Viewport presets matching the CSS breakpoints in App.css
  * Mobile: max-width 768px
@@ -36,6 +56,7 @@ async function takeScreenshot(page, name) {
  * The app will show one of: ServerSetupScreen, LoginScreen, or main App.
  */
 async function navigateToApp(page) {
+  await injectDesktopSimulation(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   // Wait for either the login screen, server setup screen, or main app
   await page.waitForSelector(
@@ -48,6 +69,7 @@ async function navigateToApp(page) {
  * Force the app to show the ServerSetupScreen by clearing stored server URL.
  */
 async function showServerSetupScreen(page) {
+  await injectDesktopSimulation(page);
   await page.evaluate(() => {
     localStorage.removeItem('nexus_server_url');
     localStorage.removeItem('nexus_token');
@@ -61,6 +83,7 @@ async function showServerSetupScreen(page) {
  * If the app uses same-origin by default, this just needs token cleared.
  */
 async function showLoginScreen(page) {
+  await injectDesktopSimulation(page);
   await page.evaluate(() => {
     // Keep server URL / same-origin behavior, just clear auth
     localStorage.removeItem('nexus_token');
@@ -121,10 +144,12 @@ async function loginUser(page, username, password) {
 module.exports = {
   VIEWPORTS,
   SCREENSHOT_DIR,
+  DESKTOP_SIMULATION,
   takeScreenshot,
   navigateToApp,
   showServerSetupScreen,
   showLoginScreen,
   registerTestUser,
   loginUser,
+  injectDesktopSimulation,
 };

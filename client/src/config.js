@@ -46,6 +46,15 @@ export function isStandaloneApp() {
 }
 
 /**
+ * Detect if the app is running inside a Tauri webview specifically.
+ * Unlike isStandaloneApp(), this does NOT match Electron or Capacitor.
+ */
+export function isTauriApp() {
+  if (typeof window === 'undefined') return false;
+  return !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+}
+
+/**
  * Check if a server URL has been configured (either by user or build-time).
  */
 export function hasServerUrl() {

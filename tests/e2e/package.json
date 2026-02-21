@@ -8,6 +8,8 @@
     "test:desktop": "npx playwright test --project=desktop-chrome",
     "test:mobile": "npx playwright test --project=mobile-chrome --project=mobile-safari",
     "test:all": "npx playwright test",
+    "test:desktop-app": "DESKTOP_SIMULATION=1 npx playwright test --config=playwright.desktop.config.js",
+    "test:desktop-app:headed": "DESKTOP_SIMULATION=1 npx playwright test --config=playwright.desktop.config.js --headed",
     "report": "npx playwright show-report"
   },
   "devDependencies": {

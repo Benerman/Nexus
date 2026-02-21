@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import WebhookDocs from './WebhookDocs';
 import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/socketTimeout';
-import { getServerUrl, isStandaloneApp } from '../config';
+import { getServerUrl, isStandaloneApp, isTauriApp } from '../config';
 import { checkForUpdates } from '../utils/updater';
 import './SettingsModal.css';
 import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon, BellIcon, SoundboardIcon, EmojiIcon } from './icons';
@@ -3534,7 +3534,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
           {tab==='about' && (
             <div className="settings-section">
               <div style={{textAlign:'center', marginBottom: 24}}>
-                <img src="/logo192.png" alt="Nexus" style={{width: 80, height: 80, borderRadius: 16, marginBottom: 12}} />
+                <HexagonIcon size={64} color="#ed4245" />
                 <h2 style={{margin: '0 0 4px', fontSize: 22, color: 'var(--text-primary)'}}>Nexus</h2>
                 <p style={{margin: 0, fontSize: 13, color: 'var(--text-muted)'}}>Your Server, Your Rules</p>
                 <p style={{margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)'}}>Version 1.0.0</p>
@@ -3562,7 +3562,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 </a>
               </div>
 
-              {isStandaloneApp() && (
+              {isTauriApp() && (
                 <div style={{marginBottom: 20}}>
                   <h3 style={{fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8}}>Updates</h3>
                   <button
@@ -3602,7 +3602,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
 
               <div style={{fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: 12}}>
                 <p style={{margin: '0 0 4px'}}>Made with care by the Nexus team.</p>
-                <p style={{margin: 0}}>Licensed under open source.</p>
+                <p style={{margin: 0}}>Licensed under <a href="https://github.com/benerman/nexus/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" style={{color: 'var(--text-muted)'}}>AGPL-3.0</a>.</p>
               </div>
             </div>
           )}
