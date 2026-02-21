@@ -44,12 +44,12 @@ function createWindow() {
 // Grant microphone and camera permissions for WebRTC voice/video
 function setupMediaPermissions() {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'camera', 'mediaKeySystem'];
+    const allowed = ['media', 'microphone', 'camera', 'mediaKeySystem', 'notifications'];
     callback(allowed.includes(permission));
   });
 
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    const allowed = ['media', 'microphone', 'camera', 'mediaKeySystem'];
+    const allowed = ['media', 'microphone', 'camera', 'mediaKeySystem', 'notifications'];
     return allowed.includes(permission);
   });
 

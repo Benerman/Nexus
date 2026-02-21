@@ -56,6 +56,7 @@ pub fn run() {
                                     let kind = args.PermissionKind()?;
                                     if kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
                                         || kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                                        || kind == COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS
                                     {
                                         args.SetState(
                                             COREWEBVIEW2_PERMISSION_STATE_ALLOW,

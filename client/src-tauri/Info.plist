@@ -6,5 +6,9 @@
     <string>Nexus needs microphone access for voice channels and calls</string>
     <key>NSCameraUsageDescription</key>
     <string>Nexus needs camera access for video calls</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Nexus needs photo library access to upload images</string>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Nexus sends notifications for new messages, calls, and friend requests</string>
 </dict>
 </plist>
