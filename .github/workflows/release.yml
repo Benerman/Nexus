@@ -133,6 +133,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup macOS environment
+        run: |
+          # Ensure Homebrew and gem paths are available
+          if [ -d "/opt/homebrew/bin" ]; then
+            echo "/opt/homebrew/bin" >> $GITHUB_PATH
+            echo "/opt/homebrew/sbin" >> $GITHUB_PATH
+          fi
+          # Add gem binary path for CocoaPods
+          GEM_BIN=$(ruby -e 'puts Gem.bindir' 2>/dev/null || echo "/usr/local/bin")
+          echo "$GEM_BIN" >> $GITHUB_PATH
+
       - name: Install client dependencies
         run: npm ci
         working-directory: client
