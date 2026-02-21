@@ -99,7 +99,7 @@ test.describe('Mobile UI — Uptime Tests', () => {
       await page.locator('.login-input').nth(1).fill('mobilepass');
 
       await expect(page.locator('.login-btn')).toBeEnabled();
-      await page.locator('.login-btn').tap();
+      await page.locator('.login-btn').click();
 
       // Should show loading or error
       await expect(
@@ -197,7 +197,9 @@ test.describe('Mobile UI — Uptime Tests', () => {
       await page.waitForSelector('.login-screen', { timeout: 15000 });
 
       const usernameInput = page.locator('.login-input').nth(0);
-      await usernameInput.tap();
+      // Use click() as fallback — tap() requires touch device emulation
+      // which is only available in mobile-specific Playwright projects
+      await usernameInput.click();
       await expect(usernameInput).toBeFocused();
       await captureScreenshot(page, 'mobile-touch', 'input-focused');
     });
@@ -208,7 +210,7 @@ test.describe('Mobile UI — Uptime Tests', () => {
       await page.waitForSelector('.login-screen', { timeout: 15000 });
 
       const switchBtn = page.locator('.login-switch button');
-      await switchBtn.tap();
+      await switchBtn.click();
       await expect(page.locator('.login-title')).toHaveText('Create account');
     });
   });
