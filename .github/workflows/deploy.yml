@@ -14,6 +14,15 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Preserve .env file
+        run: |
+          if [ -f .env ]; then
+            cp .env /tmp/.env.nexus-backup
+            echo "Backed up existing .env file"
+          else
+            echo "No existing .env file to back up"
+          fi
+
       - name: Checkout latest code
         uses: actions/checkout@v4
         with:
@@ -34,9 +43,13 @@ jobs:
             exit 1
           fi
 
-      - name: Ensure .env file exists
+      - name: Restore .env file
         run: |
-          if [ ! -f .env ]; then
+          if [ -f /tmp/.env.nexus-backup ]; then
+            cp /tmp/.env.nexus-backup .env
+            rm -f /tmp/.env.nexus-backup
+            echo "Restored .env file from backup"
+          elif [ ! -f .env ]; then
             echo "No .env file found. Copying from .env.example..."
             cp .env.example .env
             echo ""
@@ -103,8 +116,7 @@ jobs:
             if [ "$i" -eq 10 ]; then
               echo "Server did not respond after 10 attempts. Checking logs..."
               ${{ steps.docker-check.outputs.compose_cmd }} logs server
-              echo ""
-              echo "Note: The server may still be initializing. Check 'docker compose logs -f server' on the host."
+              exit 1
             fi
             echo "Waiting for server... (attempt $i/10)"
             sleep 5
@@ -120,6 +132,7 @@ jobs:
             if [ "$i" -eq 5 ]; then
               echo "Client did not respond. Checking logs..."
               ${{ steps.docker-check.outputs.compose_cmd }} logs client
+              exit 1
             fi
             echo "Waiting for client... (attempt $i/5)"
             sleep 3

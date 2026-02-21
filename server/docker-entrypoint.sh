@@ -5,23 +5,69 @@ echo "==================================="
 echo "Nexus Server Initialization"
 echo "==================================="
 
-# Wait for PostgreSQL to be ready
+# Wait for PostgreSQL to be ready (with auth check and max retries)
 echo "Waiting for PostgreSQL to be ready..."
-until PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c '\q' 2>/dev/null; do
-  echo "PostgreSQL is unavailable - sleeping"
+PG_MAX_RETRIES=30
+PG_RETRY=0
+while [ "$PG_RETRY" -lt "$PG_MAX_RETRIES" ]; do
+  PG_RETRY=$((PG_RETRY + 1))
+
+  # First check if PostgreSQL is accepting connections at all
+  if ! pg_isready -h "postgres" -U "postgres" -q 2>/dev/null; then
+    echo "PostgreSQL is not accepting connections yet (attempt $PG_RETRY/$PG_MAX_RETRIES)"
+    sleep 2
+    continue
+  fi
+
+  # Verify password authentication and database access
+  PG_OUTPUT=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c 'SELECT 1' 2>&1)
+  PG_EXIT=$?
+
+  if [ "$PG_EXIT" -eq 0 ]; then
+    echo "✓ PostgreSQL is ready!"
+    break
+  fi
+
+  # Check for auth failure specifically — this won't resolve with retries
+  if echo "$PG_OUTPUT" | grep -qi "password authentication failed"; then
+    echo ""
+    echo "ERROR: PostgreSQL password authentication failed!"
+    echo "The POSTGRES_PASSWORD in .env does not match the password stored in the PostgreSQL volume."
+    echo ""
+    echo "To fix this, either:"
+    echo "  1. Update POSTGRES_PASSWORD in .env to match the original password, or"
+    echo "  2. Remove the volume and reinitialize: docker compose down -v && docker compose up -d --build"
+    echo ""
+    exit 1
+  fi
+
+  echo "PostgreSQL is unavailable (attempt $PG_RETRY/$PG_MAX_RETRIES)"
   sleep 2
 done
 
-echo "✓ PostgreSQL is ready!"
+if [ "$PG_RETRY" -ge "$PG_MAX_RETRIES" ]; then
+  echo "ERROR: PostgreSQL did not become ready after $PG_MAX_RETRIES attempts"
+  exit 1
+fi
 
 # Wait for Redis to be ready
 echo "Waiting for Redis to be ready..."
-until redis-cli -h redis ping 2>/dev/null; do
-  echo "Redis is unavailable - sleeping"
+REDIS_MAX_RETRIES=15
+REDIS_RETRY=0
+while [ "$REDIS_RETRY" -lt "$REDIS_MAX_RETRIES" ]; do
+  REDIS_RETRY=$((REDIS_RETRY + 1))
+  if redis-cli -h redis ping 2>/dev/null | grep -q PONG; then
+    echo "✓ Redis is ready!"
+    break
+  fi
+  echo "Redis is unavailable (attempt $REDIS_RETRY/$REDIS_MAX_RETRIES)"
   sleep 2
 done
 
-echo "✓ Redis is ready!"
+if [ "$REDIS_RETRY" -ge "$REDIS_MAX_RETRIES" ]; then
+  echo "ERROR: Redis did not become ready after $REDIS_MAX_RETRIES attempts"
+  exit 1
+fi
 
 # Check if database is initialized
 echo "Checking database initialization..."
