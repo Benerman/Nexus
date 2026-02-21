@@ -60,7 +60,12 @@ client/android/app/src/main/java/com/nexus/*
 !client/android/app/src/main/java/com/nexus/app/
 client/android/app/src/main/java/com/nexus/app/*
 !client/android/app/src/main/java/com/nexus/app/MainActivity.java
-client/ios/
+client/ios/*
+!client/ios/App/
+client/ios/App/*
+!client/ios/App/App/
+client/ios/App/App/*
+!client/ios/App/App/Info.plist
 
 # Tauri build artifacts
 client/src-tauri/target/
