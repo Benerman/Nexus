@@ -19,6 +19,11 @@ jobs:
       tag: dev-build-${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Create pre-release
         uses: softprops/action-gh-release@v2
         with:
