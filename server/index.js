@@ -38,14 +38,19 @@ const ALLOWED_ORIGINS = [
   'https://localhost',
   'tauri://localhost',
   'https://tauri.localhost',
-];
+  // Support additional origins via comma-separated ALLOWED_ORIGINS env var
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : []),
+].map(o => o.replace(/\/+$/, '')); // strip trailing slashes
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (Electron file://, mobile apps, curl)
     if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.some(allowed => origin === allowed)) {
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+    if (ALLOWED_ORIGINS.some(allowed => normalizedOrigin === allowed)) {
       return callback(null, true);
     }
+    console.error(`[CORS] Blocked origin: ${origin}. Allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
     callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
