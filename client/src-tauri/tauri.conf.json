@@ -61,7 +61,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYwRjIzMTA1Q0ZCODNFNDQKUldSRVByalBCVEh5WUI0cEFYVHFhNTh4bUlPWVZCckZQeG1iRnBLUkpOeHlLM3BZT2JxWngyOUUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0OEZBQ0Y5QTU3QTdCNzIKUldSeWUzcWwrYXlQNUtkNnZtZ0x2ZVhmM2lKZXlueVhxdVk5TWQyNmRiMlh6SG9aNUttYWlzdmwK",
       "endpoints": [
         "https://github.com/Benerman/Nexus/releases/latest/download/latest.json"
       ]
