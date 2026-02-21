@@ -12,7 +12,7 @@ env:
 
 jobs:
   create-release:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
     outputs:
@@ -41,7 +41,7 @@ jobs:
 
   build-tauri-linux:
     needs: create-release
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
     steps:
@@ -267,7 +267,7 @@ jobs:
 
   build-android:
     needs: create-release
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
     steps:

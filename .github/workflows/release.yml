@@ -12,7 +12,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
     outputs:
@@ -59,7 +59,7 @@ jobs:
 
   build-tauri-linux:
     needs: prepare
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
     steps:
@@ -283,7 +283,7 @@ jobs:
 
   build-android:
     needs: prepare
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: write
     steps:
