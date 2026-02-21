@@ -48,6 +48,7 @@ jobs:
             | macOS (Apple Silicon) | `.dmg` |
             | macOS (Intel) | `.dmg` |
             | Linux | `.AppImage`, `.deb` |
+            | iOS | `.ipa` |
             | Android | `.apk` |
 
             ## What's Changed
@@ -100,16 +101,17 @@ jobs:
     needs: prepare
     permissions:
       contents: write
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
-            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            rust_targets: "aarch64-apple-darwin"
           - platform: macos-latest
             args: "--target x86_64-apple-darwin"
-            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+            rust_targets: "x86_64-apple-darwin"
           - platform: windows-latest
             args: ""
             rust_targets: ""
@@ -127,12 +129,23 @@ jobs:
         with:
           targets: ${{ matrix.rust_targets }}
 
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri -> target
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - name: Install client dependencies
         run: npm ci
         working-directory: client
 
       - name: Build with Tauri
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI: false
@@ -142,11 +155,107 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: client
+          tauriScript: npx tauri
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: "Nexus v${{ needs.prepare.outputs.version }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  build-ios:
+    needs: prepare
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build React app
+        run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
+        working-directory: client
+
+      - name: Add iOS platform
+        run: npx cap add ios
+        working-directory: client
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+        working-directory: client
+
+      - name: Install CocoaPods dependencies
+        run: pod install
+        working-directory: client/ios/App
+
+      - name: Build iOS app
+        run: |
+          xcodebuild \
+            -workspace client/ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Nexus.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export IPA
+        run: |
+          if [ -n "${{ secrets.IOS_CERTIFICATE_BASE64 }}" ]; then
+            # Decode and install certificate
+            echo "${{ secrets.IOS_CERTIFICATE_BASE64 }}" | base64 -d > /tmp/certificate.p12
+            security create-keychain -p "" build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p "" build.keychain
+            security import /tmp/certificate.p12 -k build.keychain -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+
+            # Decode provisioning profile
+            echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 -d > /tmp/profile.mobileprovision
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+            cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
+            # Create export options plist
+            cat > /tmp/ExportOptions.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>ad-hoc</string>
+              <key>teamID</key>
+              <string>${{ secrets.APPLE_TEAM_ID }}</string>
+          </dict>
+          </plist>
+          PLIST
+
+            xcodebuild -exportArchive \
+              -archivePath build/Nexus.xcarchive \
+              -exportOptionsPlist /tmp/ExportOptions.plist \
+              -exportPath build/export
+
+            # Clean up keychain
+            security delete-keychain build.keychain
+          else
+            echo "No signing certificates configured - creating unsigned archive only"
+            mkdir -p build/export
+            cd build/Nexus.xcarchive/Products/Applications
+            zip -r ../../../export/Nexus-iOS-unsigned.zip *.app
+          fi
+
+      - name: Upload iOS build to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          files: |
+            build/export/*.ipa
+            build/export/*.zip
 
   build-android:
     needs: prepare
