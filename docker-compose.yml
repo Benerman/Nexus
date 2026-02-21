@@ -51,6 +51,7 @@ services:
       - PORT=3001
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nexus_db
       - REDIS_URL=redis://redis:6379
+      # IMPORTANT: Set CLIENT_URL to your public domain for production (e.g., https://nexus.yourdomain.com)
       - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
