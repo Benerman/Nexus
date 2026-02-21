@@ -180,6 +180,10 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
       - name: Build React app
         run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
         working-directory: client
