@@ -514,6 +514,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     return () => { socket.off('webhook:created', h); socket.off('user:password-changed', handlePasswordChanged); };
   }, [socket]);
 
+  // Check ownership early (needed by ICE config effect below)
+  const isOwner = server?.ownerId === currentUser?.id;
+
   // Load ICE config when owner opens Voice/WebRTC section
   useEffect(() => {
     if (!iceConfigOpen || iceConfigLoaded || !isOwner || !socket || !server) return;
@@ -1396,7 +1399,6 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const userPerms = getUserPermissions();
 
   // Get current user's highest role position for hierarchy checks
-  const isOwner = server?.ownerId === currentUser?.id;
   const userHighestPosition = (() => {
     if (!currentUser || !server) return -1;
     if (isOwner) return Infinity;
@@ -3528,7 +3530,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
               )}
             </div>
           )}
-        </div>
+
           {tab==='about' && (
             <div className="settings-section">
               <div style={{textAlign:'center', marginBottom: 24}}>
@@ -3605,26 +3607,27 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
             </div>
           )}
 
-        {(() => {
-          const saveMap = {
-            'profile': { fn: saveProfile, saved: profileSaved, label: 'Save Profile' },
-            'server-settings': { fn: saveServer, saved: serverSaved, label: 'Save Server' },
-            'channels': editingChannel ? { fn: saveChannel, saved: channelSaved, label: 'Save Channel' } : null,
-            'roles': editingRole ? { fn: saveRole, saved: roleSaved, label: 'Save Role' } : null,
-          };
-          const s = saveMap[tab];
-          if (!s) return null;
-          return (
-            <button
-              className={`settings-floating-save ${s.saved ? 'saved' : ''}`}
-              onClick={s.fn}
-            >
-              {s.saved ? '✓ Saved' : s.label}
-            </button>
-          );
-        })()}
+          {(() => {
+            const saveMap = {
+              'profile': { fn: saveProfile, saved: profileSaved, label: 'Save Profile' },
+              'server-settings': { fn: saveServer, saved: serverSaved, label: 'Save Server' },
+              'channels': editingChannel ? { fn: saveChannel, saved: channelSaved, label: 'Save Channel' } : null,
+              'roles': editingRole ? { fn: saveRole, saved: roleSaved, label: 'Save Role' } : null,
+            };
+            const s = saveMap[tab];
+            if (!s) return null;
+            return (
+              <button
+                className={`settings-floating-save ${s.saved ? 'saved' : ''}`}
+                onClick={s.fn}
+              >
+                {s.saved ? '✓ Saved' : s.label}
+              </button>
+            );
+          })()}
+        </div>
+        {showWebhookDocs && <WebhookDocs onClose={() => setShowWebhookDocs(false)} />}
       </div>
-      {showWebhookDocs && <WebhookDocs onClose={() => setShowWebhookDocs(false)} />}
     </div>
   );
 }

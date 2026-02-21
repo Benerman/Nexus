@@ -61,9 +61,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzMTMxRTMxNUFCODY5NTIKUldSU2FiaGFNUjRUVThNS1NDK3h5cll6OEE5UHBOaU1hZDNMRHN0U3AzRU4wV2pGM0xkWEUwL1QK",
       "endpoints": [
-        "https://github.com/OWNER/REPO/releases/latest/download/latest.json"
+        "https://github.com/Benerman/Nexus/releases/latest/download/latest.json"
       ]
     }
   }
