@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import './URLEmbed.css';
 import { getServerUrl } from '../config';
 
-const SERVER_URL = getServerUrl();
 const embedCache = new Map();
 
 // Extract URLs from text, excluding invite links
@@ -33,7 +32,7 @@ export default function URLEmbed({ url }) {
     const fetchOG = async () => {
       try {
         const token = localStorage.getItem('nexus_token');
-        const resp = await fetch(`${SERVER_URL}/api/og?url=${encodeURIComponent(url)}`, {
+        const resp = await fetch(`${getServerUrl()}/api/og?url=${encodeURIComponent(url)}`, {
           headers: token ? { 'Authorization': `Bearer ${token}` } : {}
         });
         if (!resp.ok) throw new Error('Failed');

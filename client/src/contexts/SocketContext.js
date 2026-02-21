@@ -3,14 +3,13 @@ import { io } from 'socket.io-client';
 import { getServerUrl } from '../config';
 
 const SocketContext = createContext(null);
-const SERVER_URL = getServerUrl();
 
 export function SocketProvider({ children }) {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+    const socket = io(getServerUrl(), { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));

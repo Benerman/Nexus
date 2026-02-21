@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './GifPicker.css';
 import { getServerUrl } from '../config';
 
-const SERVER_URL = getServerUrl();
 const PAGE_SIZE = 20;
 
 export default function GifPicker({ onSelect, onClose }) {
@@ -23,8 +22,8 @@ export default function GifPicker({ onSelect, onClose }) {
     setLoading(true);
 
     const endpoint = searchQuery.trim()
-      ? `${SERVER_URL}/api/gifs/search?q=${encodeURIComponent(searchQuery)}&limit=${PAGE_SIZE}&offset=${offset}`
-      : `${SERVER_URL}/api/gifs/trending?limit=${PAGE_SIZE}&offset=${offset}`;
+      ? `${getServerUrl()}/api/gifs/search?q=${encodeURIComponent(searchQuery)}&limit=${PAGE_SIZE}&offset=${offset}`
+      : `${getServerUrl()}/api/gifs/trending?limit=${PAGE_SIZE}&offset=${offset}`;
 
     const token = localStorage.getItem('nexus_token');
     fetch(endpoint, {

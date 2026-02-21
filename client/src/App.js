@@ -1574,7 +1574,7 @@ export default function App() {
         </div>
       </div>;
     }
-    return <LoginScreen onLogin={handleLogin} pendingInvite={!!pendingInviteCode.current} />;
+    return <LoginScreen onLogin={handleLogin} pendingInvite={!!pendingInviteCode.current} onChangeServer={isStandaloneApp() ? handleChangeServer : null} />;
   }
 
   const activeMessages = messages[activeChannel?.id] || [];

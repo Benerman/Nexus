@@ -3,9 +3,7 @@ import './LoginScreen.css';
 import { HexagonIcon } from './icons';
 import { getServerUrl } from '../config';
 
-const SERVER_URL = getServerUrl();
-
-export default function LoginScreen({ onLogin, pendingInvite }) {
+export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) {
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +30,7 @@ export default function LoginScreen({ onLogin, pendingInvite }) {
     setLoading(true);
     try {
       const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const base = SERVER_URL || window.location.origin;
+      const base = getServerUrl() || window.location.origin;
       const res = await fetch(`${base}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,6 +129,13 @@ export default function LoginScreen({ onLogin, pendingInvite }) {
             <><span>Already have an account? </span><button onClick={() => { setMode('login'); setError(''); }}>Log In</button></>
           )}
         </div>
+
+        {onChangeServer && (
+          <div className="login-switch" style={{marginTop: 8}}>
+            <span>Connected to {getServerUrl()} </span>
+            <button onClick={onChangeServer}>Change Server</button>
+          </div>
+        )}
       </div>
     </div>
   );

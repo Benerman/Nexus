@@ -1441,16 +1441,13 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     }
   }, [tab, tabs]);
 
-  // Detect OS for X button positioning
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-
   return (
     <div className="settings-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="settings-modal">
         <SettingsSidebar tabs={tabs} tab={tab} setTab={setTab} />
 
         <div className="settings-content">
-          <button className={`settings-close-btn ${isMac ? 'mac' : 'win'}`} onClick={onClose} title="Close Settings">
+          <button className="settings-close-btn" onClick={onClose} title="Close Settings">
             ✕
           </button>
           {actionError && (
