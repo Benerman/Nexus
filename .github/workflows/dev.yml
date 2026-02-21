@@ -1,11 +1,10 @@
 name: Dev Build
 
 on:
-  push:
-    branches: [dev]
+  workflow_dispatch:
 
 concurrency:
-  group: dev-build-${{ github.ref }}
+  group: dev-build
   cancel-in-progress: true
 
 env:
@@ -26,16 +25,57 @@ jobs:
           tag_name: dev-build-${{ github.run_number }}
           name: "Dev Build #${{ github.run_number }}"
           body: |
-            **Development build from `dev` branch**
+            **Development build from `${{ github.ref_name }}` branch**
 
             Commit: `${{ github.sha }}`
-            Branch: `dev`
+            Branch: `${{ github.ref_name }}`
 
             > This is a pre-release build intended for testing.
           prerelease: true
           draft: false
 
-  build-tauri:
+  build-tauri-linux:
+    needs: create-release
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: false
+          REACT_APP_SERVER_URL: ${{ env.SERVER_URL }}
+          GENERATE_SOURCEMAP: false
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: client
+          tagName: ${{ needs.create-release.outputs.tag }}
+          releaseName: "Dev Build #${{ github.run_number }}"
+          releaseDraft: false
+          prerelease: true
+
+  build-tauri-desktop:
     needs: create-release
     permissions:
       contents: write
@@ -43,9 +83,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-22.04
-            args: ""
-            rust_targets: ""
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
             rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
@@ -68,12 +105,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_targets }}
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install client dependencies
         run: npm ci
@@ -98,7 +129,7 @@ jobs:
 
   build-android:
     needs: create-release
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: write
     steps:
