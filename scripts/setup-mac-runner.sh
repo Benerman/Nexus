@@ -18,6 +18,9 @@
 
 set -euo pipefail
 
+# Resolve script directory early, before any cd changes the working directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- Configuration ---
 RUNNER_DIR="$HOME/actions-runner"
 RUNNER_VERSION="2.321.0"
@@ -200,8 +203,7 @@ install_launch_agent() {
     PLIST_NAME="com.github.actions-runner.nexus.plist"
     PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME"
 
-    # Copy the plist template
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # Copy the plist template (SCRIPT_DIR resolved at top of script)
     if [[ -f "$SCRIPT_DIR/com.github.actions-runner.nexus.plist" ]]; then
         # Use the template and substitute paths
         sed "s|__RUNNER_DIR__|$RUNNER_DIR|g; s|__USER__|$(whoami)|g; s|__HOME__|$HOME|g" \
