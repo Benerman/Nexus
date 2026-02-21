@@ -1113,9 +1113,36 @@ async function getAccountSounds(id) {
 // ============================================================================
 
 /**
+ * Wait for database connection to be ready (retries with backoff)
+ */
+async function waitForConnection(maxRetries = 10, baseDelayMs = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await pool.query('SELECT 1');
+      return;
+    } catch (error) {
+      if (error.message && error.message.includes('password authentication failed')) {
+        console.error('[DB] Password authentication failed — POSTGRES_PASSWORD does not match the database volume');
+        throw error;
+      }
+      if (attempt === maxRetries) {
+        console.error(`[DB] Failed to connect after ${maxRetries} attempts`);
+        throw error;
+      }
+      const delay = Math.min(baseDelayMs * attempt, 5000);
+      console.log(`[DB] Connection attempt ${attempt}/${maxRetries} failed, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
  * Initialize database (run migrations)
  */
 async function initializeDatabase() {
+  // Ensure the connection is ready before running migrations
+  await waitForConnection();
+
   try {
     const fs = require('fs');
     const path = require('path');
