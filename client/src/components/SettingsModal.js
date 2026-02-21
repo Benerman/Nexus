@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import WebhookDocs from './WebhookDocs';
 import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/socketTimeout';
-import { getServerUrl, isStandaloneApp, isTauriApp } from '../config';
+import { getServerUrl, isStandaloneApp, isTauriApp, openExternalUrl } from '../config';
 import { checkForUpdates } from '../utils/updater';
 import './SettingsModal.css';
 import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon, BellIcon, SoundboardIcon, EmojiIcon } from './icons';
@@ -3550,6 +3550,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   href="https://github.com/benerman/nexus"
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={e => { e.preventDefault(); openExternalUrl('https://github.com/benerman/nexus'); }}
                   style={{
                     display:'flex', alignItems:'center', gap: 8, padding: '10px 14px',
                     background:'var(--bg-tertiary)', borderRadius: 8, color:'var(--text-primary)',
@@ -3602,7 +3603,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
 
               <div style={{fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: 12}}>
                 <p style={{margin: '0 0 4px'}}>Made with care by the Nexus team.</p>
-                <p style={{margin: 0}}>Licensed under <a href="https://github.com/benerman/nexus/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" style={{color: 'var(--text-muted)'}}>AGPL-3.0</a>.</p>
+                <p style={{margin: 0}}>Licensed under <a href="https://github.com/benerman/nexus/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" onClick={e => { e.preventDefault(); openExternalUrl('https://github.com/benerman/nexus/blob/main/LICENSE'); }} style={{color: 'var(--text-muted)'}}>AGPL-3.0</a>.</p>
               </div>
             </div>
           )}

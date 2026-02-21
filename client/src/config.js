@@ -67,3 +67,19 @@ export function hasServerUrl() {
 export function needsServerSetup() {
   return isStandaloneApp() && !hasServerUrl();
 }
+
+/**
+ * Open a URL in the system's default browser.
+ * In standalone apps (Tauri/Electron/Capacitor) this avoids navigating
+ * inside the webview. On web, falls back to window.open.
+ */
+export async function openExternalUrl(url) {
+  if (isTauriApp()) {
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    return openUrl(url);
+  }
+  // Electron's setWindowOpenHandler intercepts window.open and opens externally.
+  // Capacitor also opens window.open in the system browser by default.
+  // On web, this just opens a new tab.
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
