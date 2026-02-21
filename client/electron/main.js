@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, session, shell, systemPreferences } = require('electron');
 const path = require('path');
 
 let mainWindow;
@@ -41,7 +41,29 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+// Grant microphone and camera permissions for WebRTC voice/video
+function setupMediaPermissions() {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'microphone', 'camera', 'mediaKeySystem', 'notifications'];
+    callback(allowed.includes(permission));
+  });
+
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowed = ['media', 'microphone', 'camera', 'mediaKeySystem', 'notifications'];
+    return allowed.includes(permission);
+  });
+
+  // On macOS, request microphone and camera access at the OS level
+  if (process.platform === 'darwin') {
+    systemPreferences.askForMediaAccess('microphone').catch(() => {});
+    systemPreferences.askForMediaAccess('camera').catch(() => {});
+  }
+}
+
+app.whenReady().then(() => {
+  setupMediaPermissions();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
