@@ -20,9 +20,19 @@ jobs:
           clean: true
 
       - name: Verify Docker is available
+        id: docker-check
         run: |
           docker --version
-          docker compose version || docker-compose --version
+          if docker compose version > /dev/null 2>&1; then
+            echo "compose_cmd=docker compose" >> "$GITHUB_OUTPUT"
+            docker compose version
+          elif docker-compose --version > /dev/null 2>&1; then
+            echo "compose_cmd=docker-compose" >> "$GITHUB_OUTPUT"
+            docker-compose --version
+          else
+            echo "ERROR: Neither 'docker compose' nor 'docker-compose' found."
+            exit 1
+          fi
 
       - name: Ensure .env file exists
         run: |
@@ -35,13 +45,18 @@ jobs:
             echo "At minimum, set JWT_SECRET and POSTGRES_PASSWORD."
           fi
 
-      - name: Stop existing containers
+      - name: Stop and remove existing containers
         run: |
-          docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
+          ${{ steps.docker-check.outputs.compose_cmd }} down --remove-orphans 2>/dev/null || true
+          # Force-remove Nexus containers to avoid 'ContainerConfig' errors
+          # caused by Docker Engine / Compose version mismatches
+          for c in nexus-server nexus-client nexus-postgres nexus-redis; do
+            docker rm -f "$c" 2>/dev/null || true
+          done
 
       - name: Build and deploy with Docker Compose
         run: |
-          docker compose up -d --build 2>/dev/null || docker-compose up -d --build
+          ${{ steps.docker-check.outputs.compose_cmd }} up -d --build --force-recreate
 
       - name: Wait for services to be healthy
         run: |
@@ -56,7 +71,7 @@ jobs:
             fi
             if [ "$i" -eq 6 ]; then
               echo "PostgreSQL failed to start."
-              docker compose logs postgres 2>/dev/null || docker-compose logs postgres
+              ${{ steps.docker-check.outputs.compose_cmd }} logs postgres
               exit 1
             fi
             echo "Waiting for PostgreSQL... (attempt $i/6)"
@@ -71,7 +86,7 @@ jobs:
             fi
             if [ "$i" -eq 6 ]; then
               echo "Redis failed to start."
-              docker compose logs redis 2>/dev/null || docker-compose logs redis
+              ${{ steps.docker-check.outputs.compose_cmd }} logs redis
               exit 1
             fi
             echo "Waiting for Redis... (attempt $i/6)"
@@ -87,7 +102,7 @@ jobs:
             fi
             if [ "$i" -eq 10 ]; then
               echo "Server did not respond after 10 attempts. Checking logs..."
-              docker compose logs server 2>/dev/null || docker-compose logs server
+              ${{ steps.docker-check.outputs.compose_cmd }} logs server
               echo ""
               echo "Note: The server may still be initializing. Check 'docker compose logs -f server' on the host."
             fi
@@ -104,7 +119,7 @@ jobs:
             fi
             if [ "$i" -eq 5 ]; then
               echo "Client did not respond. Checking logs..."
-              docker compose logs client 2>/dev/null || docker-compose logs client
+              ${{ steps.docker-check.outputs.compose_cmd }} logs client
             fi
             echo "Waiting for client... (attempt $i/5)"
             sleep 3
@@ -112,7 +127,7 @@ jobs:
 
       - name: Clean up old Docker images
         run: |
-          docker image prune -f 2>/dev/null || true
+          docker image prune -f || true
 
       - name: Deployment summary
         run: |
