@@ -21,6 +21,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       connectSrc: ["'self'", "wss:", "https:"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
@@ -51,13 +52,24 @@ const corsOptions = {
       return callback(null, true);
     }
     console.error(`[CORS] Blocked origin: ${origin}. Allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
-    callback(new Error('Not allowed by CORS'));
+    console.error(`[CORS] To fix: set CLIENT_URL=${origin} in your .env file or docker-compose environment`);
+    const err = new Error('Not allowed by CORS');
+    err.statusCode = 403;
+    callback(err);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 };
 app.use(cors(corsOptions));
+
+// Handle CORS errors with 403 instead of default 500
+app.use((err, req, res, next) => {
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'Origin not allowed by CORS policy' });
+  }
+  next(err);
+});
 
 app.use(express.json({ limit: '20mb' }));
 
