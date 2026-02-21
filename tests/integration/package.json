@@ -1,0 +1,14 @@
+{
+  "name": "nexus-integration-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Integration tests for Nexus server API and Socket.IO",
+  "scripts": {
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:ci": "jest --forceExit --detectOpenHandles --ci --verbose"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "socket.io-client": "^4.6.1"
+  }
+}
