@@ -200,7 +200,7 @@ jobs:
         working-directory: client
 
       - name: Add iOS platform and sync
-        run: npx cap add ios 2>/dev/null || true && npx cap sync ios
+        run: rm -rf ios && npx cap add ios && npx cap sync ios
         working-directory: client
 
       - name: Install CocoaPods dependencies
@@ -304,7 +304,7 @@ jobs:
         working-directory: client
 
       - name: Add Android platform and sync
-        run: npx cap add android 2>/dev/null || true && npx cap sync android
+        run: rm -rf android && npx cap add android && npx cap sync android
         working-directory: client
 
       - name: Decode keystore
