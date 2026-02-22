@@ -83,3 +83,28 @@ export async function openExternalUrl(url) {
   // On web, this just opens a new tab.
   window.open(url, '_blank', 'noopener,noreferrer');
 }
+
+/**
+ * Detect if the app is running inside Electron specifically.
+ * Unlike isStandaloneApp(), this does NOT match Tauri or Capacitor.
+ */
+export function isElectronApp() {
+  if (typeof window === 'undefined') return false;
+  return !!window.__NEXUS_CONFIG__?.isDesktop;
+}
+
+/**
+ * Get the current OS platform string.
+ * Returns 'linux', 'win32', 'darwin', or 'unknown'.
+ */
+export function getPlatform() {
+  if (typeof window === 'undefined') return 'unknown';
+  // Electron preload exposes process.platform directly
+  if (window.__NEXUS_CONFIG__?.platform) return window.__NEXUS_CONFIG__.platform;
+  // User agent heuristic for Tauri and browser
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('linux')) return 'linux';
+  if (ua.includes('windows') || ua.includes('win64') || ua.includes('win32')) return 'win32';
+  if (ua.includes('macintosh') || ua.includes('mac os')) return 'darwin';
+  return 'unknown';
+}

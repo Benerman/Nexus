@@ -1669,6 +1669,25 @@ export default function App() {
         )}
       </div>
       <div className="main-content">
+        {/* Media error banner */}
+        {webrtc.mediaError && (
+          <div className="media-error-banner">
+            <div className="media-error-icon">&#9888;</div>
+            <div className="media-error-text">
+              <span className="media-error-title">{webrtc.mediaError.title}</span>
+              <span className="media-error-message">{webrtc.mediaError.message}</span>
+            </div>
+            <div className="media-error-actions">
+              {webrtc.mediaError.canRetry && webrtc.mediaError.channelId && (
+                <button className="media-error-retry"
+                  onClick={() => webrtc.retryJoinVoice(webrtc.mediaError.channelId, webrtc.mediaError.serverId)}>
+                  Retry
+                </button>
+              )}
+              <button className="media-error-dismiss" onClick={webrtc.clearMediaError}>&times;</button>
+            </div>
+          </div>
+        )}
         {/* DM Call Voice Panel - shows above chat */}
         {dmCallActive && webrtc.currentVoiceChannel === dmCallActive && activeChannel?.isDM && (
           <div className="dm-call-voice-panel">

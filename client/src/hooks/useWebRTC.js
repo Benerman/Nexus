@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { isTauriApp, isElectronApp, getPlatform } from '../config';
 
 const DEFAULT_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -73,6 +74,46 @@ async function playVoiceCue(type, customSound, customSoundVolume = 100) {
   }
 }
 
+// Map media errors to platform-aware, user-friendly messages
+function getMediaErrorInfo(err, mediaType) {
+  const platform = getPlatform();
+  const isDesktop = isTauriApp() || isElectronApp();
+  const deviceLabel = mediaType === 'screen' ? 'screen capture' : mediaType;
+
+  switch (err.name) {
+    case 'NotAllowedError':
+      if (mediaType === 'screen') {
+        if (platform === 'linux') {
+          return { title: 'Screen sharing blocked', message: 'Your system denied screen capture access. On Wayland, ensure your compositor supports the ScreenCast portal.', canRetry: false };
+        }
+        if (platform === 'win32') {
+          return { title: 'Screen sharing blocked', message: 'Windows may be blocking screen capture. Check Settings \u2192 Privacy & security \u2192 Screen recording.', canRetry: false };
+        }
+        return { title: 'Screen sharing blocked', message: 'Screen capture access was denied.', canRetry: false };
+      }
+      // Microphone / camera
+      if (isDesktop && platform === 'linux') {
+        return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} access blocked`, message: 'Your OS denied access. Check system Settings \u2192 Privacy \u2192 Microphone.', canRetry: true };
+      }
+      if (isDesktop && platform === 'win32') {
+        return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} access blocked`, message: 'Windows Privacy Settings may be blocking access. Open Settings \u2192 Privacy & security \u2192 Microphone and ensure access is allowed.', canRetry: true };
+      }
+      return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} access denied`, message: 'Click the lock icon in your address bar and allow microphone access, then retry.', canRetry: true };
+
+    case 'NotFoundError':
+      return { title: `No ${deviceLabel} found`, message: `No ${deviceLabel} was detected. Check that a device is connected.`, canRetry: true };
+
+    case 'NotReadableError':
+      return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} unavailable`, message: `Your ${deviceLabel} may be in use by another application. Close other apps using it and retry.`, canRetry: true };
+
+    case 'OverconstrainedError':
+      return { title: 'Device settings error', message: "The selected audio device doesn't support current settings. Try a different device in Audio Settings.", canRetry: true };
+
+    default:
+      return { title: 'Media error', message: err.message || `Could not access ${deviceLabel}.`, canRetry: true };
+  }
+}
+
 export function useWebRTC(socket, currentUser, activeServerId) {
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
@@ -96,6 +137,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   const [voiceStatus, setVoiceStatus] = useState(VOICE_STATUS.DISCONNECTED);
   const [voiceQuality, setVoiceQuality] = useState(null); // { rtt, packetLoss, jitter } or null
   const [voiceStatusMessage, setVoiceStatusMessage] = useState(''); // User-facing status text
+  const [mediaError, setMediaError] = useState(null); // { title, message, canRetry, mediaType, channelId?, serverId? }
 
   // Remote user states
   const [remoteUserStates, setRemoteUserStates] = useState({}); // socketId -> { isMuted, isDeafened }
@@ -749,6 +791,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
 
   const joinVoice = useCallback(async (channelId, serverId) => {
     try {
+      setMediaError(null);
       setVoiceStatus(VOICE_STATUS.CONNECTING);
       setVoiceStatusMessage('Connecting to voice...');
       reconnectAttemptsRef.current = 0;
@@ -810,9 +853,17 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       console.error('getUserMedia:', err);
       setVoiceStatus(VOICE_STATUS.DISCONNECTED);
       setVoiceStatusMessage('');
-      alert('Could not access microphone. Please allow microphone access and try again.');
+      const info = getMediaErrorInfo(err, 'microphone');
+      setMediaError({ ...info, mediaType: 'microphone', channelId, serverId: serverId || activeServerId });
     }
   }, [socket, startSpeakingDetection, isMuted, setupAudioProcessing, activeServerId]);
+
+  const clearMediaError = useCallback(() => setMediaError(null), []);
+
+  const retryJoinVoice = useCallback((channelId, serverId) => {
+    setMediaError(null);
+    joinVoice(channelId, serverId);
+  }, [joinVoice]);
 
   const leaveVoice = useCallback(() => {
     // 0. Cancel any pending auto-reconnect and quality polling
@@ -988,8 +1039,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       socket.emit('voice:join', { channelId });
     } catch (err) {
       console.error('Reconnect failed:', err);
+      const info = getMediaErrorInfo(err, 'microphone');
       setVoiceStatus(VOICE_STATUS.DEGRADED);
-      setVoiceStatusMessage('Reconnection failed — try again');
+      setVoiceStatusMessage(`Reconnection failed: ${info.title}`);
+      setMediaError({ ...info, mediaType: 'microphone' });
     }
   }, [socket, currentVoiceChannel, isMuted, cleanupAudioProcessing, setupAudioProcessing, startSpeakingDetection, activeServerId]);
 
@@ -1085,7 +1138,17 @@ export function useWebRTC(socket, currentUser, activeServerId) {
 
       videoTrack.onended = () => stopScreenShare(channelId);
     } catch (err) {
-      if (err.name !== 'NotAllowedError') console.error('getDisplayMedia:', err);
+      if (err.name === 'NotAllowedError') {
+        // In browsers, user likely just clicked Cancel — not an error
+        if (isTauriApp() || isElectronApp()) {
+          const info = getMediaErrorInfo(err, 'screen');
+          setMediaError({ ...info, mediaType: 'screen' });
+        }
+      } else {
+        console.error('getDisplayMedia:', err);
+        const info = getMediaErrorInfo(err, 'screen');
+        setMediaError({ ...info, mediaType: 'screen' });
+      }
     }
   }, [socket]); // stopScreenShare is defined below — safe forward ref via closure
 
@@ -1273,6 +1336,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     isMuted, isDeafened, isSharingScreen, isWatchingScreen, isScreenAudioMuted,
     currentVoiceChannel, activeSpeakers,
     voiceStatus, voiceQuality, voiceStatusMessage,
+    mediaError, clearMediaError, retryJoinVoice,
     remoteUserStates, userVolumes, localMutedUsers,
     initExistingPeers, joinVoice, leaveVoice, reconnectVoice,
     toggleMute, toggleDeafen,
@@ -1285,6 +1349,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     isMuted, isDeafened, isSharingScreen, isWatchingScreen, isScreenAudioMuted,
     currentVoiceChannel, activeSpeakers,
     voiceStatus, voiceQuality, voiceStatusMessage,
+    mediaError, clearMediaError, retryJoinVoice,
     remoteUserStates, userVolumes, localMutedUsers,
     initExistingPeers, joinVoice, leaveVoice, reconnectVoice,
     toggleMute, toggleDeafen,
