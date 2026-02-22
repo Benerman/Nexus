@@ -58,83 +58,77 @@ jobs:
             echo "At minimum, set JWT_SECRET and POSTGRES_PASSWORD."
           fi
 
-      - name: Stop and remove existing containers
+      - name: Stop existing containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} down --remove-orphans 2>/dev/null || true
-          # Force-remove Nexus containers to avoid 'ContainerConfig' errors
-          # caused by Docker Engine / Compose version mismatches
-          for c in nexus-server nexus-client nexus-postgres nexus-redis; do
-            docker rm -f "$c" 2>/dev/null || true
-          done
+          ${{ steps.docker-check.outputs.compose_cmd }} down --remove-orphans || true
 
-      - name: Build and deploy with Docker Compose
+      - name: Build and start containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} up -d --build --force-recreate
+          ${{ steps.docker-check.outputs.compose_cmd }} up -d --build
 
       - name: Wait for services to be healthy
         run: |
           echo "Waiting for services to start..."
-          sleep 10
 
-          # Check PostgreSQL
-          for i in 1 2 3 4 5 6; do
+          # Wait for PostgreSQL (up to 60s)
+          for i in $(seq 1 20); do
             if docker exec nexus-postgres pg_isready -U postgres > /dev/null 2>&1; then
               echo "PostgreSQL is ready."
               break
             fi
-            if [ "$i" -eq 6 ]; then
-              echo "PostgreSQL failed to start."
+            if [ "$i" -eq 20 ]; then
+              echo "PostgreSQL failed to start. Logs:"
               ${{ steps.docker-check.outputs.compose_cmd }} logs postgres
               exit 1
             fi
-            echo "Waiting for PostgreSQL... (attempt $i/6)"
-            sleep 5
+            echo "Waiting for PostgreSQL... (attempt $i/20)"
+            sleep 3
           done
 
-          # Check Redis
-          for i in 1 2 3 4 5 6; do
+          # Wait for Redis (up to 30s)
+          for i in $(seq 1 10); do
             if docker exec nexus-redis redis-cli ping 2>/dev/null | grep -q PONG; then
               echo "Redis is ready."
               break
             fi
-            if [ "$i" -eq 6 ]; then
-              echo "Redis failed to start."
+            if [ "$i" -eq 10 ]; then
+              echo "Redis failed to start. Logs:"
               ${{ steps.docker-check.outputs.compose_cmd }} logs redis
               exit 1
             fi
-            echo "Waiting for Redis... (attempt $i/6)"
-            sleep 5
+            echo "Waiting for Redis... (attempt $i/10)"
+            sleep 3
           done
 
       - name: Verify server is responding
         run: |
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if curl -sf http://localhost:3001 > /dev/null 2>&1 || curl -sf http://localhost:3001/api > /dev/null 2>&1; then
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
               echo "Server is responding on port 3001."
               break
             fi
-            if [ "$i" -eq 10 ]; then
-              echo "Server did not respond after 10 attempts. Checking logs..."
+            if [ "$i" -eq 20 ]; then
+              echo "Server did not respond after 20 attempts. Logs:"
               ${{ steps.docker-check.outputs.compose_cmd }} logs server
               exit 1
             fi
-            echo "Waiting for server... (attempt $i/10)"
+            echo "Waiting for server... (attempt $i/20)"
             sleep 5
           done
 
       - name: Verify client is responding
         run: |
-          for i in 1 2 3 4 5; do
+          for i in $(seq 1 10); do
             if curl -sf http://localhost:3000 > /dev/null 2>&1; then
               echo "Client is responding on port 3000."
               break
             fi
-            if [ "$i" -eq 5 ]; then
-              echo "Client did not respond. Checking logs..."
+            if [ "$i" -eq 10 ]; then
+              echo "Client did not respond. Logs:"
               ${{ steps.docker-check.outputs.compose_cmd }} logs client
               exit 1
             fi
-            echo "Waiting for client... (attempt $i/5)"
+            echo "Waiting for client... (attempt $i/10)"
             sleep 3
           done
 
