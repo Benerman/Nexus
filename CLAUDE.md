@@ -110,6 +110,30 @@ See `.env.example` and `server/.env.example` for full list.
 - Security: bcrypt (12 rounds), Helmet.js, CORS whitelist, input sanitization on all user data
 - Cross-platform: web is primary; Capacitor (mobile), Tauri (desktop), Electron (fallback) are secondary
 
+## Icon Generation
+
+All application icons are generated from a single master SVG (`client/scripts/icon-master.svg`) — a red `#ed4245` hexagon outline on a dark `#2b2d31` background, matching the in-app `HexagonIcon` component.
+
+```bash
+# From client/
+node scripts/generate-icons.mjs
+```
+
+Requires `sharp` (listed as a devDependency). On macOS, `iconutil` (bundled with Xcode CLI tools) is used for `.icns` generation.
+
+### Output files
+
+| Directory | Files | Purpose |
+|---|---|---|
+| `client/public/` | `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `logo192.png`, `logo512.png` | Web favicons & PWA icons |
+| `client/src-tauri/icons/` | `icon.png`, `icon.ico`, `icon.icns`, `32x32.png`, `128x128.png`, `128x128@2x.png`, `Square*.png`, `StoreLogo.png` | Tauri desktop builds (macOS, Windows, Linux) |
+
+### Updating the logo
+
+1. Edit `client/scripts/icon-master.svg` (1024x1024 viewBox)
+2. Run `node scripts/generate-icons.mjs` from `client/`
+3. Rebuild the client — `build/` icons are regenerated automatically during `npm run build`
+
 ## CI/CD
 
 - **`deploy.yml`** — Auto-deploys on push to `main`/`master` via self-hosted runner (Docker rebuild + health checks)
