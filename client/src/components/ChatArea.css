@@ -1476,3 +1476,10 @@
   .pending-attachment { width: 60px; height: 60px; }
   .remove-attachment { width: 24px; height: 24px; font-size: 14px; }
 }
+
+/* Landscape phones — hide chat header since mobile nav bar shows channel info */
+@media (max-height: 500px) and (orientation: landscape) {
+  .chat-header {
+    display: none;
+  }
+}
