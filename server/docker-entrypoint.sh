@@ -20,8 +20,12 @@ while [ "$PG_RETRY" -lt "$PG_MAX_RETRIES" ]; do
   fi
 
   # Verify password authentication and database access
-  PG_OUTPUT=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c 'SELECT 1' 2>&1)
-  PG_EXIT=$?
+  # Note: capture exit code manually; set -e would kill the script on psql failure
+  if PG_OUTPUT=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c 'SELECT 1' 2>&1); then
+    PG_EXIT=0
+  else
+    PG_EXIT=$?
+  fi
 
   if [ "$PG_EXIT" -eq 0 ]; then
     echo "✓ PostgreSQL is ready!"
