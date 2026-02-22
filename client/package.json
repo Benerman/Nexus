@@ -1,6 +1,7 @@
 {
   "name": "nexus",
   "version": "1.0.1",
+  "license": "AGPL-3.0",
   "private": true,
   "homepage": "./",
   "main": "electron/main.js",
