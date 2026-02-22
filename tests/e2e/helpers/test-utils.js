@@ -141,6 +141,47 @@ async function loginUser(page, username, password) {
   await page.locator('.login-btn').click();
 }
 
+/**
+ * Register a test user via the server API (no browser needed).
+ * Returns { username, password, token, account }.
+ * Throws on failure so tests fail loudly instead of silently passing.
+ */
+async function registerTestUserAPI(usernamePrefix = 'testuser') {
+  const serverUrl = process.env.SERVER_URL || 'http://localhost:3001';
+  const username = `${usernamePrefix}_${Date.now()}`;
+  const password = 'TestPass123!';
+
+  const res = await fetch(`${serverUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`registerTestUserAPI failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json();
+  return { username, password, token: data.token, account: data.account };
+}
+
+/**
+ * Set auth tokens in localStorage via addInitScript (runs before page JS),
+ * then navigate to the app and wait for the .app container.
+ */
+async function authenticateAndNavigate(page, token, username) {
+  const serverUrl = process.env.SERVER_URL || 'http://localhost:3001';
+  await injectDesktopSimulation(page);
+  await page.addInitScript(({ token, username, serverUrl }) => {
+    localStorage.setItem('nexus_token', token);
+    localStorage.setItem('nexus_username', username);
+    localStorage.setItem('nexus_server_url', serverUrl);
+  }, { token, username, serverUrl });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.waitForSelector('.app', { timeout: 30000 });
+}
+
 module.exports = {
   VIEWPORTS,
   SCREENSHOT_DIR,
@@ -152,4 +193,6 @@ module.exports = {
   registerTestUser,
   loginUser,
   injectDesktopSimulation,
+  registerTestUserAPI,
+  authenticateAndNavigate,
 };

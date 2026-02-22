@@ -1,6 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
-const { VIEWPORTS, navigateToApp, showLoginScreen, registerTestUser } = require('../helpers/test-utils');
+const { VIEWPORTS, navigateToApp, showLoginScreen, registerTestUser, registerTestUserAPI, authenticateAndNavigate } = require('../helpers/test-utils');
 const { captureScreenshot } = require('../helpers/screenshots');
 
 test.describe('Main App Layout — Desktop Uptime Tests', () => {
@@ -99,47 +99,39 @@ test.describe('Main App Layout — Desktop Uptime Tests', () => {
     });
   });
 
-  test.describe('Post-auth layout (with mock session)', () => {
-    test('app container uses flexbox layout', async ({ page }) => {
-      await navigateToApp(page);
-      // Set up a mock session to render the main app
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_test_token');
-        localStorage.setItem('nexus_username', 'test_desktop_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+  test.describe('Post-auth layout (with real session)', () => {
+    let authData;
 
-      // App should attempt to render (may show reconnecting state)
+    test.beforeAll(async () => {
+      authData = await registerTestUserAPI('desktop_layout');
+    });
+
+    test('app container uses flexbox layout', async ({ page }) => {
+      await authenticateAndNavigate(page, authData.token, authData.username);
+
       const appContainer = page.locator('.app');
-      if (await appContainer.isVisible()) {
-        const display = await appContainer.evaluate(el =>
-          getComputedStyle(el).display
-        );
-        expect(display).toBe('flex');
-      }
+      await expect(appContainer).toBeVisible();
+      const display = await appContainer.evaluate(el =>
+        getComputedStyle(el).display
+      );
+      expect(display).toBe('flex');
       await captureScreenshot(page, 'app-layout-desktop', 'main-app');
     });
 
     test('desktop layout shows server list, sidebar, and main content area', async ({ page }) => {
-      await navigateToApp(page);
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_test_token');
-        localStorage.setItem('nexus_username', 'test_layout_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+      await authenticateAndNavigate(page, authData.token, authData.username);
 
-      // These elements should exist in the DOM (even if server is not connected)
       const app = page.locator('.app');
-      if (await app.isVisible()) {
-        // Server list should be present on desktop
-        const serverList = page.locator('.server-list');
-        if (await serverList.isVisible()) {
-          const box = await serverList.boundingBox();
-          if (box) {
-            // Server list should be narrow and on the left
-            expect(box.x).toBeLessThan(100);
-            expect(box.width).toBeLessThan(120);
-          }
+      await expect(app).toBeVisible();
+
+      // Server list should be present on desktop
+      const serverList = page.locator('.server-list');
+      if (await serverList.isVisible()) {
+        const box = await serverList.boundingBox();
+        if (box) {
+          // Server list should be narrow and on the left
+          expect(box.x).toBeLessThan(100);
+          expect(box.width).toBeLessThan(120);
         }
       }
       await captureScreenshot(page, 'app-layout-desktop', 'full-layout');

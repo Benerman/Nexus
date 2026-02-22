@@ -1,6 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
-const { VIEWPORTS, navigateToApp, showLoginScreen } = require('../helpers/test-utils');
+const { VIEWPORTS, navigateToApp, showLoginScreen, registerTestUserAPI, authenticateAndNavigate } = require('../helpers/test-utils');
 const { captureScreenshot } = require('../helpers/screenshots');
 
 test.describe('Mobile UI — Uptime Tests', () => {
@@ -123,70 +123,75 @@ test.describe('Mobile UI — Uptime Tests', () => {
   });
 
   test.describe('Mobile main app layout', () => {
+    let authData;
+
+    test.beforeAll(async () => {
+      authData = await registerTestUserAPI('mobile_layout');
+    });
+
     test.beforeEach(async ({ page }) => {
-      await navigateToApp(page);
-      // Set up mock session
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_test_token');
-        localStorage.setItem('nexus_username', 'mobile_test_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+      await page.setViewportSize(VIEWPORTS.mobile);
+      await authenticateAndNavigate(page, authData.token, authData.username);
     });
 
     test('mobile app uses column layout (stacked)', async ({ page }) => {
       const app = page.locator('.app');
-      if (await app.isVisible()) {
-        const flexDir = await app.evaluate(el =>
-          getComputedStyle(el).flexDirection
-        );
-        // On mobile (<=768px), app should be column layout
-        expect(flexDir).toBe('column');
-        await captureScreenshot(page, 'mobile-app', 'column-layout');
-      }
+      await expect(app).toBeVisible();
+      const flexDir = await app.evaluate(el =>
+        getComputedStyle(el).flexDirection
+      );
+      expect(flexDir).toBe('column');
+      await captureScreenshot(page, 'mobile-app', 'column-layout');
     });
 
     test('mobile nav bar is visible', async ({ page }) => {
       const app = page.locator('.app');
-      if (await app.isVisible()) {
-        const navBar = page.locator('.mobile-nav-bar');
-        const display = await navBar.evaluate(el =>
-          getComputedStyle(el).display
-        );
-        // On mobile, nav bar should be visible (not display:none)
-        expect(display).not.toBe('none');
-        await captureScreenshot(page, 'mobile-app', 'nav-bar');
+      await expect(app).toBeVisible();
+      const navBar = page.locator('.mobile-nav-bar');
+      if (await navBar.count() === 0) {
+        test.skip(true, 'mobile-nav-bar element not in DOM');
+        return;
       }
+      const display = await navBar.evaluate(el =>
+        getComputedStyle(el).display
+      );
+      expect(display).not.toBe('none');
+      await captureScreenshot(page, 'mobile-app', 'nav-bar');
     });
 
     test('mobile overlay is hidden by default', async ({ page }) => {
       const overlay = page.locator('.mobile-overlay');
-      // Overlay should exist but be hidden
-      if (await overlay.count() > 0) {
-        await expect(overlay).not.toBeVisible();
+      if (await overlay.count() === 0) {
+        test.skip(true, 'mobile-overlay element not in DOM');
+        return;
       }
+      await expect(overlay).not.toBeVisible();
     });
 
     test('sidebar is hidden by default on mobile', async ({ page }) => {
       const sidebar = page.locator('.sidebar');
-      if (await sidebar.count() > 0) {
-        const isVisibleInViewport = await sidebar.evaluate(el => {
-          const rect = el.getBoundingClientRect();
-          return rect.right > 0 && rect.left < window.innerWidth;
-        });
-        // Sidebar should be off-screen or hidden
-        expect(isVisibleInViewport).toBe(false);
+      if (await sidebar.count() === 0) {
+        test.skip(true, 'sidebar element not in DOM');
+        return;
       }
+      const isVisibleInViewport = await sidebar.evaluate(el => {
+        const rect = el.getBoundingClientRect();
+        return rect.right > 0 && rect.left < window.innerWidth;
+      });
+      expect(isVisibleInViewport).toBe(false);
     });
 
     test('member list is hidden by default on mobile', async ({ page }) => {
       const memberList = page.locator('.member-list');
-      if (await memberList.count() > 0) {
-        const isVisibleInViewport = await memberList.evaluate(el => {
-          const rect = el.getBoundingClientRect();
-          return rect.left < window.innerWidth;
-        });
-        expect(isVisibleInViewport).toBe(false);
+      if (await memberList.count() === 0) {
+        test.skip(true, 'member-list element not in DOM');
+        return;
       }
+      const isVisibleInViewport = await memberList.evaluate(el => {
+        const rect = el.getBoundingClientRect();
+        return rect.left < window.innerWidth;
+      });
+      expect(isVisibleInViewport).toBe(false);
     });
   });
 

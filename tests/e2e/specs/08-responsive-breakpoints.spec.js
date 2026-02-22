@@ -1,6 +1,6 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
-const { VIEWPORTS, navigateToApp, showLoginScreen } = require('../helpers/test-utils');
+const { VIEWPORTS, navigateToApp, showLoginScreen, registerTestUserAPI, authenticateAndNavigate } = require('../helpers/test-utils');
 const { captureScreenshot } = require('../helpers/screenshots');
 
 /**
@@ -13,7 +13,12 @@ const { captureScreenshot } = require('../helpers/screenshots');
 test.describe('Responsive Breakpoints — Uptime Tests', () => {
 
   test.describe('Mobile breakpoint (<=768px)', () => {
+    let authData;
     const mobileWidths = [320, 375, 414, 768];
+
+    test.beforeAll(async () => {
+      authData = await registerTestUserAPI('breakpoint');
+    });
 
     for (const width of mobileWidths) {
       test(`login screen renders at ${width}px width`, async ({ page }) => {
@@ -27,7 +32,6 @@ test.describe('Responsive Breakpoints — Uptime Tests', () => {
         const card = page.locator('.login-card');
         const box = await card.boundingBox();
         if (box) {
-          // Card should not overflow the viewport
           expect(box.x + box.width).toBeLessThanOrEqual(width + 10);
         }
         await captureScreenshot(page, 'breakpoint', `mobile-${width}px`);
@@ -36,37 +40,26 @@ test.describe('Responsive Breakpoints — Uptime Tests', () => {
 
     test('app uses column flex-direction at 375px', async ({ page }) => {
       await page.setViewportSize(VIEWPORTS.mobile);
-      await navigateToApp(page);
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_token');
-        localStorage.setItem('nexus_username', 'breakpoint_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+      await authenticateAndNavigate(page, authData.token, authData.username);
 
       const app = page.locator('.app');
-      if (await app.isVisible()) {
-        const flexDir = await app.evaluate(el => getComputedStyle(el).flexDirection);
-        expect(flexDir).toBe('column');
-      }
+      await expect(app).toBeVisible();
+      const flexDir = await app.evaluate(el => getComputedStyle(el).flexDirection);
+      expect(flexDir).toBe('column');
     });
 
     test('mobile nav bar visible at 375px', async ({ page }) => {
       await page.setViewportSize(VIEWPORTS.mobile);
-      await navigateToApp(page);
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_token');
-        localStorage.setItem('nexus_username', 'nav_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+      await authenticateAndNavigate(page, authData.token, authData.username);
 
-      const app = page.locator('.app');
-      if (await app.isVisible()) {
-        const navBar = page.locator('.mobile-nav-bar');
-        if (await navBar.count() > 0) {
-          const display = await navBar.evaluate(el => getComputedStyle(el).display);
-          expect(display).not.toBe('none');
-        }
+      await expect(page.locator('.app')).toBeVisible();
+      const navBar = page.locator('.mobile-nav-bar');
+      if (await navBar.count() === 0) {
+        test.skip(true, 'mobile-nav-bar element not in DOM');
+        return;
       }
+      const display = await navBar.evaluate(el => getComputedStyle(el).display);
+      expect(display).not.toBe('none');
     });
   });
 
@@ -93,20 +86,14 @@ test.describe('Responsive Breakpoints — Uptime Tests', () => {
 
     test('app layout direction at 1024px', async ({ page }) => {
       await page.setViewportSize(VIEWPORTS.desktopSmall);
-      await navigateToApp(page);
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_token');
-        localStorage.setItem('nexus_username', 'tablet_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+      // Reuse the auth from the mobile breakpoint beforeAll
+      const tabletAuth = await registerTestUserAPI('tablet_bp');
+      await authenticateAndNavigate(page, tabletAuth.token, tabletAuth.username);
 
       const app = page.locator('.app');
-      if (await app.isVisible()) {
-        // At 1024px, should not be column layout
-        const flexDir = await app.evaluate(el => getComputedStyle(el).flexDirection);
-        // Could be row at this breakpoint
-        expect(['row', 'column']).toContain(flexDir);
-      }
+      await expect(app).toBeVisible();
+      const flexDir = await app.evaluate(el => getComputedStyle(el).flexDirection);
+      expect(['row', 'column']).toContain(flexDir);
     });
   });
 
@@ -143,18 +130,17 @@ test.describe('Responsive Breakpoints — Uptime Tests', () => {
 
     test('mobile nav bar hidden at desktop size', async ({ page }) => {
       await page.setViewportSize(VIEWPORTS.desktop);
-      await navigateToApp(page);
-      await page.evaluate(() => {
-        localStorage.setItem('nexus_token', 'mock_token');
-        localStorage.setItem('nexus_username', 'desktop_user');
-      });
-      await page.reload({ waitUntil: 'networkidle' });
+      const desktopAuth = await registerTestUserAPI('desktop_bp');
+      await authenticateAndNavigate(page, desktopAuth.token, desktopAuth.username);
 
+      await expect(page.locator('.app')).toBeVisible();
       const navBar = page.locator('.mobile-nav-bar');
-      if (await navBar.count() > 0) {
-        const display = await navBar.evaluate(el => getComputedStyle(el).display);
-        expect(display).toBe('none');
+      if (await navBar.count() === 0) {
+        test.skip(true, 'mobile-nav-bar element not in DOM');
+        return;
       }
+      const display = await navBar.evaluate(el => getComputedStyle(el).display);
+      expect(display).toBe('none');
     });
   });
 
