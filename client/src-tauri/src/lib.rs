@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
-use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{AboutMetadata, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -74,13 +74,27 @@ pub fn run() {
                 })?;
             }
 
-            // ── Window close → hide to tray ─────────────────────────
+            // ── Window close → hide to tray (or quit) ─────────────
+            // Read saved preference from app data dir
+            let minimize_to_tray_initial = app.path().app_data_dir()
+                .ok()
+                .and_then(|d| std::fs::read_to_string(d.join("minimize_to_tray.txt")).ok())
+                .map(|s| s.trim() != "false")
+                .unwrap_or(true);
+            let minimize_to_tray = Arc::new(Mutex::new(minimize_to_tray_initial));
+
             let main_window = app.get_webview_window("main").unwrap();
             let window_for_close = main_window.clone();
+            let app_handle_for_close = app.handle().clone();
+            let minimize_for_close = minimize_to_tray.clone();
             main_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window_for_close.hide();
+                    if *minimize_for_close.lock().unwrap() {
+                        api.prevent_close();
+                        let _ = window_for_close.hide();
+                    } else {
+                        app_handle_for_close.exit(0);
+                    }
                 }
             });
 
@@ -134,8 +148,32 @@ pub fn run() {
             // ── Build Application Menu ──────────────────────────────
 
             // File menu
+            let settings_item = MenuItemBuilder::new("Settings")
+                .id("open_settings")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
+            let change_server_item = MenuItemBuilder::new("Change Server...")
+                .id("change_server")
+                .build(app)?;
+
+            let minimize_to_tray_item = CheckMenuItemBuilder::new("Minimize to Tray")
+                .id("toggle_minimize_to_tray")
+                .checked(minimize_to_tray_initial)
+                .build(app)?;
+
+            let quit_menu_item = MenuItemBuilder::new("Quit")
+                .id("quit_app")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?;
+
             let file_menu = SubmenuBuilder::new(app, "File")
-                .quit()
+                .item(&settings_item)
+                .item(&change_server_item)
+                .separator()
+                .item(&minimize_to_tray_item)
+                .separator()
+                .item(&quit_menu_item)
                 .build()?;
 
             // Edit menu
@@ -218,6 +256,7 @@ pub fn run() {
             // ── Menu Event Handler ──────────────────────────────────
 
             let zoom_level = Arc::new(Mutex::new(1.0_f64));
+            let minimize_for_menu = minimize_to_tray.clone();
 
             app.on_menu_event(move |app_handle, event| {
                 let id = event.id().as_ref();
@@ -255,6 +294,29 @@ pub fn run() {
                         "check_updates" => {
                             // Emit event to frontend to trigger update check
                             let _ = window.eval("window.__NEXUS_CHECK_UPDATES && window.__NEXUS_CHECK_UPDATES()");
+                        }
+                        "open_settings" => {
+                            let _ = window.eval("window.__NEXUS_OPEN_SETTINGS && window.__NEXUS_OPEN_SETTINGS()");
+                        }
+                        "change_server" => {
+                            let _ = window.eval("window.__NEXUS_CHANGE_SERVER && window.__NEXUS_CHANGE_SERVER()");
+                        }
+                        "toggle_minimize_to_tray" => {
+                            let mut val = minimize_for_menu.lock().unwrap();
+                            *val = !*val;
+                            let new_val = *val;
+                            drop(val);
+                            // Persist to app data dir
+                            if let Ok(dir) = app_handle.path().app_data_dir() {
+                                let _ = std::fs::create_dir_all(&dir);
+                                let _ = std::fs::write(
+                                    dir.join("minimize_to_tray.txt"),
+                                    if new_val { "true" } else { "false" },
+                                );
+                            }
+                        }
+                        "quit_app" => {
+                            app_handle.exit(0);
                         }
                         _ => {}
                     }

@@ -79,10 +79,10 @@ export async function requestNotificationPermission() {
       if (!(await isPermissionGranted())) {
         await requestPermission();
       }
+      return;
     } catch (e) {
-      console.warn('Tauri notification permission request failed:', e);
+      console.warn('Tauri notification permission failed, falling back to Web API:', e);
     }
-    return;
   }
   if (window.Notification && Notification.permission === 'default') {
     Notification.requestPermission();
@@ -101,11 +101,11 @@ export async function sendNotification(title, options = {}) {
       const { isPermissionGranted, sendNotification: tauriNotify } = await import('@tauri-apps/plugin-notification');
       if (await isPermissionGranted()) {
         tauriNotify({ title, body: options.body || '' });
+        return;
       }
     } catch (e) {
-      console.warn('Tauri notification failed:', e);
+      console.warn('Tauri notification failed, falling back to Web API:', e);
     }
-    return;
   }
   if (window.Notification?.permission === 'granted') {
     const n = new Notification(title, options);

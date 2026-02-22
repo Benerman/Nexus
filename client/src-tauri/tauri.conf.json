@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Nexus",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.nexus.desktop",
   "build": {
     "frontendDist": "../build",
@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' wss: https:; img-src 'self' data: https: blob:; media-src 'self' blob: data:;"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' ipc://localhost wss: https:; img-src 'self' data: https: blob:; media-src 'self' blob: data:;"
     }
   },
   "bundle": {

@@ -844,7 +844,14 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         sampleRate: { ideal: 48000 },
         channelCount: { ideal: 1 }
       };
-      const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      let rawStream;
+      try {
+        rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      } catch (constraintErr) {
+        // WebKit2GTK may reject ideal constraints — fall back to basic audio
+        console.warn('getUserMedia with constraints failed, retrying with audio:true', constraintErr);
+        rawStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      }
       rawStreamRef.current = rawStream;
 
       // Set up audio processing chain (noise gate + auto gain + volume boost)
@@ -1039,7 +1046,13 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         sampleRate: { ideal: 48000 },
         channelCount: { ideal: 1 }
       };
-      const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      let rawStream;
+      try {
+        rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      } catch (constraintErr) {
+        console.warn('getUserMedia with constraints failed, retrying with audio:true', constraintErr);
+        rawStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      }
       rawStreamRef.current = rawStream;
 
       const processedStream = setupAudioProcessing(rawStream);

@@ -620,7 +620,7 @@ export default function App() {
             const authorName = msg.author?.username || msg.username || 'New message';
             const prefix = isMentioned ? `[Mention] ${authorName}` : authorName;
             sendNotification(prefix, {
-              body: (msg.content || '').substring(0, 100) || '(attachment)',
+              body: (msg.content || '').replace(/[*_~`>#\[\]()\\|]/g, '').replace(/\s+/g, ' ').trim().substring(0, 100) || '(attachment)',
               icon: msg.author?.customAvatar || msg.author?.avatar || msg.avatar || '/favicon.ico',
               tag: isMentioned ? `mention-${msg.id}` : msg.channelId,
               silent: true,
@@ -1556,6 +1556,22 @@ export default function App() {
     setSettingsOpen(false);
     setServerSetupNeeded(true);
   }, []);
+
+  // Register native menu callbacks (Tauri desktop only)
+  useEffect(() => {
+    if (!isStandaloneApp()) return;
+    window.__NEXUS_OPEN_SETTINGS = () => {
+      setSettingsTab('profile');
+      setSettingsOpen(true);
+    };
+    window.__NEXUS_CHANGE_SERVER = () => {
+      handleChangeServer();
+    };
+    return () => {
+      delete window.__NEXUS_OPEN_SETTINGS;
+      delete window.__NEXUS_CHANGE_SERVER;
+    };
+  }, [handleChangeServer]);
 
   if (serverSetupNeeded) {
     return <ServerSetupScreen onConnect={() => setServerSetupNeeded(false)} />;
