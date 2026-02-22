@@ -14,7 +14,7 @@ import ServerContextMenu from './components/ServerContextMenu';
 import ChannelContextMenu from './components/ChannelContextMenu';
 import UserProfileModal from './components/UserProfileModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
-import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp } from './config';
+import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
 import './App.css';
 const EMPTY_CHANNELS = { text: [], voice: [] };
@@ -537,9 +537,7 @@ export default function App() {
       }
 
       // Request notification permission
-      if (window.Notification && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
+      requestNotificationPermission();
     });
 
     // Handle data refresh response (for visibility change / reconnection)
@@ -617,17 +615,17 @@ export default function App() {
           }
           // Desktop notification when tab not focused, or always for @mentions
           const notPaused = !notificationsPausedUntilRef.current || Date.now() > notificationsPausedUntilRef.current;
-          const shouldNotify = (document.visibilityState === 'hidden' || isMentioned) && notificationsEnabledRef.current && notPaused && window.Notification?.permission === 'granted';
+          const shouldNotify = (document.visibilityState === 'hidden' || isMentioned) && notificationsEnabledRef.current && notPaused;
           if (shouldNotify) {
             const authorName = msg.author?.username || msg.username || 'New message';
             const prefix = isMentioned ? `[Mention] ${authorName}` : authorName;
-            const n = new Notification(prefix, {
+            sendNotification(prefix, {
               body: (msg.content || '').substring(0, 100) || '(attachment)',
               icon: msg.author?.customAvatar || msg.author?.avatar || msg.avatar || '/favicon.ico',
               tag: isMentioned ? `mention-${msg.id}` : msg.channelId,
-              silent: true
+              silent: true,
+              onclick: () => { window.focus(); }
             });
-            n.onclick = () => { window.focus(); n.close(); };
             if (messageSoundsEnabledRef.current && document.visibilityState === 'hidden') playMessageSound();
           }
         }
@@ -663,9 +661,7 @@ export default function App() {
 
     // Reminder notification
     s.on('reminder', ({ message, channelId }) => {
-      if (Notification.permission === 'granted') {
-        new Notification('Reminder', { body: message, icon: '/favicon.ico', tag: 'reminder-' + channelId });
-      }
+      sendNotification('Reminder', { body: message, icon: '/favicon.ico', tag: 'reminder-' + channelId });
       alert(`Reminder: ${message}`);
     });
 

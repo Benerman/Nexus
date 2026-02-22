@@ -69,6 +69,52 @@ export function needsServerSetup() {
 }
 
 /**
+ * Request notification permission.
+ * Uses Tauri plugin in Tauri, Web Notification API otherwise.
+ */
+export async function requestNotificationPermission() {
+  if (isTauriApp()) {
+    try {
+      const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
+      if (!(await isPermissionGranted())) {
+        await requestPermission();
+      }
+    } catch (e) {
+      console.warn('Tauri notification permission request failed:', e);
+    }
+    return;
+  }
+  if (window.Notification && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+/**
+ * Send a desktop notification.
+ * Uses Tauri plugin in Tauri, Web Notification API otherwise.
+ * @param {string} title - Notification title
+ * @param {object} options - { body, icon, tag, silent }
+ */
+export async function sendNotification(title, options = {}) {
+  if (isTauriApp()) {
+    try {
+      const { isPermissionGranted, sendNotification: tauriNotify } = await import('@tauri-apps/plugin-notification');
+      if (await isPermissionGranted()) {
+        tauriNotify({ title, body: options.body || '' });
+      }
+    } catch (e) {
+      console.warn('Tauri notification failed:', e);
+    }
+    return;
+  }
+  if (window.Notification?.permission === 'granted') {
+    const n = new Notification(title, options);
+    if (options.onclick) n.onclick = options.onclick;
+    return n;
+  }
+}
+
+/**
  * Open a URL in the system's default browser.
  * In standalone apps (Tauri/Electron/Capacitor) this avoids navigating
  * inside the webview. On web, falls back to window.open.
