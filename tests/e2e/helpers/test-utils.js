@@ -6,6 +6,8 @@ const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
 
 const DESKTOP_SIMULATION = !!process.env.DESKTOP_SIMULATION;
 
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3001';
+
 /**
  * Inject Tauri desktop simulation globals before any navigation.
  * When DESKTOP_SIMULATION env var is set, this makes the app believe
@@ -57,7 +59,10 @@ async function takeScreenshot(page, name) {
  */
 async function navigateToApp(page) {
   await injectDesktopSimulation(page);
-  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.addInitScript((serverUrl) => {
+    localStorage.setItem('nexus_server_url', serverUrl);
+  }, SERVER_URL);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   // Wait for either the login screen, server setup screen, or main app
   await page.waitForSelector(
     '.login-screen, .server-setup-screen, .app',
@@ -75,7 +80,7 @@ async function showServerSetupScreen(page) {
     localStorage.removeItem('nexus_token');
     localStorage.removeItem('nexus_username');
   });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 /**
@@ -84,16 +89,16 @@ async function showServerSetupScreen(page) {
  */
 async function showLoginScreen(page) {
   await injectDesktopSimulation(page);
-  await page.evaluate(() => {
+  await page.evaluate((serverUrl) => {
     // Keep server URL / same-origin behavior, just clear auth
     localStorage.removeItem('nexus_token');
     localStorage.removeItem('nexus_username');
     // Set a server URL so we skip server setup
     if (!localStorage.getItem('nexus_server_url')) {
-      localStorage.setItem('nexus_server_url', window.location.origin);
+      localStorage.setItem('nexus_server_url', serverUrl);
     }
-  });
-  await page.reload({ waitUntil: 'networkidle' });
+  }, SERVER_URL);
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 /**
@@ -119,6 +124,9 @@ async function registerTestUser(page, usernamePrefix = 'testuser') {
   await page.locator('.login-input').nth(1).fill(password);
   await page.locator('.login-input').nth(2).fill(password);
   await page.locator('.login-btn').click();
+
+  // Wait for registration to complete (either app loads or error shows)
+  await page.waitForSelector('.app, .login-error', { timeout: 15000 });
 
   return { username, password };
 }
@@ -147,11 +155,10 @@ async function loginUser(page, username, password) {
  * Throws on failure so tests fail loudly instead of silently passing.
  */
 async function registerTestUserAPI(usernamePrefix = 'testuser') {
-  const serverUrl = process.env.SERVER_URL || 'http://localhost:3001';
   const username = `${usernamePrefix}_${Date.now()}`;
   const password = 'TestPass123!';
 
-  const res = await fetch(`${serverUrl}/api/auth/register`, {
+  const res = await fetch(`${SERVER_URL}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
@@ -171,14 +178,13 @@ async function registerTestUserAPI(usernamePrefix = 'testuser') {
  * then navigate to the app and wait for the .app container.
  */
 async function authenticateAndNavigate(page, token, username) {
-  const serverUrl = process.env.SERVER_URL || 'http://localhost:3001';
   await injectDesktopSimulation(page);
   await page.addInitScript(({ token, username, serverUrl }) => {
     localStorage.setItem('nexus_token', token);
     localStorage.setItem('nexus_username', username);
     localStorage.setItem('nexus_server_url', serverUrl);
-  }, { token, username, serverUrl });
-  await page.goto('/', { waitUntil: 'networkidle' });
+  }, { token, username, serverUrl: SERVER_URL });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.app', { timeout: 30000 });
 }
 
@@ -186,6 +192,7 @@ module.exports = {
   VIEWPORTS,
   SCREENSHOT_DIR,
   DESKTOP_SIMULATION,
+  SERVER_URL,
   takeScreenshot,
   navigateToApp,
   showServerSetupScreen,
