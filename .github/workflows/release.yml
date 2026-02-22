@@ -199,12 +199,8 @@ jobs:
         run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
         working-directory: client
 
-      - name: Add iOS platform
-        run: npx cap add ios
-        working-directory: client
-
-      - name: Sync Capacitor
-        run: npx cap sync ios
+      - name: Add iOS platform and sync
+        run: npx cap add ios 2>/dev/null || true && npx cap sync ios
         working-directory: client
 
       - name: Install CocoaPods dependencies
@@ -307,12 +303,8 @@ jobs:
         run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
         working-directory: client
 
-      - name: Add Android platform
-        run: npx cap add android
-        working-directory: client
-
-      - name: Sync Capacitor
-        run: npx cap sync android
+      - name: Add Android platform and sync
+        run: npx cap add android 2>/dev/null || true && npx cap sync android
         working-directory: client
 
       - name: Decode keystore
