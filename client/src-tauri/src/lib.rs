@@ -41,7 +41,7 @@ pub fn run() {
                 })?;
             }
 
-            // Auto-grant microphone and camera permissions on Windows (WebView2)
+            // Auto-grant all permissions on Windows (WebView2)
             #[cfg(target_os = "windows")]
             {
                 let main_window = app.get_webview_window("main").unwrap();
@@ -54,15 +54,9 @@ pub fn run() {
                         let handler = PermissionRequestedEventHandler::create(
                             Box::new(|_sender, args| {
                                 if let Some(args) = args {
-                                    let kind = args.PermissionKind()?;
-                                    if kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
-                                        || kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA
-                                        || kind == COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS
-                                    {
-                                        args.SetState(
-                                            COREWEBVIEW2_PERMISSION_STATE_ALLOW,
-                                        )?;
-                                    }
+                                    args.SetState(
+                                        COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                                    )?;
                                 }
                                 Ok(())
                             }),
