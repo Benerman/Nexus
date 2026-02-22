@@ -100,6 +100,17 @@ jobs:
             sleep 3
           done
 
+      - name: Sync database password
+        run: |
+          # The postgres volume may have been initialized with a different password
+          # than what's in the current .env. Reset it to match using local trust auth.
+          source .env 2>/dev/null || true
+          PW="${POSTGRES_PASSWORD:-postgres}"
+          docker exec nexus-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
+          echo "Database password synced."
+          # Restart server so it picks up the corrected auth
+          docker restart nexus-server
+
       - name: Verify server is responding
         run: |
           for i in $(seq 1 20); do
