@@ -818,6 +818,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
 
       // Use saved input device if available, with noise suppression settings
       // Default to TRUE for browser-level processing — these are efficient and improve quality
+      if (!navigator.mediaDevices?.getUserMedia) return;
       const savedDevice = localStorage.getItem('nexus_audio_input');
       const noiseSuppression = localStorage.getItem('nexus_noise_suppression');
       const echoCancellation = localStorage.getItem('nexus_echo_cancellation');
@@ -1012,6 +1013,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       }
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) return;
     try {
       const savedDevice = localStorage.getItem('nexus_audio_input');
       const noiseSuppression = localStorage.getItem('nexus_noise_suppression');

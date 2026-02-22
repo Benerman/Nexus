@@ -1132,6 +1132,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   // Enumerate audio devices
   useEffect(() => {
     const enumerateDevices = async () => {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const inputs = devices.filter(d => d.kind === 'audioinput');
@@ -1157,6 +1158,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
 
   // Start/stop mic test
   const startMicTest = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
     try {
       const audioConstraints = selectedInputDevice && selectedInputDevice !== 'default'
         ? { deviceId: { exact: selectedInputDevice } }
