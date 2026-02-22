@@ -361,11 +361,11 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('peer:joined', ({ socketId }) => {
+    const handlePeerJoined = ({ socketId }) => {
       peersRef.current[socketId] = createPeer(socketId, false);
-    });
+    };
 
-    socket.on('peer:left', ({ socketId }) => {
+    const handlePeerLeft = ({ socketId }) => {
       try { peersRef.current[socketId]?.close(); } catch (_) {}
       delete peersRef.current[socketId];
       delete screenSendersRef.current[socketId];
@@ -383,9 +383,9 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       delete analyserRef.current[socketId];
       activeSpeakersRef.current.delete(socketId);
       setActiveSpeakers(new Set(activeSpeakersRef.current));
-    });
+    };
 
-    socket.on('webrtc:offer', async ({ from, offer }) => {
+    const handleOffer = async ({ from, offer }) => {
       let peer = peersRef.current[from];
       if (!peer) peer = createPeer(from, true); // unknown peer → we are polite (yield)
 
@@ -413,9 +413,9 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         await peer.setLocalDescription(answer);
         socket.emit('webrtc:answer', { targetId: from, answer });
       } catch (err) { console.error('offer handling:', err); }
-    });
+    };
 
-    socket.on('webrtc:answer', async ({ from, answer }) => {
+    const handleAnswer = async ({ from, answer }) => {
       const peer = peersRef.current[from];
       if (peer) {
         try {
@@ -427,9 +427,9 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         }
         catch (err) { console.error('answer handling:', err); }
       }
-    });
+    };
 
-    socket.on('webrtc:ice', async ({ from, candidate }) => {
+    const handleIce = async ({ from, candidate }) => {
       const peer = peersRef.current[from];
       if (peer) {
         try {
@@ -443,10 +443,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         }
         catch (err) { console.error('ICE:', err); }
       }
-    });
+    };
 
     // Voice join/leave audio cues
-    socket.on('voice:cue', ({ type, user, customSound, customSoundVolume }) => {
+    const handleVoiceCue = ({ type, user, customSound, customSoundVolume }) => {
       if (isDeafenedRef.current) return;
       if (user?.id === currentUser?.id) {
         // Play default beep for yourself as feedback (not your custom sound)
@@ -454,25 +454,25 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       } else {
         playVoiceCue(type, customSound, customSoundVolume);
       }
-    });
+    };
 
     // Remote user mute/deafen state changes
-    socket.on('peer:mute:changed', ({ socketId, isMuted }) => {
+    const handleMuteChanged = ({ socketId, isMuted }) => {
       setRemoteUserStates(prev => ({
         ...prev,
         [socketId]: { ...prev[socketId], isMuted }
       }));
-    });
+    };
 
-    socket.on('peer:deafen:changed', ({ socketId, isDeafened }) => {
+    const handleDeafenChanged = ({ socketId, isDeafened }) => {
       setRemoteUserStates(prev => ({
         ...prev,
         [socketId]: { ...prev[socketId], isDeafened }
       }));
-    });
+    };
 
     // Opt-in screen share: sharer receives request to add/remove viewer
-    socket.on('screen:add-viewer', ({ viewerId }) => {
+    const handleAddViewer = ({ viewerId }) => {
       const peer = peersRef.current[viewerId];
       const stream = screenStreamRef.current;
       if (!peer || !stream) return;
@@ -491,9 +491,9 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         catch (err) { console.error('addTrack screen audio:', err); }
       }
       screenSendersRef.current[viewerId] = senders;
-    });
+    };
 
-    socket.on('screen:remove-viewer', ({ viewerId }) => {
+    const handleRemoveViewer = ({ viewerId }) => {
       const peer = peersRef.current[viewerId];
       const senders = screenSendersRef.current[viewerId];
       if (peer && senders) {
@@ -502,10 +502,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         });
         delete screenSendersRef.current[viewerId];
       }
-    });
+    };
 
     // When a specific user's screen share stops, clean up only that sharer's stream
-    socket.on('screen:stopped', ({ socketId }) => {
+    const handleScreenStopped = ({ socketId }) => {
       setRemoteScreenStreams(prev => {
         const next = { ...prev };
         delete next[socketId];
@@ -516,20 +516,32 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         }
         return next;
       });
-    });
+    };
+
+    socket.on('peer:joined', handlePeerJoined);
+    socket.on('peer:left', handlePeerLeft);
+    socket.on('webrtc:offer', handleOffer);
+    socket.on('webrtc:answer', handleAnswer);
+    socket.on('webrtc:ice', handleIce);
+    socket.on('voice:cue', handleVoiceCue);
+    socket.on('peer:mute:changed', handleMuteChanged);
+    socket.on('peer:deafen:changed', handleDeafenChanged);
+    socket.on('screen:add-viewer', handleAddViewer);
+    socket.on('screen:remove-viewer', handleRemoveViewer);
+    socket.on('screen:stopped', handleScreenStopped);
 
     return () => {
-      socket.off('peer:joined');
-      socket.off('peer:left');
-      socket.off('webrtc:offer');
-      socket.off('webrtc:answer');
-      socket.off('webrtc:ice');
-      socket.off('voice:cue');
-      socket.off('peer:mute:changed');
-      socket.off('peer:deafen:changed');
-      socket.off('screen:add-viewer');
-      socket.off('screen:remove-viewer');
-      socket.off('screen:stopped');
+      socket.off('peer:joined', handlePeerJoined);
+      socket.off('peer:left', handlePeerLeft);
+      socket.off('webrtc:offer', handleOffer);
+      socket.off('webrtc:answer', handleAnswer);
+      socket.off('webrtc:ice', handleIce);
+      socket.off('voice:cue', handleVoiceCue);
+      socket.off('peer:mute:changed', handleMuteChanged);
+      socket.off('peer:deafen:changed', handleDeafenChanged);
+      socket.off('screen:add-viewer', handleAddViewer);
+      socket.off('screen:remove-viewer', handleRemoveViewer);
+      socket.off('screen:stopped', handleScreenStopped);
     };
   }, [socket, createPeer, currentUser]);
 
