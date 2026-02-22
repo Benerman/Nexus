@@ -1,12 +1,13 @@
 name: Playwright UI Uptime Tests
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
-  # Allow manual trigger
   workflow_dispatch:
+
+concurrency:
+  group: playwright-tests-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   playwright-tests:
