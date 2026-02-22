@@ -22,6 +22,11 @@
         "decorations": true
       }
     ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "Nexus"
+    },
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' wss: https:; img-src 'self' data: https: blob:; media-src 'self' blob: data:;"
     }

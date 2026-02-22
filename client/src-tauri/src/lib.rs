@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -72,6 +73,63 @@ pub fn run() {
                     }
                 })?;
             }
+
+            // ── Window close → hide to tray ─────────────────────────
+            let main_window = app.get_webview_window("main").unwrap();
+            let window_for_close = main_window.clone();
+            main_window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window_for_close.hide();
+                }
+            });
+
+            // ── Tray icon ───────────────────────────────────────────
+            let show_item = MenuItemBuilder::new("Show")
+                .id("tray_show")
+                .build(app)?;
+            let quit_item = MenuItemBuilder::new("Quit")
+                .id("tray_quit")
+                .build(app)?;
+            let tray_menu = MenuBuilder::new(app)
+                .items(&[&show_item, &quit_item])
+                .build()?;
+
+            let app_handle = app.handle().clone();
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("Nexus")
+                .menu(&tray_menu)
+                .on_menu_event(move |_app, event| {
+                    let id = event.id().as_ref();
+                    match id {
+                        "tray_show" => {
+                            if let Some(w) = app_handle.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "tray_quit" => {
+                            app_handle.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
 
             // ── Build Application Menu ──────────────────────────────
 
