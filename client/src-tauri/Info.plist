@@ -10,5 +10,7 @@
     <string>Nexus needs photo library access to upload images</string>
     <key>NSUserNotificationsUsageDescription</key>
     <string>Nexus sends notifications for new messages, calls, and friend requests</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Nexus needs screen recording access for screen sharing in voice channels</string>
 </dict>
 </plist>

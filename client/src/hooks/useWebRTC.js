@@ -1099,6 +1099,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   }, [isDeafened, isMuted, socket, currentVoiceChannel]);
 
   const startScreenShare = useCallback(async (channelId) => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      alert('Screen sharing is not available in the desktop app. Use the web version for screen sharing.');
+      return;
+    }
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
