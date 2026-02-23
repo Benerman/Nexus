@@ -596,7 +596,7 @@ async function getReportsForServer(serverId) {
             a_reported.color AS reported_color,
             a_reporter.username AS reporter_username
      FROM reports r
-     JOIN server_members sm ON r.reported_id = sm.user_id AND sm.server_id = $1
+     JOIN server_members sm ON r.reported_id = sm.account_id AND sm.server_id = $1
      JOIN accounts a_reported ON r.reported_id = a_reported.id
      LEFT JOIN accounts a_reporter ON r.reporter_id = a_reporter.id
      ORDER BY r.created_at DESC`,
