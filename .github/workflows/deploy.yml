@@ -14,23 +14,21 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Preserve .env file
-        run: |
-          # Use a persistent path that survives reboots (runner home dir)
-          BACKUP="$HOME/.nexus-env-backup"
-          if [ -f .env ]; then
-            cp .env "$BACKUP"
-            echo "Backed up .env to $BACKUP"
-          elif [ -f "$BACKUP" ]; then
-            echo ".env missing from workspace but backup exists — will restore after checkout"
-          else
-            echo "No .env file to back up"
-          fi
-
       - name: Checkout latest code
         uses: actions/checkout@v4
         with:
           clean: true
+
+      - name: Symlink .env file
+        run: |
+          ENV_SOURCE="/opt/nexus/.env"
+          if [ ! -f "$ENV_SOURCE" ]; then
+            echo "ERROR: No .env file found at $ENV_SOURCE"
+            echo "Create it with production secrets before deploying."
+            exit 1
+          fi
+          ln -sf "$ENV_SOURCE" .env
+          echo "Linked .env → $ENV_SOURCE"
 
       - name: Verify Docker is available
         id: docker-check
@@ -47,21 +45,6 @@ jobs:
             exit 1
           fi
 
-      - name: Restore .env file
-        run: |
-          BACKUP="$HOME/.nexus-env-backup"
-          if [ -f "$BACKUP" ]; then
-            cp "$BACKUP" .env
-            echo "Restored .env from $BACKUP"
-          elif [ ! -f .env ]; then
-            echo "No .env backup found. Copying from .env.example..."
-            cp .env.example .env
-            echo ""
-            echo "WARNING: .env was created from .env.example."
-            echo "You should update it with real secrets before first use."
-            echo "At minimum, set JWT_SECRET and POSTGRES_PASSWORD."
-          fi
-
       - name: Stop existing containers
         run: |
           ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml down --remove-orphans || true
@@ -69,40 +52,6 @@ jobs:
       - name: Build and start containers
         run: |
           ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml up --build --force-recreate -d
-
-      - name: Wait for services to be healthy
-        run: |
-          echo "Waiting for services to start..."
-
-          # Wait for PostgreSQL (up to 60s)
-          for i in $(seq 1 20); do
-            if docker exec nexus-postgres pg_isready -U postgres > /dev/null 2>&1; then
-              echo "PostgreSQL is ready."
-              break
-            fi
-            if [ "$i" -eq 20 ]; then
-              echo "PostgreSQL failed to start. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs postgres
-              exit 1
-            fi
-            echo "Waiting for PostgreSQL... (attempt $i/20)"
-            sleep 3
-          done
-
-          # Wait for Redis (up to 30s)
-          for i in $(seq 1 10); do
-            if docker exec nexus-redis redis-cli ping 2>/dev/null | grep -q PONG; then
-              echo "Redis is ready."
-              break
-            fi
-            if [ "$i" -eq 10 ]; then
-              echo "Redis failed to start. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs redis
-              exit 1
-            fi
-            echo "Waiting for Redis... (attempt $i/10)"
-            sleep 3
-          done
 
       - name: Sync database password
         run: |
