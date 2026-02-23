@@ -1022,14 +1022,14 @@
   }
   .voice-controls {
     padding: 10px;
-    gap: 6px;
-    flex-wrap: wrap;
+    gap: 4px;
+    flex-wrap: nowrap;
     justify-content: center;
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
   .voice-ctrl-btn {
-    min-width: 48px;
-    padding: 8px 10px;
+    min-width: 0;
+    padding: 8px 6px;
     font-size: 10px;
     flex-shrink: 1;
   }
