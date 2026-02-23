@@ -68,6 +68,7 @@ services:
       - STUN_URLS=${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
       - TURN_URL=${TURN_URL:-}
       - TURN_SECRET=${TURN_SECRET:-}
+      - PLATFORM_ADMIN=${PLATFORM_ADMIN:-}
     depends_on:
       postgres:
         condition: service_healthy

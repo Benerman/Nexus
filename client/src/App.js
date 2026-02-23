@@ -1541,6 +1541,36 @@ export default function App() {
     setSettingsOpen(false);
   }, []);
 
+  const handleDeleteAccount = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('nexus_token');
+      if (!token) return;
+      const url = getServerUrl();
+      const res = await fetch(`${url}/api/auth/account`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete account');
+        return;
+      }
+      localStorage.removeItem('nexus_token');
+      localStorage.removeItem('nexus_username');
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+        setSocket(null);
+      }
+      setCurrentUser(null);
+      setSettingsOpen(false);
+    } catch (err) {
+      console.error('Account deletion error:', err);
+      alert('Failed to delete account');
+    }
+  }, []);
+
   const handleChangeServer = useCallback(() => {
     // Disconnect, clear auth, clear server URL, show setup screen
     if (socketRef.current) {
@@ -1823,6 +1853,7 @@ export default function App() {
           updateAudioProcessing={webrtc.updateAudioProcessing}
           onClose={() => setSettingsOpen(false)}
           onLogout={handleLogout}
+          onDeleteAccount={handleDeleteAccount}
           onChangeServer={handleChangeServer}
           developerMode={developerMode}
           onSetDeveloperMode={(val) => { setDeveloperMode(val); localStorage.setItem('nexus_developer_mode', val ? 'true' : 'false'); }} />

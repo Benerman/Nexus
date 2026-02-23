@@ -33,7 +33,7 @@ docker-compose logs -f client
 npm start          # Run server
 npm run dev        # Dev mode with nodemon
 npm run migrate    # Run database migrations
-npm test           # Run Jest tests (48 tests: validation, utils, permissions)
+npm test           # Run Jest tests (225 tests: validation, utils, permissions, config, security)
 ```
 
 ### Client (from `client/`)
@@ -55,7 +55,7 @@ docker exec nexus-postgres psql -U postgres -d nexus_db
 ### Server (`server/`)
 - **`index.js`** (4649 lines) — Express server with 89+ Socket.IO event handlers. All real-time communication goes through Socket.IO; REST is only used for auth, file uploads, GIF search, and URL previews.
 - **`db.js`** (100+ functions) — All PostgreSQL queries. Uses connection pooling (max 20 clients). Use `getClient()` for explicit transactions on multi-step operations.
-- **`config.js`** — Environment variable loading with validation. Production fails fast if `JWT_SECRET` or `DATABASE_URL` are missing.
+- **`config.js`** — Environment variable loading with validation. Production fails fast if `JWT_SECRET` or `DATABASE_URL` are missing. Also loads `PLATFORM_ADMIN` for platform-level admin designation.
 - **`validation.js`** — Input validation and sanitization for all user inputs.
 - **`utils.js`** — Permission checking with complex role hierarchy: @everyone defaults → role stacking (highest position wins) → channel-level overrides. Server owner has all permissions.
 - **`migrations/`** — 9 sequential SQL files applied idempotently on container startup via `docker-entrypoint.sh`.
@@ -64,7 +64,7 @@ docker exec nexus-postgres psql -U postgres -d nexus_db
 - **`src/App.js`** (77KB) — Root component managing all global state (servers, channels, messages, voice, DMs, user). This is the central state hub.
 - **`src/components/ChatArea.js`** (65KB) — Message display, input, attachments, reactions, URL previews.
 - **`src/hooks/useWebRTC.js`** (53KB) — WebRTC peer connection management for voice/video/screen sharing.
-- **`src/components/SettingsModal.js`** — 9-tab settings panel (profile, server, channels, roles, members, webhooks, audio, friends, emoji).
+- **`src/components/SettingsModal.js`** — 10-tab settings panel (profile, server, channels, roles, members, webhooks, audio, friends, emoji, platform admin). Platform Admin tab is only visible to the user designated by the `PLATFORM_ADMIN` env var.
 - **`src/config.js`** — Server URL resolution for web, Capacitor, Tauri, and Electron environments.
 - **`nginx.conf`** — WebSocket upgrade support, SPA fallback routing, static asset caching.
 
@@ -76,7 +76,7 @@ docker exec nexus-postgres psql -U postgres -d nexus_db
 - Indexes on frequently queried fields (username, server_id, channel_id)
 
 ### Socket.IO Event Naming
-All events use domain-prefixed names: `message:send`, `channel:create`, `voice:join`, `dm:create`, `friend:request`, etc.
+All events use domain-prefixed names: `message:send`, `channel:create`, `voice:join`, `dm:create`, `friend:request`, `admin:get-servers`, etc.
 
 ### REST API Routes
 - `POST /api/auth/register|login|logout` — Authentication
@@ -89,7 +89,7 @@ All events use domain-prefixed names: `message:send`, `channel:create`, `voice:j
 
 ## Testing
 
-**Automated:** 48 Jest tests in `tests/automated/` — run with `npm test` from `server/`. Tests cover validation, utils, and permissions. Can run without the full server stack.
+**Automated:** 225 Jest tests in `tests/automated/` — run with `npm test` from `server/`. Tests cover validation, utils, permissions, config, and security. Can run without the full server stack.
 
 **Manual:** 40 test cases in `tests/manual/` (8 categories: auth, messaging, channels, emoji, voice, social, moderation, UI).
 
@@ -97,7 +97,7 @@ All events use domain-prefixed names: `message:send`, `channel:create`, `voice:j
 
 Required: `JWT_SECRET`, `DATABASE_URL`, `POSTGRES_PASSWORD`
 
-Important: `CLIENT_URL` (default `http://localhost:3000`), `GIPHY_API_KEY` (optional)
+Important: `CLIENT_URL` (default `http://localhost:3000`), `GIPHY_API_KEY` (optional), `PLATFORM_ADMIN` (username for platform-level admin panel, optional)
 
 See `.env.example` and `server/.env.example` for full list.
 

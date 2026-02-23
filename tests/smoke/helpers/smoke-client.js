@@ -127,6 +127,15 @@ class SmokeClient {
       socket.emit('message:delete', { channelId, messageId });
     });
   }
+
+  async deleteAccount(token) {
+    const res = await fetch(`${this.baseUrl}/api/auth/account`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const body = await res.json();
+    return { status: res.status, body };
+  }
 }
 
 module.exports = { SmokeClient };

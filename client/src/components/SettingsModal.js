@@ -322,7 +322,7 @@ function SettingsSidebar({ tabs, tab, setTab }) {
   );
 }
 
-export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onChangeServer, developerMode, onSetDeveloperMode }) {
+export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onDeleteAccount, onChangeServer, developerMode, onSetDeveloperMode }) {
   const [tab, setTabRaw] = useState(initialTab || localStorage.getItem('nexus_settings_last_tab') || 'profile');
   const setTab = (t) => { setTabRaw(t); localStorage.setItem('nexus_settings_last_tab', t); };
   const [profileSaved, setProfileSaved] = useState(false);
@@ -356,6 +356,11 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const passwordTimeoutRef = useRef(null);
+
+  // Delete account
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deleteConfirmUsername, setDeleteConfirmUsername] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Local action error (shown inside modal)
   const [actionError, setActionError] = useState(null);
@@ -431,6 +436,22 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const soundboardAudioCtxRef = useRef(null);
   const soundboardPreviewSourceRef = useRef(null);
   const soundboardFileRef = useRef(null);
+
+  // Moderation
+  const [modSection, setModSection] = useState('bans');
+  const [modBans, setModBans] = useState([]);
+  const [modTimeouts, setModTimeouts] = useState([]);
+  const [modReports, setModReports] = useState([]);
+  const [modLoading, setModLoading] = useState(false);
+  const [modSearch, setModSearch] = useState('');
+
+  // Platform Admin
+  const [adminSection, setAdminSection] = useState('servers');
+  const [adminServers, setAdminServers] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminOrphanedStats, setAdminOrphanedStats] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminSearch, setAdminSearch] = useState('');
 
   // Voice Channel Sounds (intro/exit)
   const [voiceSounds, setVoiceSounds] = useState(null); // { intro_sound, exit_sound, ... }
@@ -676,6 +697,106 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     });
   };
 
+  // ── Moderation helpers ──────────────────────────────────────────────────
+  const loadModData = () => {
+    if (!socket || !server) return;
+    setModLoading(true);
+    let pending = 3;
+    const done = () => { pending--; if (pending <= 0) setModLoading(false); };
+    emitWithTimeout(socket, 'moderation:get-bans', { serverId: server.id }, (r) => {
+      if (r?.bans) setModBans(r.bans);
+      done();
+    });
+    emitWithTimeout(socket, 'moderation:get-timeouts', { serverId: server.id }, (r) => {
+      if (r?.timeouts) setModTimeouts(r.timeouts);
+      done();
+    });
+    emitWithTimeout(socket, 'moderation:get-reports', { serverId: server.id }, (r) => {
+      if (r?.reports) setModReports(r.reports);
+      done();
+    });
+  };
+
+  const handleUnban = (userId) => {
+    if (!socket || !server) return;
+    emitWithTimeout(socket, 'server:unban-user', { serverId: server.id, userId }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setModBans(prev => prev.filter(b => b.user_id !== userId));
+    });
+  };
+
+  const handleRemoveTimeout = (userId) => {
+    if (!socket || !server) return;
+    emitWithTimeout(socket, 'server:remove-timeout', { serverId: server.id, userId }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setModTimeouts(prev => prev.filter(t => t.user_id !== userId));
+    });
+  };
+
+  const handleUpdateReport = (reportId, newStatus) => {
+    if (!socket) return;
+    emitWithTimeout(socket, 'moderation:update-report', { reportId, status: newStatus }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setModReports(prev => prev.map(rp => rp.id === reportId ? { ...rp, status: newStatus, resolved_at: new Date().toISOString() } : rp));
+    });
+  };
+
+  // ── Platform Admin helpers ─────────────────────────────────────────────
+  const loadAdminData = () => {
+    if (!socket) return;
+    setAdminLoading(true);
+    let pending = 3;
+    const done = () => { pending--; if (pending <= 0) setAdminLoading(false); };
+    emitWithTimeout(socket, 'admin:get-servers', {}, (r) => {
+      if (r?.servers) setAdminServers(r.servers);
+      done();
+    });
+    emitWithTimeout(socket, 'admin:get-users', {}, (r) => {
+      if (r?.users) setAdminUsers(r.users);
+      done();
+    });
+    emitWithTimeout(socket, 'admin:get-orphaned-stats', {}, (r) => {
+      if (r?.stats) setAdminOrphanedStats(r.stats);
+      done();
+    });
+  };
+
+  const handleAdminDeleteServer = (serverId, serverName) => {
+    if (!socket) return;
+    if (!window.confirm(`Delete server "${serverName}"? This cannot be undone.`)) return;
+    emitWithTimeout(socket, 'admin:delete-server', { serverId }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setAdminServers(prev => prev.filter(s => s.id !== serverId));
+      loadAdminData();
+    });
+  };
+
+  const handleAdminDeleteUser = (userId, username) => {
+    if (!socket) return;
+    if (!window.confirm(`Delete user "${username}"? Their servers will be transferred or deleted. This cannot be undone.`)) return;
+    emitWithTimeout(socket, 'admin:delete-user', { userId }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setAdminUsers(prev => prev.filter(u => u.id !== userId));
+      loadAdminData();
+    });
+  };
+
+  const handleCleanupEmptyDMs = () => {
+    if (!socket) return;
+    emitWithTimeout(socket, 'admin:cleanup-empty-dms', {}, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      loadAdminData();
+    });
+  };
+
+  const handleAssignOwnerlessServers = () => {
+    if (!socket) return;
+    emitWithTimeout(socket, 'admin:assign-ownerless-servers', {}, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      loadAdminData();
+    });
+  };
+
   const loadSoundboardSounds = () => {
     if (!socket || !server) return;
     setSoundboardLoading(true);
@@ -855,6 +976,20 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     setSoundboardIsGlobal(false);
     if (soundboardFileRef.current) soundboardFileRef.current.value = '';
   };
+
+  // Load moderation data when tab opens
+  useEffect(() => {
+    if (tab === 'moderation' && server) {
+      loadModData();
+    }
+  }, [tab, server?.id]);
+
+  // Load platform admin data when tab opens
+  useEffect(() => {
+    if (tab === 'platform-admin' && currentUser?.isPlatformAdmin) {
+      loadAdminData();
+    }
+  }, [tab]);
 
   // Load soundboard when tab opens
   useEffect(() => {
@@ -1432,7 +1567,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       ...(userPerms.manageWebhooks || userPerms.admin ? [{id:'webhooks', label:'Webhooks', icon: <LinkIcon size={16} />}] : []),
       ...(userPerms.manageServer || userPerms.admin ? [{id:'soundboard', label:'Soundboard', icon: <SoundboardIcon size={16} />}] : []),
       ...(userPerms.manageEmojis || userPerms.admin ? [{id:'emojis', label:'Emojis', icon: <EmojiIcon size={16} />}] : []),
+      ...(userPerms.admin || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
     ] : []),
+    ...(currentUser?.isPlatformAdmin ? [{id:'platform-admin', label:'Platform Admin', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15l-4-4 1.41-1.41L11 13.17l6.59-6.59L19 8l-8 8z"/></svg>}] : []),
     {id:'about', label:'About', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>}
   ];
 
@@ -1805,6 +1942,64 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
               >
                 Log Out
               </button>
+
+              {/* Delete Account */}
+              <div style={{ marginTop: 16, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+                {!showDeleteAccount ? (
+                  <span
+                    style={{ color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => setShowDeleteAccount(true)}
+                  >
+                    Delete my account
+                  </span>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <p style={{ color: 'var(--red)', fontSize: 13, margin: 0 }}>
+                      This will permanently delete your account. Your messages will remain but show as "Deleted User". DMs will be preserved for other participants. This cannot be undone.
+                    </p>
+                    <label style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                      Type <strong style={{ color: 'var(--text-normal)' }}>{currentUser?.username}</strong> to confirm:
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteConfirmUsername}
+                      onChange={e => setDeleteConfirmUsername(e.target.value)}
+                      placeholder="Enter your username"
+                      style={{
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                        borderRadius: 6, padding: '6px 10px', color: 'var(--text-normal)', fontSize: 14, outline: 'none'
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="settings-btn"
+                        disabled={deleteConfirmUsername !== currentUser?.username || deleteLoading}
+                        style={{
+                          background: deleteConfirmUsername === currentUser?.username ? 'var(--red)' : 'rgba(237,66,69,0.15)',
+                          color: '#fff', border: 'none', fontWeight: 600,
+                          opacity: deleteConfirmUsername === currentUser?.username && !deleteLoading ? 1 : 0.5,
+                          cursor: deleteConfirmUsername === currentUser?.username && !deleteLoading ? 'pointer' : 'not-allowed'
+                        }}
+                        onClick={async () => {
+                          if (deleteConfirmUsername !== currentUser?.username) return;
+                          setDeleteLoading(true);
+                          await onDeleteAccount?.();
+                          setDeleteLoading(false);
+                        }}
+                      >
+                        {deleteLoading ? 'Deleting...' : 'Delete Account'}
+                      </button>
+                      <button
+                        className="settings-btn"
+                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }}
+                        onClick={() => { setShowDeleteAccount(false); setDeleteConfirmUsername(''); }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             </div>
           )}
@@ -3527,6 +3722,259 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                     {emojiList.length} / 50 emojis used
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* ── MODERATION ── */}
+          {tab==='moderation' && server && (
+            <div className="settings-section">
+              <h2>Moderation</h2>
+              <p className="settings-hint">View and manage bans, timeouts, and user reports for this server.</p>
+
+              <div className="mod-section-tabs">
+                <button className={`mod-section-tab ${modSection==='bans'?'active':''}`} onClick={()=>{setModSection('bans');setModSearch('');}}>
+                  Bans ({modBans.length})
+                </button>
+                <button className={`mod-section-tab ${modSection==='timeouts'?'active':''}`} onClick={()=>{setModSection('timeouts');setModSearch('');}}>
+                  Timeouts ({modTimeouts.length})
+                </button>
+                <button className={`mod-section-tab ${modSection==='reports'?'active':''}`} onClick={()=>{setModSection('reports');setModSearch('');}}>
+                  Reports ({modReports.length})
+                </button>
+              </div>
+
+              {modLoading && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>Loading...</p>}
+
+              {/* ── Bans ── */}
+              {!modLoading && modSection==='bans' && (
+                <div>
+                  <div className="search-input-container" style={{marginBottom:12}}>
+                    <input className="settings-input" placeholder="Search banned users..." value={modSearch}
+                      onChange={e=>setModSearch(e.target.value)}/>
+                    {modSearch && <button className="search-clear-btn" onClick={()=>setModSearch('')}>×</button>}
+                  </div>
+                  {modBans.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No banned users.</p>}
+                  <div className="members-manage-list">
+                    {modBans
+                      .filter(b => !modSearch || (b.username||'').toLowerCase().includes(modSearch.toLowerCase()))
+                      .map(ban => (
+                        <div key={ban.id} className="member-manage-item">
+                          <div className="member-avatar-sm" style={{background: ban.custom_avatar ? 'transparent' : (ban.color || '#3B82F6')}}>
+                            {ban.custom_avatar
+                              ? <img src={ban.custom_avatar} alt="" className="avatar-upload-img"/>
+                              : (ban.avatar || 'U')}
+                          </div>
+                          <div className="member-manage-info">
+                            <span className="member-manage-username">{ban.username || 'Unknown'}</span>
+                            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                              Banned {new Date(ban.created_at).toLocaleDateString()}
+                              {ban.reason && <span> &mdash; {ban.reason}</span>}
+                            </div>
+                          </div>
+                          <button className="settings-btn danger-sm" onClick={()=>handleUnban(ban.user_id)}>Unban</button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Timeouts ── */}
+              {!modLoading && modSection==='timeouts' && (
+                <div>
+                  {modTimeouts.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No active timeouts.</p>}
+                  <div className="members-manage-list">
+                    {modTimeouts.map(to => {
+                      const remaining = Math.max(0, Math.ceil((new Date(to.expires_at) - Date.now()) / 60000));
+                      return (
+                        <div key={to.id} className="member-manage-item">
+                          <div className="member-avatar-sm" style={{background: to.custom_avatar ? 'transparent' : (to.color || '#3B82F6')}}>
+                            {to.custom_avatar
+                              ? <img src={to.custom_avatar} alt="" className="avatar-upload-img"/>
+                              : (to.avatar || 'U')}
+                          </div>
+                          <div className="member-manage-info">
+                            <span className="member-manage-username">{to.username || 'Unknown'}</span>
+                            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                              {to.duration_minutes}min timeout &mdash; {remaining > 0 ? `${remaining}m remaining` : 'Expired'}
+                            </div>
+                          </div>
+                          <button className="settings-btn danger-sm" onClick={()=>handleRemoveTimeout(to.user_id)}>Remove</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Reports ── */}
+              {!modLoading && modSection==='reports' && (
+                <div>
+                  {modReports.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No reports for this server's members.</p>}
+                  <div className="members-manage-list" style={{maxHeight:500}}>
+                    {modReports.map(report => (
+                      <div key={report.id} className="member-manage-item" style={{flexDirection:'column',alignItems:'flex-start',gap:6}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
+                          <div className="member-avatar-sm" style={{background: report.reported_custom_avatar ? 'transparent' : (report.reported_color || '#3B82F6'), width:28, height:28, fontSize:14}}>
+                            {report.reported_custom_avatar
+                              ? <img src={report.reported_custom_avatar} alt="" className="avatar-upload-img"/>
+                              : (report.reported_avatar || 'U')}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <span className="member-manage-username">{report.reported_username || 'Unknown'}</span>
+                            <span style={{fontSize:11,color:'var(--text-muted)',marginLeft:6}}>
+                              reported by {report.reporter_username || 'Unknown'}
+                            </span>
+                          </div>
+                          <span className={`mod-report-status mod-status-${report.status}`}>{report.status}</span>
+                        </div>
+                        <div style={{fontSize:12,color:'var(--text-muted)'}}>
+                          <strong style={{color:'var(--text-normal)',textTransform:'capitalize'}}>{report.report_type}</strong>
+                          {report.description && <span> &mdash; {report.description}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:'var(--text-muted)'}}>
+                          {new Date(report.created_at).toLocaleString()}
+                          {report.resolved_at && <span> &middot; Resolved {new Date(report.resolved_at).toLocaleString()}</span>}
+                        </div>
+                        {report.status === 'pending' && (
+                          <div style={{display:'flex',gap:6,marginTop:4}}>
+                            <button className="settings-btn-small" onClick={()=>handleUpdateReport(report.id,'reviewed')}>Reviewed</button>
+                            <button className="settings-btn-small primary" onClick={()=>handleUpdateReport(report.id,'actioned')}>Actioned</button>
+                            <button className="settings-btn-small" onClick={()=>handleUpdateReport(report.id,'dismissed')} style={{color:'var(--text-muted)'}}>Dismiss</button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── PLATFORM ADMIN ── */}
+          {tab==='platform-admin' && currentUser?.isPlatformAdmin && (
+            <div className="settings-section">
+              <h2>Platform Admin</h2>
+              <p className="settings-hint">Cross-server oversight — manage all servers, users, and orphaned data.</p>
+
+              <div className="mod-section-tabs">
+                <button className={`mod-section-tab ${adminSection==='servers'?'active':''}`} onClick={()=>{setAdminSection('servers');setAdminSearch('');}}>
+                  Servers ({adminServers.length})
+                </button>
+                <button className={`mod-section-tab ${adminSection==='users'?'active':''}`} onClick={()=>{setAdminSection('users');setAdminSearch('');}}>
+                  Users ({adminUsers.length})
+                </button>
+                <button className={`mod-section-tab ${adminSection==='cleanup'?'active':''}`} onClick={()=>{setAdminSection('cleanup');setAdminSearch('');}}>
+                  Cleanup
+                </button>
+              </div>
+
+              {adminLoading && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>Loading...</p>}
+
+              {/* ── Servers ── */}
+              {!adminLoading && adminSection==='servers' && (
+                <div>
+                  <div className="search-input-container" style={{marginBottom:12}}>
+                    <input className="settings-input" placeholder="Search servers..." value={adminSearch}
+                      onChange={e=>setAdminSearch(e.target.value)}/>
+                    {adminSearch && <button className="search-clear-btn" onClick={()=>setAdminSearch('')}>×</button>}
+                  </div>
+                  {adminServers.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No servers found.</p>}
+                  <div className="members-manage-list">
+                    {adminServers
+                      .filter(s => !adminSearch || s.name.toLowerCase().includes(adminSearch.toLowerCase()))
+                      .map(srv => (
+                        <div key={srv.id} className="member-manage-item">
+                          <div className="member-avatar-sm" style={{background: srv.customIcon ? 'transparent' : '#5865F2', borderRadius: 8}}>
+                            {srv.customIcon
+                              ? <img src={srv.customIcon} alt="" className="avatar-upload-img" style={{borderRadius:8}}/>
+                              : (srv.icon || srv.name?.[0] || 'S')}
+                          </div>
+                          <div className="member-manage-info">
+                            <span className="member-manage-username">{srv.name}</span>
+                            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                              {srv.memberCount} members · {srv.channelCount} channels · Owner: {srv.ownerUsername}
+                              {srv.createdAt && <span> · Created {new Date(srv.createdAt).toLocaleDateString()}</span>}
+                            </div>
+                          </div>
+                          <button className="settings-btn danger-sm" onClick={()=>handleAdminDeleteServer(srv.id, srv.name)}>Delete</button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Users ── */}
+              {!adminLoading && adminSection==='users' && (
+                <div>
+                  <div className="search-input-container" style={{marginBottom:12}}>
+                    <input className="settings-input" placeholder="Search users..." value={adminSearch}
+                      onChange={e=>setAdminSearch(e.target.value)}/>
+                    {adminSearch && <button className="search-clear-btn" onClick={()=>setAdminSearch('')}>×</button>}
+                  </div>
+                  {adminUsers.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No users found.</p>}
+                  <div className="members-manage-list">
+                    {adminUsers
+                      .filter(u => !adminSearch || u.username.toLowerCase().includes(adminSearch.toLowerCase()))
+                      .map(usr => (
+                        <div key={usr.id} className="member-manage-item">
+                          <div className="member-avatar-sm" style={{background: usr.customAvatar ? 'transparent' : (usr.color || '#3B82F6'), position:'relative'}}>
+                            {usr.customAvatar
+                              ? <img src={usr.customAvatar} alt="" className="avatar-upload-img"/>
+                              : (usr.avatar || 'U')}
+                            {usr.online && <div style={{position:'absolute',bottom:-1,right:-1,width:8,height:8,borderRadius:'50%',background:'#3ba55c',border:'2px solid var(--bg-secondary)'}}/>}
+                          </div>
+                          <div className="member-manage-info">
+                            <span className="member-manage-username">{usr.username}</span>
+                            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                              {usr.serverCount} servers · Joined {new Date(usr.createdAt).toLocaleDateString()}
+                              {usr.online && <span style={{color:'#3ba55c'}}> · Online</span>}
+                            </div>
+                          </div>
+                          {usr.id !== currentUser.id && (
+                            <button className="settings-btn danger-sm" onClick={()=>handleAdminDeleteUser(usr.id, usr.username)}>Delete</button>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Cleanup ── */}
+              {!adminLoading && adminSection==='cleanup' && (
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div style={{background:'var(--bg-tertiary)',borderRadius:8,padding:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontWeight:600,marginBottom:4}}>Null-Author Messages</div>
+                      <div style={{fontSize:12,color:'var(--text-muted)'}}>Messages from deleted accounts with no author reference</div>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:700,color:'var(--text-muted)'}}>{adminOrphanedStats?.null_author_messages ?? '—'}</div>
+                  </div>
+                  <div style={{background:'var(--bg-tertiary)',borderRadius:8,padding:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontWeight:600,marginBottom:4}}>Empty DM Channels</div>
+                      <div style={{fontSize:12,color:'var(--text-muted)'}}>DM channels with no participants</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:12}}>
+                      <div style={{fontSize:24,fontWeight:700,color:'var(--text-muted)'}}>{adminOrphanedStats?.empty_dm_channels ?? '—'}</div>
+                      {adminOrphanedStats && parseInt(adminOrphanedStats.empty_dm_channels) > 0 && (
+                        <button className="settings-btn danger-sm" onClick={handleCleanupEmptyDMs}>Clean up</button>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{background:'var(--bg-tertiary)',borderRadius:8,padding:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontWeight:600,marginBottom:4}}>Ownerless Servers</div>
+                      <div style={{fontSize:12,color:'var(--text-muted)'}}>Servers whose owner account no longer exists</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:12}}>
+                      <div style={{fontSize:24,fontWeight:700,color:'var(--text-muted)'}}>{adminOrphanedStats?.ownerless_servers ?? '—'}</div>
+                      {adminOrphanedStats && parseInt(adminOrphanedStats.ownerless_servers) > 0 && (
+                        <button className="settings-btn primary-sm" onClick={handleAssignOwnerlessServers}>Assign owners</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}

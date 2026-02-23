@@ -16,7 +16,7 @@ let testMessageId;
 let channelId;
 
 afterAll(async () => {
-  // Cleanup: delete test message, disconnect socket, logout
+  // Cleanup: delete test message, disconnect socket, delete account
   try {
     if (testMessageId && channelId && smokeSocket?.connected) {
       await client.deleteMessage(smokeSocket, channelId, testMessageId).catch(() => {});
@@ -28,7 +28,7 @@ afterAll(async () => {
   }
 
   if (smokeToken) {
-    await client.logout(smokeToken).catch(() => {});
+    await client.deleteAccount(smokeToken).catch(() => {});
   }
 });
 

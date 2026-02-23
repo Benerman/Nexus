@@ -58,5 +58,9 @@ module.exports = {
     stunUrls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',').map(s => s.trim()),
     turnUrl: process.env.TURN_URL || '',
     turnSecret: process.env.TURN_SECRET || '',
+  },
+
+  admin: {
+    platformAdminUsername: process.env.PLATFORM_ADMIN || ''
   }
 };

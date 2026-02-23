@@ -186,6 +186,13 @@ async function deleteAllTokensForAccount(accountId) {
 }
 
 /**
+ * Delete an account (cascades tokens, memberships, friendships, etc.)
+ */
+async function deleteAccount(accountId) {
+  await query('DELETE FROM accounts WHERE id = $1', [accountId]);
+}
+
+/**
  * Clean up expired tokens
  */
 async function cleanupExpiredTokens() {
@@ -578,6 +585,40 @@ async function createReport(reporterId, reportedId, reportType, description, mes
 }
 
 /**
+ * Get reports for users who are members of a server
+ */
+async function getReportsForServer(serverId) {
+  const result = await query(
+    `SELECT r.*,
+            a_reported.username AS reported_username,
+            a_reported.avatar AS reported_avatar,
+            a_reported.custom_avatar AS reported_custom_avatar,
+            a_reported.color AS reported_color,
+            a_reporter.username AS reporter_username
+     FROM reports r
+     JOIN server_members sm ON r.reported_id = sm.user_id AND sm.server_id = $1
+     JOIN accounts a_reported ON r.reported_id = a_reported.id
+     LEFT JOIN accounts a_reporter ON r.reporter_id = a_reporter.id
+     ORDER BY r.created_at DESC`,
+    [serverId]
+  );
+  return result.rows;
+}
+
+/**
+ * Update the status of a report
+ */
+async function updateReportStatus(reportId, status) {
+  const resolvedAt = (status === 'reviewed' || status === 'actioned' || status === 'dismissed')
+    ? new Date() : null;
+  const result = await query(
+    `UPDATE reports SET status = $1, resolved_at = $2 WHERE id = $3 RETURNING *`,
+    [status, resolvedAt, reportId]
+  );
+  return result.rows[0];
+}
+
+/**
  * Create server invite
  */
 async function createInvite(serverId, createdBy, maxUses = 0, expiresInMs = null) {
@@ -911,6 +952,49 @@ async function getServerTimeouts(serverId) {
     [serverId]
   );
   return result.rows;
+}
+
+// ============================================================================
+// PLATFORM ADMIN FUNCTIONS
+// ============================================================================
+
+/**
+ * Get all accounts with server membership counts (excludes password data)
+ */
+async function getAllAccounts() {
+  const result = await query(`
+    SELECT a.id, a.username, a.color, a.avatar, a.custom_avatar, a.status, a.bio, a.created_at,
+           COUNT(sm.server_id) AS server_count
+    FROM accounts a
+    LEFT JOIN server_members sm ON a.id = sm.account_id
+    GROUP BY a.id
+    ORDER BY a.created_at ASC
+  `);
+  return result.rows;
+}
+
+/**
+ * Get counts of orphaned data (null-author messages, empty DM channels, ownerless servers)
+ */
+async function getOrphanedDataStats() {
+  const result = await query(`
+    SELECT
+      (SELECT COUNT(*) FROM messages WHERE author_id IS NULL) AS null_author_messages,
+      (SELECT COUNT(*) FROM dm_channels WHERE id NOT IN (SELECT DISTINCT dm_channel_id FROM dm_participants)) AS empty_dm_channels,
+      (SELECT COUNT(*) FROM servers WHERE owner_id IS NULL OR owner_id NOT IN (SELECT id FROM accounts)) AS ownerless_servers
+  `);
+  return result.rows[0];
+}
+
+/**
+ * Delete DM channels with no participants
+ */
+async function cleanupEmptyDMs() {
+  const result = await query(`
+    DELETE FROM dm_channels
+    WHERE id NOT IN (SELECT DISTINCT dm_channel_id FROM dm_participants)
+  `);
+  return result.rowCount;
 }
 
 // ============================================================================
@@ -1324,6 +1408,7 @@ module.exports = {
   validateToken,
   deleteToken,
   deleteAllTokensForAccount,
+  deleteAccount,
   cleanupExpiredTokens,
 
   // Server functions
@@ -1368,6 +1453,8 @@ module.exports = {
   getBlockedUsers,
   isUserBlocked,
   createReport,
+  getReportsForServer,
+  updateReportStatus,
   createInvite,
   getInviteByCode,
   incrementInviteUse,
@@ -1419,6 +1506,11 @@ module.exports = {
   createCustomEmoji,
   updateCustomEmoji,
   deleteCustomEmoji,
+
+  // Platform admin functions
+  getAllAccounts,
+  getOrphanedDataStats,
+  cleanupEmptyDMs,
 
   // Maintenance
   initializeDatabase,
