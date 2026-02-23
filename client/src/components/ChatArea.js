@@ -271,7 +271,7 @@ const ChatArea = React.memo(function ChatArea({
   server, servers, onOpenSettings, memberSidebarVisible, onToggleMemberSidebar,
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
-  developerMode
+  developerMode, onReportMessage
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -914,6 +914,7 @@ const ChatArea = React.memo(function ChatArea({
           onEdit={handleEditMessage}
           onReply={handleReplyToMessage}
           onCopyUrl={handleCopyMessageUrl}
+          onReport={onReportMessage}
           developerMode={developerMode}
         />
       )}

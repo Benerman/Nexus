@@ -13,6 +13,7 @@ import UserContextMenu from './components/UserContextMenu';
 import ServerContextMenu from './components/ServerContextMenu';
 import ChannelContextMenu from './components/ChannelContextMenu';
 import UserProfileModal from './components/UserProfileModal';
+import ReportModal from './components/ReportModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
@@ -73,6 +74,7 @@ export default function App() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [dmUnreadCounts, setDmUnreadCounts] = useState({}); // channelId -> unread count
   const [profileUser, setProfileUser] = useState(null); // user to show in profile modal
+  const [reportTarget, setReportTarget] = useState(null); // { userId, username, messageId?, messagePreview? }
   const [channelLastRead, setChannelLastRead] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nexus_channel_last_read') || '{}'); } catch { return {}; }
   });
@@ -1285,8 +1287,7 @@ export default function App() {
     } else if (action === 'block' && socketRef.current) {
       socketRef.current.emit('block:user', { userId: user.id });
     } else if (action === 'report') {
-      // TODO: Open report modal
-      console.log('Report user:', user.username);
+      setReportTarget({ userId: user.id, username: user.username });
     } else if (action === 'view-profile') {
       setProfileUser(user);
     } else if (action === 'kick' && socketRef.current) {
@@ -1308,6 +1309,28 @@ export default function App() {
       }
     }
   }, [activeServerId]);
+
+  const handleReportMessage = useCallback((message) => {
+    if (!message?.author) return;
+    const preview = typeof message.content === 'string' ? message.content.slice(0, 120) : '';
+    setReportTarget({
+      userId: message.author.id,
+      username: message.author.username,
+      messageId: message.id,
+      messagePreview: preview,
+    });
+  }, []);
+
+  const handleSubmitReport = useCallback(({ reportType, description }) => {
+    if (!socketRef.current || !reportTarget) return;
+    socketRef.current.emit('report:user', {
+      userId: reportTarget.userId,
+      reportType,
+      description,
+      messageId: reportTarget.messageId || null,
+    });
+    setReportTarget(null);
+  }, [reportTarget]);
 
   // Server context menu handler
   const handleServerContextMenu = useCallback((server, event) => {
@@ -1818,6 +1841,7 @@ export default function App() {
             onlineUsers={onlineUsers}
             friends={friends}
             developerMode={developerMode}
+            onReportMessage={handleReportMessage}
           />
         )}
       </div>
@@ -1890,6 +1914,13 @@ export default function App() {
               socketRef.current.emit('block:user', { userId: user.id });
             }
           }}
+        />
+      )}
+      {reportTarget && (
+        <ReportModal
+          target={reportTarget}
+          onSubmit={handleSubmitReport}
+          onClose={() => setReportTarget(null)}
         />
       )}
       {serverContextMenu && (

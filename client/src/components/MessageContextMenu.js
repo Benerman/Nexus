@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './MessageContextMenu.css';
 
-const MessageContextMenu = ({ message, currentUser, isAdmin, position, onClose, onDelete, onEdit, onReply, onCopyUrl, developerMode }) => {
+const MessageContextMenu = ({ message, currentUser, isAdmin, position, onClose, onDelete, onEdit, onReply, onCopyUrl, onReport, developerMode }) => {
   const menuRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const isAuthor = message.author.id === currentUser?.id;
@@ -68,13 +68,24 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, position, onClose, 
         </>
       )}
 
-      <div className="context-menu-divider" />
+      {!isAuthor && onReport && (
+        <>
+          <div className="context-menu-divider" />
+          <button className="context-menu-item warning" onClick={() => { onReport(message); onClose(); }}>
+            <span className="context-menu-icon">⚠️</span>
+            Report Message
+          </button>
+        </>
+      )}
 
       {canDelete && onDelete && (
-        <button className="context-menu-item danger" onClick={() => { onDelete(message); onClose(); }}>
-          <span className="context-menu-icon">🗑️</span>
-          Delete Message
-        </button>
+        <>
+          <div className="context-menu-divider" />
+          <button className="context-menu-item danger" onClick={() => { onDelete(message); onClose(); }}>
+            <span className="context-menu-icon">🗑️</span>
+            Delete Message
+          </button>
+        </>
       )}
     </div>
   );

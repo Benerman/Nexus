@@ -41,6 +41,15 @@
   color: #fff;
 }
 
+.context-menu-item.warning {
+  color: var(--yellow, #FEE75C);
+}
+
+.context-menu-item.warning:hover {
+  background: var(--yellow, #FEE75C);
+  color: #000;
+}
+
 .context-menu-item.danger {
   color: var(--red);
 }

@@ -43,9 +43,11 @@ export default function useLongPress(callback, delay = 350) {
 
   const onTouchEnd = useCallback((e) => {
     clear();
-    // If long-press fired, prevent the click that follows
+    // If long-press fired, prevent the click/tap that follows
+    // and stop the event from bubbling to parent click handlers
     if (firedRef.current) {
       e.preventDefault();
+      e.stopPropagation();
     }
   }, [clear]);
 

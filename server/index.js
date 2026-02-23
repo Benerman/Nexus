@@ -2491,10 +2491,11 @@ io.on('connection', (socket) => {
   socket.on('soundboard:delete', async ({ serverId, soundId }, callback) => {
     const user = state.users[socket.id];
     if (!user) return;
-    const perms = getUserPerms(user.id, serverId);
-    if (!perms.manageServer && !perms.admin) return socket.emit('error', { message: 'No permission' });
     const srv = state.servers[serverId];
     if (!srv) return;
+    const perms = getUserPerms(user.id, serverId);
+    const isUploader = (srv.soundboard || []).some(s => s.id === soundId && s.created_by === user.id);
+    if (!perms.manageServer && !perms.admin && !isUploader) return socket.emit('error', { message: 'No permission' });
 
     try {
       await db.deleteSoundboardSound(soundId);

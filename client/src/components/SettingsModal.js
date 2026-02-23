@@ -1588,7 +1588,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
 
         <div className="settings-content">
           <button className="settings-close-btn" onClick={onClose} title="Close Settings">
-            ✕
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
           </button>
           {actionError && (
             <div style={{
@@ -3462,14 +3462,20 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   {/* Sound list */}
                   {soundboardSounds.length > 0 && !soundboardEditing && !soundboardAudioBuffer && (
                     <div className="soundboard-list">
-                      {activePage.sounds.map(sound => (
+                      {activePage.sounds.map(sound => {
+                        const uploaderName = sound.created_by && server?.members?.[sound.created_by]?.username;
+                        const canDelete = userPerms.admin || isOwner || sound.created_by === currentUser?.id;
+                        return (
                         <div key={sound.id} className="soundboard-item">
                           <span className="soundboard-item-emoji">{sound.emoji || '🔊'}</span>
                           <span className="soundboard-item-name">
                             {sound.name}
                             {sound.is_global && <span className="global-badge" title="Global sound">G</span>}
                           </span>
-                          <span className="soundboard-item-duration">{Math.round((sound.volume || 1) * 100)}% · {(sound.duration || 0).toFixed(1)}s</span>
+                          <span className="soundboard-item-duration">
+                            {Math.round((sound.volume || 1) * 100)}% · {(sound.duration || 0).toFixed(1)}s
+                            {uploaderName && <span style={{marginLeft:4,color:'var(--text-muted)',fontSize:11}}> · {uploaderName}</span>}
+                          </span>
                           <div className="soundboard-item-actions">
                             <button className="settings-btn" style={{padding:'4px 10px',fontSize:12}} onClick={() => {
                               // Quick preview the trimmed audio
@@ -3489,11 +3495,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                                 });
                               }
                             }}>Play</button>
-                            <button className="settings-btn" style={{padding:'4px 10px',fontSize:12}} onClick={() => editSoundboardSound(sound)}>Edit</button>
-                            <button className="settings-btn danger-sm" onClick={() => deleteSoundboardSound(sound.id)}>Del</button>
+                            {canDelete && <button className="settings-btn" style={{padding:'4px 10px',fontSize:12}} onClick={() => editSoundboardSound(sound)}>Edit</button>}
+                            {canDelete && <button className="settings-btn danger-sm" onClick={() => deleteSoundboardSound(sound.id)}>Del</button>}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
