@@ -60,11 +60,11 @@ jobs:
 
       - name: Stop existing containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} down --remove-orphans || true
+          ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml down --remove-orphans || true
 
       - name: Build and start containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} up -d --build
+          ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml up --build --force-recreate -d
 
       - name: Wait for services to be healthy
         run: |
