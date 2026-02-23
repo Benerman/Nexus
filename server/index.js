@@ -454,6 +454,11 @@ app.post('/api/user/avatar', async (req, res) => {
     const { avatar } = req.body; // base64 data URL
     if (!avatar || !avatar.startsWith('data:image/')) return res.status(400).json({ error: 'Invalid image' });
 
+    // Validate file size (max 2MB)
+    const base64Data = avatar.split(',')[1] || '';
+    const actualBytes = Math.ceil(base64Data.length * 3 / 4);
+    if (actualBytes > 2 * 1024 * 1024) return res.status(400).json({ error: 'Image too large (max 2MB)' });
+
     // Update account in database
     await db.updateAccount(accountId, { custom_avatar: avatar });
 
@@ -474,6 +479,11 @@ app.post('/api/server/:serverId/icon', async (req, res) => {
     const { serverId } = req.params;
     const { icon } = req.body; // base64
     if (!icon || !icon.startsWith('data:image/')) return res.status(400).json({ error: 'Invalid image' });
+
+    // Validate file size (max 2MB)
+    const base64Data = icon.split(',')[1] || '';
+    const actualBytes = Math.ceil(base64Data.length * 3 / 4);
+    if (actualBytes > 2 * 1024 * 1024) return res.status(400).json({ error: 'Image too large (max 2MB)' });
 
     const srv = state.servers[serverId];
     if (!srv) return res.status(404).json({ error: 'Server not found' });
@@ -2187,6 +2197,16 @@ io.on('connection', (socket) => {
     if (duration > 8) return socket.emit('error', { message: 'Sound must be 8 seconds or less' });
     if (!name || !trimmedAudio) return socket.emit('error', { message: 'Name and audio are required' });
 
+    // Validate audio data size
+    const audioBase64 = trimmedAudio.split(',')[1] || trimmedAudio;
+    const audioBytes = Math.ceil(audioBase64.length * 3 / 4);
+    if (audioBytes > 5 * 1024 * 1024) return socket.emit('error', { message: 'Audio too large (max 5MB)' });
+    if (originalAudio) {
+      const origBase64 = originalAudio.split(',')[1] || originalAudio;
+      const origBytes = Math.ceil(origBase64.length * 3 / 4);
+      if (origBytes > 10 * 1024 * 1024) return socket.emit('error', { message: 'Original audio too large (max 10MB)' });
+    }
+
     try {
       const sound = await db.createSoundboardSound({
         serverId,
@@ -2652,6 +2672,18 @@ io.on('connection', (socket) => {
 
   // ─── Messages ─────────────────────────────────────────────────────────────────
   socket.on('channel:join', async ({ channelId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    // For server channels, verify membership and view permission
+    const srvCheck = findServerByChannelId(channelId);
+    if (srvCheck) {
+      const member = srvCheck.members[user.id];
+      if (!member) return;
+      const perms = getUserPerms(user.id, srvCheck.id, channelId);
+      if (perms.viewChannel === false) return;
+    }
+
     socket.rooms.forEach(room => {
       if (room !== socket.id && room.startsWith('text:')) socket.leave(room);
     });
@@ -2760,6 +2792,14 @@ io.on('connection', (socket) => {
 
     const trimmedContent = content ? content.trim().slice(0, 2000) : '';
     const srv = findServerByChannelId(channelId);
+
+    // For server channels, verify membership and sendMessages permission
+    if (srv) {
+      const member = srv.members[user.id];
+      if (!member) return socket.emit('error', { message: 'Not a member of this server' });
+      const perms = getUserPerms(user.id, srv.id, channelId);
+      if (!perms.sendMessages && !perms.admin) return socket.emit('error', { message: 'No permission to send messages in this channel' });
+    }
 
     // ── Slash command handling ──
     if (trimmedContent.startsWith('/')) {
@@ -3904,9 +3944,18 @@ io.on('connection', (socket) => {
   });
 
   // ─── WebRTC ───────────────────────────────────────────────────────────────────
-  socket.on('webrtc:offer',  ({ targetId, offer })     => io.to(targetId).emit('webrtc:offer',  { from: socket.id, offer }));
-  socket.on('webrtc:answer', ({ targetId, answer })    => io.to(targetId).emit('webrtc:answer', { from: socket.id, answer }));
-  socket.on('webrtc:ice',    ({ targetId, candidate }) => io.to(targetId).emit('webrtc:ice',    { from: socket.id, candidate }));
+  socket.on('webrtc:offer', ({ targetId, offer }) => {
+    if (!state.users[socket.id]) return;
+    io.to(targetId).emit('webrtc:offer', { from: socket.id, offer });
+  });
+  socket.on('webrtc:answer', ({ targetId, answer }) => {
+    if (!state.users[socket.id]) return;
+    io.to(targetId).emit('webrtc:answer', { from: socket.id, answer });
+  });
+  socket.on('webrtc:ice', ({ targetId, candidate }) => {
+    if (!state.users[socket.id]) return;
+    io.to(targetId).emit('webrtc:ice', { from: socket.id, candidate });
+  });
 
   // ─── Screen Share ─────────────────────────────────────────────────────────────
   socket.on('screen:start', ({ channelId }) => {
