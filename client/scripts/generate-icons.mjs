@@ -23,10 +23,14 @@ const PUBLIC_DIR = join(ROOT, 'public');
 const TAURI_ICONS_DIR = join(ROOT, 'src-tauri', 'icons');
 const ANDROID_RES_DIR = join(ROOT, 'android', 'app', 'src', 'main', 'res');
 
-// Foreground-only SVG (hexagon on transparent background) for adaptive icons
+// Foreground-only SVG (hexagon on transparent background) for adaptive icons.
+// Scaled to 60% and centered so the hexagon fits within the 66% safe zone
+// that Android uses for adaptive icon masking.
 const foregroundSvg = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <path d="M512 128L896 348V708L512 928L128 708V348Z" fill="none" stroke="#ed4245" stroke-width="56" stroke-linejoin="round"/>
+  <g transform="translate(512, 528) scale(0.6) translate(-512, -528)">
+    <path d="M512 128L896 348V708L512 928L128 708V348Z" fill="none" stroke="#ed4245" stroke-width="56" stroke-linejoin="round"/>
+  </g>
 </svg>`
 );
 
