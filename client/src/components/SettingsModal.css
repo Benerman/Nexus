@@ -948,8 +948,8 @@
     width: 22px;
     height: 22px;
   }
-  /* Buttons bigger */
-  .settings-content button {
+  /* Buttons bigger (exclude the close button which must stay circular) */
+  .settings-content button:not(.settings-close-btn) {
     min-height: 40px;
   }
 }
