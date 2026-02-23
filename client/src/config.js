@@ -55,6 +55,15 @@ export function isTauriApp() {
 }
 
 /**
+ * Detect if the app is running inside a Capacitor native shell (iOS/Android).
+ * Unlike isStandaloneApp(), this does NOT match Electron or Tauri.
+ */
+export function isCapacitorApp() {
+  if (typeof window === 'undefined') return false;
+  return !!window.Capacitor?.isNativePlatform?.();
+}
+
+/**
  * Check if a server URL has been configured (either by user or build-time).
  */
 export function hasServerUrl() {

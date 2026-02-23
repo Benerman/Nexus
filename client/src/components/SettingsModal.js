@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import WebhookDocs from './WebhookDocs';
 import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/socketTimeout';
-import { getServerUrl, isStandaloneApp, isTauriApp, openExternalUrl } from '../config';
+import { getServerUrl, isStandaloneApp, isTauriApp, isCapacitorApp, openExternalUrl } from '../config';
 import { checkForUpdates } from '../utils/updater';
+import { checkForCapacitorUpdate } from '../utils/capacitor-updater';
 import './SettingsModal.css';
 import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon, BellIcon, SoundboardIcon, EmojiIcon } from './icons';
 
@@ -3536,7 +3537,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 <HexagonIcon size={64} color="#ed4245" />
                 <h2 style={{margin: '0 0 4px', fontSize: 22, color: 'var(--text-primary)'}}>Nexus</h2>
                 <p style={{margin: 0, fontSize: 13, color: 'var(--text-muted)'}}>Your Server, Your Rules</p>
-                <p style={{margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)'}}>Version 1.0.0</p>
+                <p style={{margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)'}}>Version {process.env.REACT_APP_VERSION || '1.0.0'}</p>
               </div>
 
               <p style={{fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 20}}>
@@ -3562,7 +3563,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 </a>
               </div>
 
-              {isTauriApp() && (
+              {(isTauriApp() || isCapacitorApp()) && (
                 <div style={{marginBottom: 20}}>
                   <h3 style={{fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8}}>Updates</h3>
                   <button
@@ -3572,7 +3573,8 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       setUpdateChecking(true);
                       setUpdateStatus('');
                       setUpdateInfo(null);
-                      await checkForUpdates({
+                      const checker = isCapacitorApp() ? checkForCapacitorUpdate : checkForUpdates;
+                      await checker({
                         onStatus: (msg) => setUpdateStatus(msg),
                         onUpdateAvailable: (info) => {
                           setUpdateInfo(info);
@@ -3594,7 +3596,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       style={{marginTop: 8}}
                       onClick={() => updateInfo.install?.()}
                     >
-                      Download & Install v{updateInfo.version}
+                      {isCapacitorApp() ? 'Download' : 'Download & Install'} v{updateInfo.version}
                     </button>
                   )}
                 </div>

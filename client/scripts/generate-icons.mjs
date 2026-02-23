@@ -7,7 +7,7 @@
 
 import sharp from 'sharp';
 import { execSync } from 'child_process';
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -21,6 +21,14 @@ const svgBuffer = readFileSync(SVG_PATH);
 // Output directories
 const PUBLIC_DIR = join(ROOT, 'public');
 const TAURI_ICONS_DIR = join(ROOT, 'src-tauri', 'icons');
+const ANDROID_RES_DIR = join(ROOT, 'android', 'app', 'src', 'main', 'res');
+
+// Foreground-only SVG (hexagon on transparent background) for adaptive icons
+const foregroundSvg = Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <path d="M512 128L896 348V708L512 928L128 708V348Z" fill="none" stroke="#ed4245" stroke-width="56" stroke-linejoin="round"/>
+</svg>`
+);
 
 async function generatePng(size, outputPath) {
   await sharp(svgBuffer)
@@ -120,6 +128,78 @@ async function generateIcns(outputPath) {
   console.log(`  ✓ ${outputPath} (icns)`);
 }
 
+async function generateAndroidIcons() {
+  if (!existsSync(join(ROOT, 'android'))) {
+    console.log('\nAndroid directory not found, skipping Android icons.');
+    return;
+  }
+
+  console.log('\nAndroid icons (client/android/...):');
+
+  // Density → px mappings
+  const densities = [
+    { name: 'mdpi',    launcher: 48,  foreground: 108 },
+    { name: 'hdpi',    launcher: 72,  foreground: 162 },
+    { name: 'xhdpi',   launcher: 96,  foreground: 216 },
+    { name: 'xxhdpi',  launcher: 144, foreground: 324 },
+    { name: 'xxxhdpi', launcher: 192, foreground: 432 },
+  ];
+
+  for (const { name, launcher, foreground } of densities) {
+    const dir = join(ANDROID_RES_DIR, `mipmap-${name}`);
+    mkdirSync(dir, { recursive: true });
+
+    // Standard launcher icons (dark background)
+    await sharp(svgBuffer)
+      .resize(launcher, launcher, { fit: 'contain', background: { r: 43, g: 45, b: 49, alpha: 1 } })
+      .png()
+      .toFile(join(dir, 'ic_launcher.png'));
+
+    await sharp(svgBuffer)
+      .resize(launcher, launcher, { fit: 'contain', background: { r: 43, g: 45, b: 49, alpha: 1 } })
+      .png()
+      .toFile(join(dir, 'ic_launcher_round.png'));
+
+    // Foreground layer (transparent background, hexagon centered in safe zone)
+    await sharp(foregroundSvg)
+      .resize(foreground, foreground, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(join(dir, 'ic_launcher_foreground.png'));
+
+    console.log(`  ✓ mipmap-${name}/ (${launcher}px launcher, ${foreground}px foreground)`);
+  }
+
+  // Adaptive icon XML (Android 8.0+)
+  const anydpiDir = join(ANDROID_RES_DIR, 'mipmap-anydpi-v26');
+  mkdirSync(anydpiDir, { recursive: true });
+
+  const adaptiveXml = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+</adaptive-icon>
+`;
+  writeFileSync(join(anydpiDir, 'ic_launcher.xml'), adaptiveXml);
+  writeFileSync(join(anydpiDir, 'ic_launcher_round.xml'), adaptiveXml);
+  console.log('  ✓ mipmap-anydpi-v26/ (adaptive icon XMLs)');
+
+  // Background color resource
+  const valuesDir = join(ANDROID_RES_DIR, 'values');
+  mkdirSync(valuesDir, { recursive: true });
+
+  writeFileSync(join(valuesDir, 'ic_launcher_background.xml'),
+    `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#2b2d31</color>
+</resources>
+`);
+  console.log('  ✓ values/ic_launcher_background.xml');
+
+  // Play Store icon (512x512)
+  const playstorePath = join(ROOT, 'android', 'app', 'src', 'main', 'playstore-icon.png');
+  await generatePng(512, playstorePath);
+}
+
 async function main() {
   console.log('Generating Nexus icons from master SVG...\n');
 
@@ -156,6 +236,9 @@ async function main() {
 
   // macOS ICNS
   await generateIcns(join(TAURI_ICONS_DIR, 'icon.icns'));
+
+  // --- Android icons ---
+  await generateAndroidIcons();
 
   console.log('\nAll icons generated successfully!');
 }

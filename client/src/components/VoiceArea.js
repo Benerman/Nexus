@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import './VoiceArea.css';
 import { MicrophoneIcon, HeadphoneIcon, ScreenShareIcon, PhoneIcon, VolumeIcon, SettingsIcon } from './icons';
+import { isCapacitorApp } from '../config';
 
 // Convert a data URI (data:audio/wav;base64,...) to ArrayBuffer without fetch
 function dataUriToArrayBuffer(dataUri) {
@@ -912,7 +913,7 @@ const VoiceArea = React.memo(function VoiceArea({
           </div>
         )}
 
-        {isSharingScreen ? (
+        {!isCapacitorApp() && (isSharingScreen ? (
           <button className="voice-ctrl-btn danger screen-share-btn" onClick={onStopScreenShare} title="Stop sharing">
             <span className="voice-ctrl-icon">
               <ScreenShareIcon size={20} />
@@ -926,7 +927,7 @@ const VoiceArea = React.memo(function VoiceArea({
             </span>
             <span>Share Screen</span>
           </button>
-        )}
+        ))}
 
         {onOpenSettings && (
           <button className="voice-ctrl-btn audio-settings-btn" onClick={() => onOpenSettings('audio')} title="Audio Settings">

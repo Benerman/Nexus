@@ -284,12 +284,20 @@ jobs:
         working-directory: client
 
       - name: Build React app
-        run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
+        run: |
+          export REACT_APP_VERSION=$(node -p "require('./package.json').version")
+          npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} REACT_APP_VERSION=$REACT_APP_VERSION react-scripts build
         working-directory: client
 
       - name: Add Android platform and sync
         run: rm -rf android && npx cap add android && npx cap sync android
         working-directory: client
+
+      - name: Apply Android customizations
+        working-directory: client
+        run: |
+          git checkout -- android/app/src/main/AndroidManifest.xml android/app/src/main/java/com/nexus/app/MainActivity.java
+          node scripts/generate-icons.mjs
 
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore

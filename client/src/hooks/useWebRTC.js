@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { isTauriApp, isElectronApp, getPlatform } from '../config';
+import { isTauriApp, isElectronApp, isCapacitorApp, getPlatform } from '../config';
 
 const DEFAULT_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -97,6 +97,9 @@ function getMediaErrorInfo(err, mediaType) {
       }
       if (isDesktop && platform === 'win32') {
         return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} access blocked`, message: 'Windows Privacy Settings may be blocking access. Open Settings \u2192 Privacy & security \u2192 Microphone and ensure access is allowed.', canRetry: true };
+      }
+      if (isCapacitorApp()) {
+        return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} access blocked`, message: 'Permission was denied. Open Android Settings \u2192 Apps \u2192 Nexus \u2192 Permissions and enable access.', canRetry: true };
       }
       return { title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} access denied`, message: 'Click the lock icon in your address bar and allow microphone access, then retry.', canRetry: true };
 
