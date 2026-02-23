@@ -16,6 +16,7 @@ const managedVars = [
   'MAX_MESSAGE_LENGTH', 'MAX_ATTACHMENTS', 'MAX_ATTACHMENT_SIZE',
   'ENABLE_GUEST_MODE', 'RATE_LIMIT_MESSAGES', 'RATE_LIMIT_WINDOW',
   'STUN_URLS', 'TURN_URL', 'TURN_SECRET',
+  'PLATFORM_ADMIN',
 ];
 
 function deleteManagedVars() {
@@ -184,5 +185,27 @@ describe('config.client defaults', () => {
   test('url defaults to http://localhost:3000', () => {
     const config = requireCleanConfig();
     expect(config.client.url).toBe('http://localhost:3000');
+  });
+});
+
+describe('config.admin defaults', () => {
+  test('admin section exists', () => {
+    const config = requireCleanConfig();
+    expect(config).toHaveProperty('admin');
+  });
+
+  test('platformAdminUsername defaults to empty string', () => {
+    const config = requireCleanConfig();
+    expect(config.admin.platformAdminUsername).toBe('');
+  });
+
+  test('reads from PLATFORM_ADMIN env var', () => {
+    const config = requireCleanConfig({ PLATFORM_ADMIN: 'superadmin' });
+    expect(config.admin.platformAdminUsername).toBe('superadmin');
+  });
+
+  test('preserves case from env var', () => {
+    const config = requireCleanConfig({ PLATFORM_ADMIN: 'AdminUser' });
+    expect(config.admin.platformAdminUsername).toBe('AdminUser');
   });
 });

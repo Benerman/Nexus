@@ -14,6 +14,9 @@ module.exports = {
     '/node_modules/',
   ],
 
+  // Allow resolving React packages from client/node_modules for client tests
+  modulePaths: ['<rootDir>/client/node_modules'],
+
   // Coverage configuration
   collectCoverageFrom: [
     'server/validation.js',
@@ -22,6 +25,8 @@ module.exports = {
     'server/default-sounds.js',
     'client/src/config.js',
     'client/src/utils/socketTimeout.js',
+    'client/src/components/ReportModal.js',
+    'client/src/hooks/useLongPress.js',
   ],
   coverageDirectory: '<rootDir>/tests/coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],

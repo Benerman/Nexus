@@ -6,5 +6,6 @@ module.exports = {
       path.resolve(__dirname, '..', 'server', 'node_modules', '@babel', 'preset-env'),
       { targets: { node: 'current' } },
     ],
+    path.resolve(__dirname, '..', 'client', 'node_modules', '@babel', 'preset-react'),
   ],
 };

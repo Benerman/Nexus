@@ -128,4 +128,5 @@ const ReportModal = ({ target, onSubmit, onClose }) => {
   );
 };
 
+export { REPORT_TYPES };
 export default ReportModal;
