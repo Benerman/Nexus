@@ -16,11 +16,15 @@ jobs:
     steps:
       - name: Preserve .env file
         run: |
+          # Use a persistent path that survives reboots (runner home dir)
+          BACKUP="$HOME/.nexus-env-backup"
           if [ -f .env ]; then
-            cp .env /tmp/.env.nexus-backup
-            echo "Backed up existing .env file"
+            cp .env "$BACKUP"
+            echo "Backed up .env to $BACKUP"
+          elif [ -f "$BACKUP" ]; then
+            echo ".env missing from workspace but backup exists — will restore after checkout"
           else
-            echo "No existing .env file to back up"
+            echo "No .env file to back up"
           fi
 
       - name: Checkout latest code
@@ -45,12 +49,12 @@ jobs:
 
       - name: Restore .env file
         run: |
-          if [ -f /tmp/.env.nexus-backup ]; then
-            cp /tmp/.env.nexus-backup .env
-            rm -f /tmp/.env.nexus-backup
-            echo "Restored .env file from backup"
+          BACKUP="$HOME/.nexus-env-backup"
+          if [ -f "$BACKUP" ]; then
+            cp "$BACKUP" .env
+            echo "Restored .env from $BACKUP"
           elif [ ! -f .env ]; then
-            echo "No .env file found. Copying from .env.example..."
+            echo "No .env backup found. Copying from .env.example..."
             cp .env.example .env
             echo ""
             echo "WARNING: .env was created from .env.example."
@@ -78,7 +82,7 @@ jobs:
             fi
             if [ "$i" -eq 20 ]; then
               echo "PostgreSQL failed to start. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} logs postgres
+              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs postgres
               exit 1
             fi
             echo "Waiting for PostgreSQL... (attempt $i/20)"
@@ -93,7 +97,7 @@ jobs:
             fi
             if [ "$i" -eq 10 ]; then
               echo "Redis failed to start. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} logs redis
+              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs redis
               exit 1
             fi
             echo "Waiting for Redis... (attempt $i/10)"
@@ -103,11 +107,33 @@ jobs:
       - name: Sync database password
         run: |
           # The postgres volume may have been initialized with a different password
-          # than what's in the current .env. Reset it to match using local trust auth.
+          # than what's in the current .env. Reset it to match.
           source .env 2>/dev/null || true
           PW="${POSTGRES_PASSWORD:-postgres}"
-          docker exec nexus-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
-          echo "Database password synced."
+
+          # Try normal auth first, fall back to local socket with no password
+          if docker exec nexus-postgres psql -U postgres -c "SELECT 1" > /dev/null 2>&1; then
+            docker exec nexus-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
+            echo "Database password synced."
+          else
+            echo "Normal auth failed — attempting via local trust override..."
+            # Temporarily allow trust auth, sync password, then revert
+            docker exec nexus-postgres bash -c "
+              cp /var/lib/postgresql/data/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf.bak
+              echo 'local all all trust' > /tmp/pg_hba_override.conf
+              cat /var/lib/postgresql/data/pg_hba.conf >> /tmp/pg_hba_override.conf
+              cp /tmp/pg_hba_override.conf /var/lib/postgresql/data/pg_hba.conf
+              pg_ctl reload -D /var/lib/postgresql/data
+            "
+            sleep 2
+            docker exec nexus-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
+            docker exec nexus-postgres bash -c "
+              cp /var/lib/postgresql/data/pg_hba.conf.bak /var/lib/postgresql/data/pg_hba.conf
+              pg_ctl reload -D /var/lib/postgresql/data
+            "
+            echo "Database password synced via trust override."
+          fi
+
           # Restart server so it picks up the corrected auth
           docker restart nexus-server
 
@@ -120,7 +146,7 @@ jobs:
             fi
             if [ "$i" -eq 20 ]; then
               echo "Server did not respond after 20 attempts. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} logs server
+              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs server
               exit 1
             fi
             echo "Waiting for server... (attempt $i/20)"
@@ -136,7 +162,7 @@ jobs:
             fi
             if [ "$i" -eq 10 ]; then
               echo "Client did not respond. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} logs client
+              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs client
               exit 1
             fi
             echo "Waiting for client... (attempt $i/10)"

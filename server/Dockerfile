@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
-# Install PostgreSQL client and Redis client
-RUN apk add --no-cache postgresql-client redis
+# Install PostgreSQL client, Redis client, and curl (for healthcheck)
+RUN apk add --no-cache postgresql-client redis curl
 
 WORKDIR /app
 

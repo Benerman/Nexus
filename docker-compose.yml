@@ -77,6 +77,12 @@ services:
     restart: unless-stopped
     networks:
       - nexus-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # Frontend Client
   client:
@@ -87,7 +93,8 @@ services:
     environment:
       - REACT_APP_SERVER_URL=http://localhost:3001
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - nexus-network
