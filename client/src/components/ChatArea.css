@@ -146,6 +146,7 @@
   gap: 16px;
   position: relative;
   animation: fadeIn 0.15s ease;
+  -webkit-touch-callout: none;
 }
 
 .message:not(.grouped) {

@@ -178,7 +178,7 @@
 .settings-hint { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
 .settings-btn {
   padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: all 0.2s ease;
+  cursor: pointer; transition: all 0.2s ease; border: none;
   background: var(--bg-modifier-hover); color: var(--text-normal); margin-top: 12px;
 }
 .settings-btn:hover { background: var(--bg-modifier-active); }
@@ -384,8 +384,15 @@
 .settings-btn.danger-sm {
   background: rgba(237,66,69,0.15); color: var(--red);
   padding: 4px 10px; font-size: 12px; margin-top: 0;
+  border: none; line-height: 1.4; white-space: nowrap;
 }
 .settings-btn.danger-sm:hover { background: rgba(237,66,69,0.3); }
+.settings-btn.primary-sm {
+  background: var(--brand-primary, #3B82F6); color: #fff;
+  padding: 4px 10px; font-size: 12px; margin-top: 0;
+  border: none; line-height: 1.4; white-space: nowrap;
+}
+.settings-btn.primary-sm:hover { background: #2563EB; }
 
 /* ── Channel category sections ────────────────────── */
 .category-section {
@@ -919,6 +926,8 @@
     z-index: 10;
     width: 36px;
     height: 36px;
+    aspect-ratio: 1;
+    padding: 0;
     background: var(--bg-tertiary);
     border: 1px solid rgba(255,255,255,0.1);
   }
