@@ -99,6 +99,10 @@ async function generateIco(sizes, outputPath) {
 }
 
 async function generateIcns(outputPath) {
+  if (process.platform !== 'darwin') {
+    console.log(`  ⊘ Skipping .icns (iconutil requires macOS)`);
+    return;
+  }
   const iconsetDir = join(dirname(outputPath), 'icon.iconset');
   mkdirSync(iconsetDir, { recursive: true });
 
