@@ -2707,7 +2707,6 @@ io.on('connection', (socket) => {
     let history = (state.messages[channelId]||[]).slice(-30);
 
     // For DM channels, filter out messages before the user's delete timestamp
-    const user = state.users[socket.id];
     if (user) {
       try {
         const account = await db.getAccountById(user.id);
