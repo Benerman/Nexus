@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './URLEmbed.css';
 import { getServerUrl } from '../config';
 
@@ -54,6 +54,9 @@ export default function URLEmbed({ url }) {
     return () => { cancelled = true; };
   }, [url]);
 
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const onImgLoad = useCallback(() => setImgLoaded(true), []);
+
   if (loading || !data || !data.title) return null;
 
   const isYouTube = data.type === 'youtube';
@@ -62,8 +65,9 @@ export default function URLEmbed({ url }) {
     <a href={url} target="_blank" rel="noopener noreferrer" className={`url-embed ${isYouTube ? 'youtube' : ''}`}>
       {data.image && (
         <div className="url-embed-image">
-          <img src={data.image} alt="" loading="lazy" />
-          {isYouTube && (
+          {!imgLoaded && <div className="img-placeholder" style={{ width: 80, height: 80 }} />}
+          <img src={data.image} alt="" loading="lazy" onLoad={onImgLoad} style={imgLoaded ? undefined : { position: 'absolute', opacity: 0 }} />
+          {isYouTube && imgLoaded && (
             <div className="url-embed-play-icon">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="#fff">
                 <path d="M8 5v14l11-7z"/>

@@ -10,6 +10,7 @@ import CommandMessage from './CommandMessage';
 import MessageLinkEmbed from './MessageLinkEmbed';
 import PollCreator from './PollCreator';
 import useLongPress from '../hooks/useLongPress';
+import emojiImageCache from '../utils/emojiCache';
 
 const SLASH_COMMANDS = [
   { name: 'poll', description: 'Create a poll', usage: '/poll', icon: '📊' },
@@ -76,6 +77,7 @@ function Lightbox({ src, name, onClose }) {
 
 // ─── Attachment renderer — GIFs animate inline, images open lightbox ──────
 function MessageAttachment({ attachment, onLightbox }) {
+  const [loaded, setLoaded] = useState(false);
   const isGif = attachment.type === 'image/gif' ||
                 attachment.url?.match(/\.gif($|\?)/i) ||
                 attachment.url?.startsWith('data:image/gif');
@@ -84,23 +86,49 @@ function MessageAttachment({ attachment, onLightbox }) {
                   attachment.url?.startsWith('data:image/');
 
   if (isImage) {
+    const pw = Math.min(attachment.width || 300, 400);
+    const ph = attachment.width && attachment.height
+      ? Math.min(Math.round(pw * attachment.height / attachment.width), 300)
+      : 200;
     return (
       <div className="msg-attachment-img">
-        {/* Use <img> for all images — including GIFs. The browser animates GIFs natively in <img> tags.
-            We must NOT use window.open(dataURL) because browsers block about:blank data nav. */}
+        {!loaded && <div className="img-placeholder" style={{ width: pw, height: ph }} />}
         <img
           src={attachment.url}
           alt={attachment.name || 'image'}
           loading="lazy"
           className={isGif ? 'gif-img' : ''}
+          style={loaded ? undefined : { position: 'absolute', opacity: 0 }}
+          onLoad={() => setLoaded(true)}
           onClick={() => onLightbox(attachment)}
           title={isGif ? 'Click to view full size' : 'Click to expand'}
         />
-        {isGif && <span className="gif-badge">GIF</span>}
+        {isGif && loaded && <span className="gif-badge">GIF</span>}
       </div>
     );
   }
   return <div className="msg-attachment-file"> {attachment.name || 'file'}</div>;
+}
+
+// ─── Reaction emoji renderer — custom emojis show as <img>, unicode as text ──
+function ReactionEmoji({ emoji, socket }) {
+  const customMatch = emoji.match(/^:([a-zA-Z0-9_]+):([^:]+):([^:]+):$/);
+  const [src, setSrc] = React.useState(() => customMatch ? emojiImageCache.get(customMatch[3]) || null : null);
+
+  React.useEffect(() => {
+    if (!customMatch || src || !socket) return;
+    const emojiId = customMatch[3];
+    socket.emit('emoji:get-image', { emojiId }, (response) => {
+      if (response?.imageData) {
+        emojiImageCache.set(emojiId, response.imageData);
+        setSrc(response.imageData);
+      }
+    });
+  }, [customMatch, socket, src]);
+
+  if (!customMatch) return emoji;
+  if (!src) return <span className="custom-emoji-placeholder">:{customMatch[1]}:</span>;
+  return <img src={src} alt={`:${customMatch[1]}:`} title={`:${customMatch[1]}:`} className="custom-emoji-inline" />;
 }
 
 // ─── Emoji Picker ─────────────────────────────────────────────────────────
@@ -1076,11 +1104,11 @@ const ChatArea = React.memo(function ChatArea({
                 }}
               >
                 {!msg.isGrouped && (
-                  <div className="message-avatar" style={{background: msg.author.customAvatar || (msg.isWebhook && msg.author.avatar?.startsWith?.('http')) ? 'transparent' : msg.author.color}}>
+                  <div className={`message-avatar${(msg.author.customAvatar || (msg.isWebhook && msg.author.avatar?.startsWith?.('http'))) ? ' avatar-loading' : ''}`} style={{background: msg.author.customAvatar || (msg.isWebhook && msg.author.avatar?.startsWith?.('http')) ? 'transparent' : msg.author.color}}>
                     {msg.author.customAvatar
-                      ? <img src={msg.author.customAvatar} alt="" className="avatar-custom-img"/>
+                      ? <img src={msg.author.customAvatar} alt="" className="avatar-custom-img" onLoad={e => e.target.closest('.message-avatar')?.classList.remove('avatar-loading')}/>
                       : (msg.isWebhook && msg.author.avatar?.startsWith?.('http'))
-                        ? <img src={msg.author.avatar} alt="" className="avatar-custom-img"/>
+                        ? <img src={msg.author.avatar} alt="" className="avatar-custom-img" onLoad={e => e.target.closest('.message-avatar')?.classList.remove('avatar-loading')}/>
                         : msg.author.avatar}
                   </div>
                 )}
@@ -1213,7 +1241,7 @@ const ChatArea = React.memo(function ChatArea({
                         <button key={emoji}
                           className={`reaction ${users.includes(currentUser?.id)?'reacted':''}`}
                           onClick={e=>{e.stopPropagation();handleReact(msg.id,emoji);}}>
-                          {emoji} <span>{users.length}</span>
+                          <ReactionEmoji emoji={emoji} socket={socket} /> <span>{users.length}</span>
                         </button>
                       ))}
                     </div>
@@ -1221,6 +1249,9 @@ const ChatArea = React.memo(function ChatArea({
                 </div>
                 {!isEditing && (
                   <div className="message-actions">
+                    <button className="reply-action-btn"
+                      onClick={e=>{e.stopPropagation();handleReplyToMessage(msg);}}
+                      title="Reply">↩</button>
                     <button className="reaction-btn"
                       onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
                     <button className="message-options-btn"

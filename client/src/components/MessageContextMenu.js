@@ -13,7 +13,7 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, position, onClose, 
   // Delay overlay click sensitivity so the touch-end from long press
   // doesn't immediately trigger the ghost click that dismisses the menu
   useEffect(() => {
-    const id = setTimeout(() => setReady(true), 300);
+    const id = setTimeout(() => setReady(true), 450);
     return () => clearTimeout(id);
   }, []);
 
@@ -50,7 +50,7 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, position, onClose, 
 
   return ReactDOM.createPortal(
     <>
-      <div className="message-context-overlay" onClick={() => ready && onClose()} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
+      <div className="message-context-overlay" onClick={() => ready && onClose()} onContextMenu={(e) => { e.preventDefault(); if (ready) onClose(); }} />
       <div ref={menuRef} className="message-context-menu" style={menuStyle}>
         {onReply && (
           <button className="context-menu-item" onClick={() => { onReply(message); onClose(); }}>

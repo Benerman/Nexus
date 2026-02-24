@@ -1038,8 +1038,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     const file = e.target.files?.[0];
     if (!file) return;
     const url = await fileToDataURL(file);
-    const resized = await resizeEmojiImage(url);
-    setEmojiForm(f => ({ ...f, file, preview: resized }));
+    // Skip canvas resize for GIFs — canvas flattens animation frames to a single PNG
+    const preview = file.type === 'image/gif' ? url : await resizeEmojiImage(url);
+    setEmojiForm(f => ({ ...f, file, preview }));
   };
 
   const saveEmoji = async () => {
@@ -1065,7 +1066,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
         serverId: server.id,
         name,
         imageData: emojiForm.preview,
-        contentType: 'image/png',
+        contentType: animated ? 'image/gif' : 'image/png',
         animated
       }, (response) => {
         setEmojiSaving(false);
@@ -3904,10 +3905,32 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                               {srv.createdAt && <span> · Created {new Date(srv.createdAt).toLocaleDateString()}</span>}
                             </div>
                           </div>
-                          <button className="settings-btn danger-sm" onClick={()=>handleAdminDeleteServer(srv.id, srv.name)}>Delete</button>
                         </div>
                       ))}
                   </div>
+
+                  {/* Danger Zone — collapsible to prevent accidental deletes */}
+                  <details style={{marginTop:16}}>
+                    <summary style={{cursor:'pointer',color:'var(--red)',fontSize:13,fontWeight:600,userSelect:'none',padding:'8px 0'}}>
+                      Danger Zone
+                    </summary>
+                    <div style={{border:'1px solid var(--red)',borderRadius:8,padding:12,marginTop:8,background:'rgba(237,66,69,0.05)'}}>
+                      <p style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>Permanently delete a server. This cannot be undone.</p>
+                      <div className="members-manage-list">
+                        {adminServers
+                          .filter(s => !adminSearch || s.name.toLowerCase().includes(adminSearch.toLowerCase()))
+                          .map(srv => (
+                            <div key={srv.id} className="member-manage-item">
+                              <div className="member-manage-info" style={{flex:1}}>
+                                <span className="member-manage-username">{srv.name}</span>
+                                <span style={{fontSize:11,color:'var(--text-muted)',marginLeft:8}}>{srv.memberCount} members</span>
+                              </div>
+                              <button className="settings-btn danger-sm" onClick={()=>handleAdminDeleteServer(srv.id, srv.name)}>Delete</button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </details>
                 </div>
               )}
 

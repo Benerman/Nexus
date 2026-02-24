@@ -133,8 +133,11 @@ export async function openExternalUrl(url) {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     return openUrl(url);
   }
+  if (isCapacitorApp()) {
+    const { Browser } = await import('@capacitor/browser');
+    return Browser.open({ url });
+  }
   // Electron's setWindowOpenHandler intercepts window.open and opens externally.
-  // Capacitor also opens window.open in the system browser by default.
   // On web, this just opens a new tab.
   window.open(url, '_blank', 'noopener,noreferrer');
 }

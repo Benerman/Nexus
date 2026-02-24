@@ -2,9 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
-
-// Simple image cache for custom emojis
-const emojiImageCache = new Map();
+import emojiImageCache from '../utils/emojiCache';
 
 /**
  * Renders message content with highlighted @mentions, #channel links, and custom emojis.
@@ -165,7 +163,7 @@ function CustomEmojiInline({ emojiId, name, serverId, socket }) {
   }, [emojiId, socket, src]);
 
   if (!src) {
-    return <span className="custom-emoji-placeholder" title={`:${name}:`}>:{name}:</span>;
+    return <span className="custom-emoji-placeholder img-placeholder" title={`:${name}:`} style={{ display: 'inline-block', width: 20, height: 20, verticalAlign: 'middle', borderRadius: 4 }} />;
   }
   return <img src={src} alt={`:${name}:`} title={`:${name}:`} className="custom-emoji-inline" />;
 }
