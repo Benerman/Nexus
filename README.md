@@ -2,7 +2,7 @@
 
 A self-hosted, real-time communication platform built with React, Node.js, Socket.IO, and WebRTC. Supports servers, channels, voice chat, direct messaging, custom emoji, soundboard, and more.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.1-blue)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -90,7 +90,7 @@ Permissions resolve through role stacking with channel-level overrides.
 ### Moderation
 - Kick, ban, and timeout users (admin only)
 - Server bans persisted in database
-- User reports
+- User reports with review/action/dismiss workflow
 - Message deletion by author or admin
 
 ### Social
@@ -161,7 +161,7 @@ curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
 |-------|-----------|
 | Frontend | React 18, Socket.IO Client, WebRTC |
 | Backend | Express, Socket.IO, Node.js |
-| Database | PostgreSQL 15 (JSONB), 7 migration files |
+| Database | PostgreSQL 15 (JSONB), 10 migration files |
 | Cache | Redis 7 (AOF persistence) |
 | Proxy | Nginx with WebSocket upgrade support |
 | Deployment | Docker Compose |
@@ -174,14 +174,17 @@ curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
 nexus/
 +-- client/                    # React frontend
 |   +-- src/
-|   |   +-- components/        # 25+ UI components
+|   |   +-- components/        # 26 UI components
 |   |   |   +-- ChatArea.js        Messages, input, attachments
 |   |   |   +-- VoiceArea.js       WebRTC tiles, controls, soundboard
 |   |   |   +-- Sidebar.js         Channels (server) / DMs (personal)
 |   |   |   +-- ServerList.js      Server icon rail
 |   |   |   +-- MemberList.js      Online/offline member list
-|   |   |   +-- SettingsModal.js   9-tab settings (profile, server, channels,
-|   |   |   |                      roles, members, webhooks, audio, friends, emoji)
+|   |   |   +-- SettingsModal.js   16-tab settings (profile, appearance,
+|   |   |   |                      audio, notifications, friends, servers,
+|   |   |   |                      server settings, channels, roles, members,
+|   |   |   |                      webhooks, soundboard, emojis, moderation,
+|   |   |   |                      platform admin, about)
 |   |   |   +-- GifPicker.js       Giphy integration
 |   |   |   +-- CommandMessage.js  Slash command output renderer
 |   |   |   +-- PollCreator.js     Poll creation modal
@@ -198,16 +201,16 @@ nexus/
 |   +-- nginx.conf                 Reverse proxy with WSS support
 |
 +-- server/                    # Node.js backend
-|   +-- index.js               # Express + Socket.IO (89 socket events)
-|   +-- db.js                  # PostgreSQL queries + connection pool
+|   +-- index.js               # Express + Socket.IO (103 socket events)
+|   +-- db.js                  # PostgreSQL queries (100+ functions)
 |   +-- config.js              # Environment configuration
 |   +-- validation.js          # Input validation and sanitization
 |   +-- default-sounds.js      # 16 procedurally generated WAV sounds
-|   +-- migrations/            # Database schema (7 files)
+|   +-- migrations/            # Database schema (10 files)
 |   +-- Dockerfile
 |
++-- tests/                     # 299 automated tests + 40 manual test cases
 +-- docs/                      # Documentation
-+-- tests/                     # Manual + automated test suites
 +-- docker-compose.yml         # Production orchestration
 ```
 
@@ -223,6 +226,7 @@ Copy `.env.example` to `.env` and configure:
 | `CLIENT_URL` | `http://localhost:3000` | Frontend URL for CORS |
 | `POSTGRES_PASSWORD` | `postgres` | Database password |
 | `GIPHY_API_KEY` | _(optional)_ | Giphy API key for GIF picker |
+| `PLATFORM_ADMIN` | _(optional)_ | Username for platform-level admin panel |
 | `MAX_MESSAGE_LENGTH` | `2000` | Max characters per message |
 | `MAX_ATTACHMENTS` | `4` | Max files per message |
 | `MAX_ATTACHMENT_SIZE` | `10485760` | Max file size (10MB) |
@@ -268,17 +272,17 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 
 ## Database
 
-7 migration files manage the schema across 15+ tables:
+10 migration files manage the schema across 18 tables:
 
 | Table | Purpose |
 |-------|---------|
 | `accounts` | Users, credentials, profiles |
 | `tokens` | Authentication sessions |
 | `servers` | Server definitions |
-| `server_members` | Membership records with roles |
+| `server_members` | Membership records with JSONB roles |
 | `categories` | Channel groupings |
 | `channels` | Text and voice channels |
-| `roles` / `member_roles` | Role definitions and assignments |
+| `roles` | Role definitions with position and permissions |
 | `messages` | Chat messages with JSONB reactions/attachments/mentions |
 | `dm_channels` / `dm_participants` | Direct message channels |
 | `dm_read_states` | Per-user read positions |
@@ -288,6 +292,14 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 | `custom_emojis` | Per-server custom emoji |
 | `server_bans` / `server_timeouts` | Moderation records |
 | `reports` | User reports |
+
+---
+
+## Testing
+
+299 automated tests across 13 suites covering validation, utils, permissions, config, and security. Run with `npm test` from `server/`. Tests run standalone without the full server stack.
+
+40 manual test cases across 8 categories (auth, messaging, channels, emoji, voice, social, moderation, UI) in `tests/manual/`.
 
 ---
 
@@ -323,6 +335,7 @@ See [docs/CROSS_PLATFORM_PLAN.md](docs/CROSS_PLATFORM_PLAN.md) for details.
 - [DATA_PERSISTENCE.md](docs/DATA_PERSISTENCE.md) - Database and persistence details
 - [PRODUCTION_HARDENING.md](docs/PRODUCTION_HARDENING.md) - Security hardening checklist
 - [CHANGELOG.md](docs/CHANGELOG.md) - Version history
+- [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) - Implementation notes
 
 ---
 
@@ -332,4 +345,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Version**: 1.0.0 | **Last Updated**: February 2026
+**Version**: 1.0.1 | **Last Updated**: February 2026
