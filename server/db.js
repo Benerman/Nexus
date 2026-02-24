@@ -572,6 +572,20 @@ async function isUserBlocked(userId, potentialBlockerId) {
 }
 
 /**
+ * Check if a block exists between two users in either direction
+ */
+async function getBlockRelation(userId1, userId2) {
+  const result = await query(
+    `SELECT * FROM friendships
+     WHERE ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+       AND status = 'blocked'
+     LIMIT 1`,
+    [userId1, userId2]
+  );
+  return result.rows[0] || null;
+}
+
+/**
  * Create a report
  */
 async function createReport(reporterId, reportedId, reportType, description, messageId = null) {
@@ -1455,6 +1469,7 @@ module.exports = {
   unblockUser,
   getBlockedUsers,
   isUserBlocked,
+  getBlockRelation,
   createReport,
   getReportsForServer,
   updateReportStatus,

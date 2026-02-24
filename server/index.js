@@ -3015,6 +3015,25 @@ io.on('connection', (socket) => {
       if (!perms.sendMessages && !perms.admin) return socket.emit('error', { message: 'No permission to send messages in this channel' });
     }
 
+    // For DM channels, check if either user has blocked the other
+    if (!srv) {
+      try {
+        const dmChannels = await db.getDMChannelsForUser(user.id);
+        const dmChannel = dmChannels.find(dm => dm.id === channelId);
+        if (dmChannel) {
+          const otherUserId = dmChannel.participant_1 === user.id
+            ? dmChannel.participant_2
+            : dmChannel.participant_1;
+          const blockRelation = await db.getBlockRelation(user.id, otherUserId);
+          if (blockRelation) {
+            return socket.emit('error', { message: 'Cannot send messages to this user' });
+          }
+        }
+      } catch (err) {
+        console.warn('[Message] Error checking DM block status:', err.message);
+      }
+    }
+
     // ── Slash command handling ──
     if (trimmedContent.startsWith('/')) {
       const cmdMatch = trimmedContent.match(/^\/(\w+)\s*([\s\S]*)/);
@@ -3406,10 +3425,7 @@ io.on('connection', (socket) => {
       }
 
       // Check if either user has blocked the other
-      const friendships = await db.getFriends(user.id);
-      const blockRelation = friendships.find(f =>
-        (f.user_id === targetUserId || f.friend_id === targetUserId) && f.status === 'blocked'
-      );
+      const blockRelation = await db.getBlockRelation(user.id, targetUserId);
       if (blockRelation) {
         return socket.emit('error', { message: 'Cannot send DM to this user' });
       }
@@ -4653,8 +4669,9 @@ io.on('connection', (socket) => {
         await db.updateServer(serverId, { owner_id: newOwnerId });
         srv.ownerId = newOwnerId;
 
-        if (!srv.members[newOwnerId].roles.includes('admin')) {
-          srv.members[newOwnerId].roles.push('admin');
+        const memberRoles = srv.members[newOwnerId]?.roles || [];
+        if (!memberRoles.includes('admin')) {
+          srv.members[newOwnerId].roles = [...memberRoles, 'admin'];
           await db.addServerMember(serverId, newOwnerId, srv.members[newOwnerId].roles);
         }
         io.emit('server:updated', { server: serializeServer(serverId) });
@@ -4728,8 +4745,9 @@ io.on('connection', (socket) => {
 
         await db.updateServer(serverId, { owner_id: newOwnerId });
         srv.ownerId = newOwnerId;
-        if (!srv.members[newOwnerId].roles.includes('admin')) {
-          srv.members[newOwnerId].roles.push('admin');
+        const ownerRoles = srv.members[newOwnerId]?.roles || [];
+        if (!ownerRoles.includes('admin')) {
+          srv.members[newOwnerId].roles = [...ownerRoles, 'admin'];
           await db.addServerMember(serverId, newOwnerId, srv.members[newOwnerId].roles);
         }
         io.emit('server:updated', { server: serializeServer(serverId) });
