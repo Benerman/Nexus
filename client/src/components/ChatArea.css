@@ -1132,6 +1132,12 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.refresh-btn svg {
+  transition: transform 0.3s ease;
+}
+.refresh-btn:active svg {
+  transform: rotate(180deg);
+}
 
 /* ── Add Member Dropdown ────────────────────────── */
 .add-member-dropdown {
@@ -1374,6 +1380,9 @@
   .chat-header-actions {
     flex-shrink: 0;
     gap: 2px;
+  }
+  .refresh-btn {
+    display: none;
   }
   .header-action-btn {
     padding: 6px;

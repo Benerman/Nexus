@@ -299,7 +299,7 @@ const ChatArea = React.memo(function ChatArea({
   server, servers, onOpenSettings, memberSidebarVisible, onToggleMemberSidebar,
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
-  developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete
+  developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete, onRefreshData
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -1014,6 +1014,14 @@ const ChatArea = React.memo(function ChatArea({
             <button className="header-action-btn" onClick={onToggleMemberSidebar}
               title={memberSidebarVisible ? 'Hide member list' : 'Show member list'}>
               <UserIcon size={18} color="var(--text-muted)" />
+            </button>
+          )}
+          {onRefreshData && (
+            <button className="header-action-btn refresh-btn" onClick={onRefreshData} title="Refresh data">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
             </button>
           )}
         </div>

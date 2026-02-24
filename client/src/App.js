@@ -1198,6 +1198,15 @@ export default function App() {
     }
   }, [channels]);
 
+  // Refresh all data from server without page reload
+  const handleRefreshData = useCallback(() => {
+    if (!socketRef.current?.connected) return;
+    socketRef.current.emit('data:refresh');
+    const ch = activeChannelRef.current;
+    if (ch?.id) socketRef.current.emit('channel:join', { channelId: ch.id });
+    socketRef.current.emit('friend:list');
+  }, []);
+
   // DM Call actions
   const handleStartDMCall = useCallback((channelId) => {
     if (!socketRef.current) return;
@@ -1858,6 +1867,7 @@ export default function App() {
             onReportMessage={handleReportMessage}
             scrollToMessageId={scrollToMessageId}
             onScrollToMessageComplete={() => setScrollToMessageId(null)}
+            onRefreshData={handleRefreshData}
           />
         )}
       </div>
