@@ -299,7 +299,7 @@ const ChatArea = React.memo(function ChatArea({
   server, servers, onOpenSettings, memberSidebarVisible, onToggleMemberSidebar,
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
-  developerMode, onReportMessage
+  developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -830,6 +830,27 @@ const ChatArea = React.memo(function ChatArea({
       setTimeout(() => setHighlightedMessageId(null), 2000);
     }
   }, []);
+
+  // Scroll to a specific message when triggered externally (e.g. from report navigation)
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const tryScroll = () => {
+      const el = messageRefs.current[scrollToMessageId];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedMessageId(scrollToMessageId);
+        setTimeout(() => setHighlightedMessageId(null), 2000);
+        onScrollToMessageComplete?.();
+        return true;
+      }
+      return false;
+    };
+    // Messages may not be rendered yet after channel switch — retry briefly
+    if (!tryScroll()) {
+      const timer = setTimeout(tryScroll, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [scrollToMessageId, onScrollToMessageComplete]);
 
   const handleCopyMessageUrl = useCallback((message) => {
     const url = `${window.location.origin}/channels/${server?.id || 'nexus-main'}/${channel.id}/${message.id}`;

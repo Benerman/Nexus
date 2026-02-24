@@ -83,6 +83,7 @@ export default function App() {
   });
   const [connectionState, setConnectionState] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
   const [soundboardPlayed, setSoundboardPlayed] = useState(null); // { soundId, userId, username, _ts }
+  const [scrollToMessageId, setScrollToMessageId] = useState(null); // message id to scroll to after channel switch
 
   // Mute & notification state
   const [mutedServers, setMutedServers] = useState(() => {
@@ -1184,6 +1185,19 @@ export default function App() {
     }
   }, [channels]);
 
+  // Navigate to a specific message in a channel (e.g. from report moderation)
+  const handleNavigateToMessage = useCallback((channelId, messageId) => {
+    // Find the channel in the active server
+    const allChannels = [...(channels.text || []), ...(channels.voice || [])];
+    const targetChannel = allChannels.find(ch => ch.id === channelId);
+    if (targetChannel) {
+      setActiveChannel(targetChannel);
+      setActiveChannelType('text');
+      if (socketRef.current) socketRef.current.emit('channel:join', { channelId });
+      setScrollToMessageId(messageId);
+    }
+  }, [channels]);
+
   // DM Call actions
   const handleStartDMCall = useCallback((channelId) => {
     if (!socketRef.current) return;
@@ -1842,6 +1856,8 @@ export default function App() {
             friends={friends}
             developerMode={developerMode}
             onReportMessage={handleReportMessage}
+            scrollToMessageId={scrollToMessageId}
+            onScrollToMessageComplete={() => setScrollToMessageId(null)}
           />
         )}
       </div>
@@ -1880,7 +1896,8 @@ export default function App() {
           onDeleteAccount={handleDeleteAccount}
           onChangeServer={handleChangeServer}
           developerMode={developerMode}
-          onSetDeveloperMode={(val) => { setDeveloperMode(val); localStorage.setItem('nexus_developer_mode', val ? 'true' : 'false'); }} />
+          onSetDeveloperMode={(val) => { setDeveloperMode(val); localStorage.setItem('nexus_developer_mode', val ? 'true' : 'false'); }}
+          onNavigateToMessage={handleNavigateToMessage} />
       )}
       {contextMenu && (
         <UserContextMenu

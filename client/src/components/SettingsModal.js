@@ -322,7 +322,7 @@ function SettingsSidebar({ tabs, tab, setTab }) {
   );
 }
 
-export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onDeleteAccount, onChangeServer, developerMode, onSetDeveloperMode }) {
+export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onDeleteAccount, onChangeServer, developerMode, onSetDeveloperMode, onNavigateToMessage }) {
   const [tab, setTabRaw] = useState(initialTab || localStorage.getItem('nexus_settings_last_tab') || 'profile');
   const setTab = (t) => { setTabRaw(t); localStorage.setItem('nexus_settings_last_tab', t); };
   const [profileSaved, setProfileSaved] = useState(false);
@@ -3816,46 +3816,78 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
               )}
 
               {/* ── Reports ── */}
-              {!modLoading && modSection==='reports' && (
-                <div>
-                  {modReports.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No reports for this server's members.</p>}
-                  <div className="members-manage-list" style={{maxHeight:500}}>
-                    {modReports.map(report => (
-                      <div key={report.id} className="member-manage-item" style={{flexDirection:'column',alignItems:'flex-start',gap:6}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
-                          <div className="member-avatar-sm" style={{background: report.reported_custom_avatar ? 'transparent' : (report.reported_color || '#3B82F6'), width:28, height:28, fontSize:14}}>
-                            {report.reported_custom_avatar
-                              ? <img src={report.reported_custom_avatar} alt="" className="avatar-upload-img"/>
-                              : (report.reported_avatar || 'U')}
-                          </div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <span className="member-manage-username">{report.reported_username || 'Unknown'}</span>
-                            <span style={{fontSize:11,color:'var(--text-muted)',marginLeft:6}}>
-                              reported by {report.reporter_username || 'Unknown'}
-                            </span>
-                          </div>
-                          <span className={`mod-report-status mod-status-${report.status}`}>{report.status}</span>
-                        </div>
-                        <div style={{fontSize:12,color:'var(--text-muted)'}}>
-                          <strong style={{color:'var(--text-normal)',textTransform:'capitalize'}}>{report.report_type}</strong>
-                          {report.description && <span> &mdash; {report.description}</span>}
-                        </div>
-                        <div style={{fontSize:11,color:'var(--text-muted)'}}>
-                          {new Date(report.created_at).toLocaleString()}
-                          {report.resolved_at && <span> &middot; Resolved {new Date(report.resolved_at).toLocaleString()}</span>}
-                        </div>
-                        {report.status === 'pending' && (
-                          <div style={{display:'flex',gap:6,marginTop:4}}>
-                            <button className="settings-btn-small" onClick={()=>handleUpdateReport(report.id,'reviewed')}>Reviewed</button>
-                            <button className="settings-btn-small primary" onClick={()=>handleUpdateReport(report.id,'actioned')}>Actioned</button>
-                            <button className="settings-btn-small" onClick={()=>handleUpdateReport(report.id,'dismissed')} style={{color:'var(--text-muted)'}}>Dismiss</button>
-                          </div>
-                        )}
+              {!modLoading && modSection==='reports' && (() => {
+                const activeReports = modReports.filter(r => r.status === 'pending' || r.status === 'reviewed');
+                const previousReports = modReports.filter(r => r.status === 'actioned' || r.status === 'dismissed');
+                const renderReport = (report) => (
+                  <div key={report.id} className="member-manage-item" style={{flexDirection:'column',alignItems:'flex-start',gap:6}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
+                      <div className="member-avatar-sm" style={{background: report.reported_custom_avatar ? 'transparent' : (report.reported_color || '#3B82F6'), width:28, height:28, fontSize:14}}>
+                        {report.reported_custom_avatar
+                          ? <img src={report.reported_custom_avatar} alt="" className="avatar-upload-img"/>
+                          : (report.reported_avatar || 'U')}
                       </div>
-                    ))}
+                      <div style={{flex:1,minWidth:0}}>
+                        <span className="member-manage-username">{report.reported_username || 'Unknown'}</span>
+                        <span style={{fontSize:11,color:'var(--text-muted)',marginLeft:6}}>
+                          reported by {report.reporter_username || 'Unknown'}
+                        </span>
+                      </div>
+                      <span className={`mod-report-status mod-status-${report.status}`}>{report.status}</span>
+                    </div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>
+                      <strong style={{color:'var(--text-normal)',textTransform:'capitalize'}}>{report.report_type}</strong>
+                      {report.description && <span> &mdash; {report.description}</span>}
+                    </div>
+                    {report.message_content && (
+                      <div style={{fontSize:12,color:'var(--text-muted)',background:'var(--bg-tertiary)',padding:'6px 10px',borderRadius:4,borderLeft:'2px solid var(--text-muted)',width:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {report.message_content.substring(0, 150)}{report.message_content.length > 150 ? '...' : ''}
+                      </div>
+                    )}
+                    <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
+                      <div style={{fontSize:11,color:'var(--text-muted)',flex:1}}>
+                        {new Date(report.created_at).toLocaleString()}
+                        {report.resolved_at && <span> &middot; Resolved {new Date(report.resolved_at).toLocaleString()}</span>}
+                      </div>
+                      {report.message_id && report.message_channel_id && onNavigateToMessage && (
+                        <button className="settings-btn-small" onClick={() => {
+                          onNavigateToMessage(report.message_channel_id, report.message_id);
+                          onClose();
+                        }} style={{fontSize:11,padding:'3px 8px'}}>
+                          Jump to Message
+                        </button>
+                      )}
+                    </div>
+                    {report.status === 'pending' && (
+                      <div style={{display:'flex',gap:6,marginTop:4}}>
+                        <button className="settings-btn-small" onClick={()=>handleUpdateReport(report.id,'reviewed')}>Reviewed</button>
+                        <button className="settings-btn-small primary" onClick={()=>handleUpdateReport(report.id,'actioned')}>Actioned</button>
+                        <button className="settings-btn-small" onClick={()=>handleUpdateReport(report.id,'dismissed')} style={{color:'var(--text-muted)'}}>Dismiss</button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+                return (
+                  <div>
+                    {modReports.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No reports for this server's members.</p>}
+                    {activeReports.length > 0 && (
+                      <div className="members-manage-list" style={{maxHeight:500}}>
+                        {activeReports.map(renderReport)}
+                      </div>
+                    )}
+                    {previousReports.length > 0 && (
+                      <details style={{marginTop:16}}>
+                        <summary style={{cursor:'pointer',color:'var(--text-muted)',fontSize:12,fontWeight:600,userSelect:'none',padding:'8px 0'}}>
+                          Previous Reports ({previousReports.length})
+                        </summary>
+                        <div className="members-manage-list" style={{maxHeight:400,marginTop:8}}>
+                          {previousReports.map(renderReport)}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
