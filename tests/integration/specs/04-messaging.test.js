@@ -87,7 +87,25 @@ describe('Messaging', () => {
   });
 
   test('Slash command /flip returns a coin-flip result message', async () => {
-    const msgPromise = waitForEvent(sender.socket, 'message:new', 5000);
+    // Wait for any in-flight message:new events from previous tests to drain
+    await new Promise(r => setTimeout(r, 250));
+
+    // Listen for a message:new that matches the flip result, skipping stale events
+    const msgPromise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        sender.socket.off('message:new', handler);
+        reject(new Error('Timed out waiting for flip result'));
+      }, 5000);
+      function handler(data) {
+        if (/flip|heads|tails|coin/i.test(data.content)) {
+          clearTimeout(timer);
+          sender.socket.off('message:new', handler);
+          resolve(data);
+        }
+      }
+      sender.socket.on('message:new', handler);
+    });
+
     sender.socket.emit('message:send', { channelId, content: '/flip' });
     const msg = await msgPromise;
     expect(msg.content).toMatch(/flip|heads|tails|coin/i);
