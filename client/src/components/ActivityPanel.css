@@ -1,0 +1,228 @@
+/* Activity Panel - slide-out from right */
+.activity-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+  animation: fadeIn 0.15s ease;
+}
+
+.activity-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 320px;
+  background: var(--bg-secondary);
+  border-left: 1px solid rgba(255,255,255,0.06);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 16px rgba(0,0,0,0.3);
+  animation: slideInRight 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.activity-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.activity-panel-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--header-primary);
+}
+
+.activity-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-clear-btn {
+  font-size: 12px;
+  color: var(--text-link);
+  background: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.activity-clear-btn:hover {
+  text-decoration: underline;
+}
+
+.activity-close-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 18px;
+}
+.activity-close-btn:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--text-normal);
+}
+
+.activity-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* Empty state */
+.activity-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+.activity-empty-icon {
+  font-size: 32px;
+  opacity: 0.4;
+}
+.activity-empty-text {
+  font-size: 14px;
+}
+
+/* Individual job card */
+.activity-job {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 6px;
+  animation: fadeIn 0.15s ease;
+}
+
+.activity-job-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.activity-job-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-job-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-job-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-job-dismiss {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.activity-job:hover .activity-job-dismiss {
+  opacity: 1;
+}
+.activity-job-dismiss:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* Progress bar */
+.activity-progress-track {
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.activity-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  background: var(--brand-500);
+}
+.activity-progress-fill.completed {
+  background: var(--green);
+}
+.activity-progress-fill.failed {
+  background: var(--red);
+}
+
+/* Status indicators */
+.activity-job-status {
+  font-size: 11px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.activity-job-status.running {
+  color: var(--brand-500);
+}
+.activity-job-status.completed {
+  color: var(--text-positive);
+}
+.activity-job-status.failed {
+  color: var(--text-danger);
+}
+
+.activity-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.activity-status-dot.running {
+  background: var(--brand-500);
+  animation: pulse 1.5s infinite;
+}
+.activity-status-dot.completed {
+  background: var(--green);
+}
+.activity-status-dot.failed {
+  background: var(--red);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .activity-panel {
+    width: 100%;
+  }
+}

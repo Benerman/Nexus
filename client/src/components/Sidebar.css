@@ -161,6 +161,21 @@
   margin-left: auto; flex-shrink: 0;
 }
 .sidebar-settings-btn:hover { color: var(--text-normal); }
+.sidebar-activity-btn {
+  position: relative;
+  background: none; color: var(--text-muted); font-size: 16px;
+  padding: 2px 6px; border-radius: 4px; cursor: pointer; transition: color 0.15s;
+  flex-shrink: 0; display: flex; align-items: center;
+}
+.sidebar-activity-btn:hover { color: var(--text-normal); }
+.sidebar-activity-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--red); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  min-width: 16px; height: 16px;
+  border-radius: 8px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+}
 .sidebar-header { gap: 8px; }
 
 .add-channel-btn {

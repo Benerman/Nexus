@@ -15,6 +15,7 @@ import ChannelContextMenu from './components/ChannelContextMenu';
 import UserProfileModal from './components/UserProfileModal';
 import ReportModal from './components/ReportModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
+import ActivityPanel from './components/ActivityPanel';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
 import './App.css';
@@ -119,6 +120,11 @@ export default function App() {
   const touchCurrentX = useRef(0);
   const touchCurrentY = useRef(0);
 
+  // Activity panel state
+  const [activities, setActivities] = useState([]);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const activityTimers = useRef({});
+
   // Auto-updater state (Tauri only)
   const [updateAvailable, setUpdateAvailable] = useState(null); // { version, notes, install }
 
@@ -201,6 +207,54 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // Activity / job tracking helpers
+  const trackJob = useCallback((id, label, initialStatus = {}) => {
+    setActivities(prev => {
+      if (prev.find(j => j.id === id)) return prev;
+      return [...prev, { id, label, status: 'running', progress: 0, currentItem: '', ...initialStatus }];
+    });
+  }, []);
+
+  const updateJobProgress = useCallback((id, progress, currentItem) => {
+    setActivities(prev => prev.map(j =>
+      j.id === id ? { ...j, status: 'running', progress, currentItem: currentItem || j.currentItem } : j
+    ));
+  }, []);
+
+  const completeJob = useCallback((id, summary) => {
+    setActivities(prev => prev.map(j =>
+      j.id === id ? { ...j, status: 'completed', progress: 1, summary } : j
+    ));
+    // Auto-remove after 8 seconds
+    const timer = setTimeout(() => {
+      setActivities(prev => prev.filter(j => j.id !== id));
+      delete activityTimers.current[id];
+    }, 8000);
+    activityTimers.current[id] = timer;
+  }, []);
+
+  const failJob = useCallback((id, error) => {
+    setActivities(prev => prev.map(j =>
+      j.id === id ? { ...j, status: 'failed', error } : j
+    ));
+  }, []);
+
+  const removeJob = useCallback((id) => {
+    if (activityTimers.current[id]) {
+      clearTimeout(activityTimers.current[id]);
+      delete activityTimers.current[id];
+    }
+    setActivities(prev => prev.filter(j => j.id !== id));
+  }, []);
+
+  const clearJobs = useCallback(() => {
+    Object.values(activityTimers.current).forEach(clearTimeout);
+    activityTimers.current = {};
+    setActivities([]);
+  }, []);
+
+  const activeJobCount = useMemo(() => activities.filter(j => j.status === 'running').length, [activities]);
 
   // Message notification sound (subtle 2-note chime via Web Audio API)
   const messageSoundCtxRef = useRef(null);
@@ -1014,6 +1068,40 @@ export default function App() {
       showError(`${username || 'User'} was timed out`);
     });
 
+    // Activity tracking: transfers, ingests, exports, batches
+    s.on('transfer:started', ({ transfer_id, device_name }) => {
+      trackJob(transfer_id, `Transfer from ${device_name || 'device'}`, { status: 'running', progress: 0 });
+    });
+    s.on('transfer:progress', ({ transfer_id, files_completed, files_total, file_name }) => {
+      updateJobProgress(transfer_id, files_total ? files_completed / files_total : 0, file_name);
+    });
+    s.on('transfer:complete', ({ transfer_id, summary }) => {
+      completeJob(transfer_id, summary);
+    });
+    s.on('transfer:failed', ({ transfer_id, error }) => {
+      failJob(transfer_id, error);
+    });
+    s.on('ingest:progress', ({ job_id, completed, total, file_name }) => {
+      trackJob(job_id, 'Ingesting files');
+      updateJobProgress(job_id, total ? completed / total : 0, file_name);
+    });
+    s.on('ingest:complete', ({ job_id, photos_ingested }) => {
+      completeJob(job_id, { succeeded: photos_ingested, total_items: photos_ingested });
+    });
+    s.on('export:complete', ({ job_id, photos_exported }) => {
+      completeJob(job_id, { succeeded: photos_exported, total_items: photos_exported });
+    });
+    s.on('export:failed', ({ job_id, error }) => {
+      failJob(job_id, error);
+    });
+    s.on('batch:progress', ({ job_id, completed, total, photo_id }) => {
+      trackJob(job_id, 'Batch operation');
+      updateJobProgress(job_id, total ? completed / total : 0, photo_id);
+    });
+    s.on('batch:complete', ({ job_id, summary }) => {
+      completeJob(job_id, summary);
+    });
+
     // Clean up heartbeat on unmount
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
@@ -1726,12 +1814,20 @@ export default function App() {
         onNavigateToVoice={handleNavigateToVoice}
         dmCallActive={dmCallActive}
         onChannelContextMenu={handleChannelContextMenu}
+        activityCount={activeJobCount}
+        onToggleActivity={() => setActivityOpen(o => !o)}
       />
       {/* Mobile sub-nav bar */}
       <div className="mobile-nav-bar">
         <button className="mobile-nav-left" onClick={() => { setMobileSidebarOpen(o => !o); setMobileMemberListOpen(false); }}>
           <span className="mobile-nav-arrow">{mobileSidebarOpen ? '‹' : '›'}</span>
           <span className="mobile-nav-channel">{activeChannel?.isDM ? activeChannel?.name : `# ${activeChannel?.name || 'general'}`}</span>
+        </button>
+        <button className="mobile-nav-activity" onClick={() => setActivityOpen(o => !o)} title="Activity">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+          {activeJobCount > 0 && <span className="mobile-nav-activity-badge">{activeJobCount > 9 ? '9+' : activeJobCount}</span>}
         </button>
         {!activeServer?.isPersonal && (
           <button className="mobile-nav-right" onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }}>
@@ -1852,6 +1948,9 @@ export default function App() {
             scrollToMessageId={scrollToMessageId}
             onScrollToMessageComplete={() => setScrollToMessageId(null)}
             onRefreshData={handleRefreshData}
+            onTrackJob={trackJob}
+            onCompleteJob={completeJob}
+            onFailJob={failJob}
           />
         )}
       </div>
@@ -1868,6 +1967,14 @@ export default function App() {
             setContextMenu({ user, position: { x: e.clientX, y: e.clientY } });
           }}
           className={mobileMemberListOpen ? 'mobile-open' : ''}
+        />
+      )}
+      {activityOpen && (
+        <ActivityPanel
+          jobs={activities}
+          onRemove={removeJob}
+          onClear={clearJobs}
+          onClose={() => setActivityOpen(false)}
         />
       )}
       {incomingCall && (

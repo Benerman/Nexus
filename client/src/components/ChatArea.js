@@ -299,7 +299,8 @@ const ChatArea = React.memo(function ChatArea({
   server, servers, onOpenSettings, memberSidebarVisible, onToggleMemberSidebar,
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
-  developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete, onRefreshData
+  developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete, onRefreshData,
+  onTrackJob, onCompleteJob, onFailJob
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -648,6 +649,12 @@ const ChatArea = React.memo(function ChatArea({
       return;
     }
 
+    // Track upload as an activity job when there are attachments
+    const jobId = pendingAttachments.length > 0 ? `upload-${Date.now()}` : null;
+    if (jobId && onTrackJob) {
+      onTrackJob(jobId, `Uploading ${pendingAttachments.length} file${pendingAttachments.length > 1 ? 's' : ''}`, { status: 'running', progress: 0.5 });
+    }
+
     const payload = {
       channelId: channel.id,
       content: input,
@@ -656,7 +663,15 @@ const ChatArea = React.memo(function ChatArea({
     if (replyingTo) {
       payload.replyTo = replyingTo.id;
     }
-    socket.emit('message:send', payload);
+    socket.emit('message:send', payload, (ack) => {
+      if (jobId) {
+        if (ack?.error) {
+          onFailJob?.(jobId, ack.error);
+        } else {
+          onCompleteJob?.(jobId, { succeeded: pendingAttachments.length });
+        }
+      }
+    });
     setInput('');
     setPendingAttachments([]);
     setReplyingTo(null);
@@ -670,7 +685,7 @@ const ChatArea = React.memo(function ChatArea({
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-  }, [input, pendingAttachments, socket, channel, replyingTo]);
+  }, [input, pendingAttachments, socket, channel, replyingTo, onTrackJob, onCompleteJob, onFailJob]);
 
   const handleGifSelect = useCallback((gif) => {
     if (!socket || !channel) return;

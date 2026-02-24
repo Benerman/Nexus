@@ -197,6 +197,21 @@
     font-size: 12px;
     color: var(--text-muted);
   }
+  .mobile-nav-activity {
+    position: relative;
+    background: none; color: var(--text-muted);
+    padding: 8px; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center;
+  }
+  .mobile-nav-activity:active { background: var(--bg-modifier-hover); }
+  .mobile-nav-activity-badge {
+    position: absolute; top: 2px; right: 0;
+    background: var(--red); color: #fff;
+    font-size: 9px; font-weight: 700; line-height: 1;
+    min-width: 14px; height: 14px;
+    border-radius: 7px; padding: 0 3px;
+    display: flex; align-items: center; justify-content: center;
+  }
 
   .main-content {
     position: fixed;

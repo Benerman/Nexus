@@ -164,6 +164,14 @@ function FriendsList({ friends, onlineUsers, onCreateDM, dmSearch, onFriendActio
 
 let sidebarMountCount = 0;
 
+function ActivityToggleIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
 const Sidebar = React.memo(function Sidebar({
   channels, activeChannel, activeChannelType, onSelectChannel,
   voiceChannelState, currentVoiceChannel, onlineUsers, currentUser,
@@ -172,7 +180,8 @@ const Sidebar = React.memo(function Sidebar({
   channelUnreadCounts = {}, pinnedDMIds = [], onPinDM, onUnpinDM, onArchiveDM, onDeleteDM,
   mutedChannels = {}, onMuteChannel, onUnmuteChannel,
   onNavigateToVoice, dmCallActive,
-  onChannelContextMenu
+  onChannelContextMenu,
+  activityCount = 0, onToggleActivity
 }) {
   const [collapsed, setCollapsedRaw] = useState(() => {
     try {
@@ -310,6 +319,10 @@ const Sidebar = React.memo(function Sidebar({
         <div className="sidebar-header">
           <div className={`sidebar-server-icon ${server?.customIcon ? 'has-custom-icon' : ''}`}>{serverIcon}</div>
           <span className="sidebar-server-name">{server?.name || 'Direct Messages'}</span>
+          <button className="sidebar-activity-btn" onClick={onToggleActivity} title="Activity">
+            <ActivityToggleIcon size={16} />
+            {activityCount > 0 && <span className="sidebar-activity-badge">{activityCount > 9 ? '9+' : activityCount}</span>}
+          </button>
           <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('profile')} title="Settings">
             <SettingsIcon size={16} color="currentColor" />
           </button>
@@ -552,6 +565,10 @@ const Sidebar = React.memo(function Sidebar({
       <div className="sidebar-header">
         <div className={`sidebar-server-icon ${server?.customIcon ? 'has-custom-icon' : ''}`}>{serverIcon}</div>
         <span className="sidebar-server-name">{server?.name || 'Nexus'}</span>
+        <button className="sidebar-activity-btn" onClick={onToggleActivity} title="Activity">
+          <ActivityToggleIcon size={16} />
+          {activityCount > 0 && <span className="sidebar-activity-badge">{activityCount > 9 ? '9+' : activityCount}</span>}
+        </button>
         <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('server-settings')} title="Server settings">
           <SettingsIcon size={16} color="currentColor" />
         </button>
