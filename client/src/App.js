@@ -1502,59 +1502,43 @@ export default function App() {
     }
   }, []);
 
-  // Mobile swipe gesture handlers
+  // Mobile swipe gesture handlers — global, works from anywhere on screen
   const handleTouchStart = useCallback((e) => {
-    // Only capture touches from edges to prevent interfering with scrolling
-    const x = e.touches[0].clientX;
-    const edgeZone = 80; // Increased from 50px for easier triggering
-
-    if (x < edgeZone || x > window.innerWidth - edgeZone) {
-      touchStartX.current = e.touches[0].clientX;
-      touchStartY.current = e.touches[0].clientY;
-      touchCurrentX.current = e.touches[0].clientX;
-      touchCurrentY.current = e.touches[0].clientY;
-    } else {
-      // Reset to indicate this isn't an edge swipe
-      touchStartX.current = -1;
-    }
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchCurrentX.current = e.touches[0].clientX;
+    touchCurrentY.current = e.touches[0].clientY;
   }, []);
 
   const handleTouchMove = useCallback((e) => {
-    if (touchStartX.current !== -1) {
-      touchCurrentX.current = e.touches[0].clientX;
-      touchCurrentY.current = e.touches[0].clientY;
-    }
+    touchCurrentX.current = e.touches[0].clientX;
+    touchCurrentY.current = e.touches[0].clientY;
   }, []);
 
   const handleTouchEnd = useCallback((e) => {
-    if (touchStartX.current === -1) return; // Not an edge swipe
-
     const deltaX = touchCurrentX.current - touchStartX.current;
     const deltaY = Math.abs(touchCurrentY.current - touchStartY.current);
-    const threshold = 60; // Reduced from 80px for faster response
-    const edgeZone = 80;
+    const threshold = 50;
 
-    // Require horizontal swipe to be 3x more dominant than vertical (prevents accidental triggers during scroll)
-    if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > deltaY * 3) {
-      if (deltaX > 0 && touchStartX.current < edgeZone) {
-        // Swipe right from left edge - open sidebar
-        setMobileSidebarOpen(true);
-        setMobileMemberListOpen(false);
-      } else if (deltaX < 0 && touchStartX.current > window.innerWidth - edgeZone) {
-        // Swipe left from right edge - open member list
-        setMobileMemberListOpen(true);
-        setMobileSidebarOpen(false);
-      } else if (deltaX < 0 && mobileSidebarOpen) {
-        // Swipe left when sidebar is open - close it
-        setMobileSidebarOpen(false);
-      } else if (deltaX > 0 && mobileMemberListOpen) {
-        // Swipe right when member list is open - close it
-        setMobileMemberListOpen(false);
+    // Horizontal swipe must be at least 2x the vertical movement
+    if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > deltaY * 2) {
+      if (deltaX > 0) {
+        // Swipe right — open left sidebar or close right panel
+        if (mobileMemberListOpen) {
+          setMobileMemberListOpen(false);
+        } else {
+          setMobileSidebarOpen(true);
+        }
+      } else {
+        // Swipe left — open right member list or close left sidebar
+        if (mobileSidebarOpen) {
+          setMobileSidebarOpen(false);
+        } else {
+          setMobileMemberListOpen(true);
+          setMobileSidebarOpen(false);
+        }
       }
     }
-
-    // Reset
-    touchStartX.current = -1;
   }, [mobileSidebarOpen, mobileMemberListOpen]);
 
   const closeMobilePanels = useCallback(() => {
