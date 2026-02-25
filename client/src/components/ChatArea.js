@@ -1328,6 +1328,35 @@ const ChatArea = React.memo(function ChatArea({
         )}
       </div>
 
+      {/* Message Request Banner */}
+      {channel.messageRequest && (
+        <div className="message-request-banner">
+          {channel.messageRequest === 'received' ? (
+            <>
+              <div className="message-request-text">
+                <strong>{channel.participant?.username || 'Someone'}</strong> wants to send you a message.
+                <span className="message-request-hint">Accepting will let them DM you freely.</span>
+              </div>
+              <div className="message-request-actions">
+                <button className="message-request-btn accept" onClick={() => socket?.emit('dm:message-request:accept', { channelId: channel.id })}>
+                  Accept
+                </button>
+                <button className="message-request-btn ignore" onClick={() => socket?.emit('dm:message-request:reject', { channelId: channel.id })}>
+                  Ignore
+                </button>
+                <button className="message-request-btn block" onClick={() => socket?.emit('dm:message-request:block', { channelId: channel.id })}>
+                  Block
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="message-request-text">
+              <span>Message request sent. <strong>{channel.participant?.username || 'They'}</strong> hasn't accepted yet.</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {pendingAttachments.length>0 && (
         <div className="pending-attachments">
           {pendingAttachments.map((att,i) => (
@@ -1429,9 +1458,10 @@ const ChatArea = React.memo(function ChatArea({
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:'none'}}
             onChange={e=>addFiles(e.target.files)}/>
           <textarea ref={inputRef} className="chat-input"
-            placeholder={channel.isDM ? `Message @${channel.participant?.username || channel.name}` : 'Start typing...'}
+            placeholder={channel.messageRequest === 'received' ? 'Accept the message request to reply' : channel.isDM ? `Message @${channel.participant?.username || channel.name}` : 'Start typing...'}
             value={input} onChange={handleInput} onKeyDown={handleKeyDown}
-            onPaste={handlePaste} rows={1} maxLength={2000}/>
+            onPaste={handlePaste} rows={1} maxLength={2000}
+            disabled={channel.messageRequest === 'received'}/>
           <div className="chat-input-actions">
             <button className="attach-btn" onClick={()=>fileInputRef.current?.click()} title="Attach image">
               <AttachmentIcon size={18} color="currentColor" />

@@ -176,7 +176,7 @@ const Sidebar = React.memo(function Sidebar({
   channels, activeChannel, activeChannelType, onSelectChannel,
   voiceChannelState, currentVoiceChannel, onlineUsers, currentUser,
   server, socket, onOpenSettings, voiceControls, className, onCreateDM, friends,
-  pendingRequests = [], onFriendAction,
+  pendingRequests = [], messageRequests = [], onFriendAction,
   channelUnreadCounts = {}, pinnedDMIds = [], onPinDM, onUnpinDM, onArchiveDM, onDeleteDM,
   mutedChannels = {}, onMuteChannel, onUnmuteChannel,
   onNavigateToVoice, dmCallActive,
@@ -417,6 +417,58 @@ const Sidebar = React.memo(function Sidebar({
                       className="dm-fr-btn block"
                       title="Block"
                       onClick={(e) => { e.stopPropagation(); onFriendAction?.('block', req.id, from.id); }}
+                    >
+                      🚫
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Message Requests (DMs from non-friends) */}
+        {messageRequests.length > 0 && (
+          <div className="dm-friend-requests dm-message-requests">
+            <div className="dm-fr-header">
+              MESSAGE REQUESTS — {messageRequests.length}
+            </div>
+            {messageRequests.map(req => {
+              const from = req.participant || {};
+              return (
+                <div key={req.id} className="dm-fr-item" onClick={() => onSelectChannel(req, 'text')}>
+                  <div className="dm-avatar-wrapper">
+                    <div className="dm-avatar" style={{ background: from.customAvatar ? 'transparent' : (from.color || '#3B82F6') }}>
+                      {from.customAvatar
+                        ? <img src={from.customAvatar} alt="" className="dm-avatar-img" />
+                        : (from.avatar || '👤')}
+                    </div>
+                  </div>
+                  <div className="dm-fr-info">
+                    <span className="dm-fr-name" style={{ color: from.color || '#fff' }}>
+                      {from.username || 'Unknown'}
+                    </span>
+                    <span className="dm-fr-label">wants to message you</span>
+                  </div>
+                  <div className="dm-fr-actions">
+                    <button
+                      className="dm-fr-btn accept"
+                      title="Accept"
+                      onClick={(e) => { e.stopPropagation(); socket?.emit('dm:message-request:accept', { channelId: req.id }); }}
+                    >
+                      ✓
+                    </button>
+                    <button
+                      className="dm-fr-btn ignore"
+                      title="Ignore"
+                      onClick={(e) => { e.stopPropagation(); socket?.emit('dm:message-request:reject', { channelId: req.id }); }}
+                    >
+                      ✕
+                    </button>
+                    <button
+                      className="dm-fr-btn block"
+                      title="Block"
+                      onClick={(e) => { e.stopPropagation(); socket?.emit('dm:message-request:block', { channelId: req.id }); }}
                     >
                       🚫
                     </button>

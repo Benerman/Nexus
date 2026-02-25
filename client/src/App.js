@@ -74,6 +74,7 @@ export default function App() {
   const [channelContextMenu, setChannelContextMenu] = useState(null);
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [messageRequests, setMessageRequests] = useState([]); // pending DM message requests
   const [dmUnreadCounts, setDmUnreadCounts] = useState({}); // channelId -> unread count
   const [profileUser, setProfileUser] = useState(null); // user to show in profile modal
   const [reportTarget, setReportTarget] = useState(null); // { userId, username, messageId?, messagePreview? }
@@ -608,10 +609,11 @@ export default function App() {
         if (s.connected) s.emit('data:refresh');
       }, 30000); // Refresh every 30 seconds
 
-      // Request friend list and unread counts after init
+      // Request friend list, unread counts, and message requests after init
       if (token) {
         s.emit('friend:list');
         s.emit('dm:unread-counts');
+        s.emit('dm:message-requests');
       }
 
       // Handle pending invite from URL (e.g. /invite/abc123)
@@ -924,6 +926,88 @@ export default function App() {
         setMobileSidebarOpen(false);
         setMobileMemberListOpen(false);
       }
+    });
+
+    // Message request received from non-friend
+    s.on('dm:message-request', ({ channel, messages: msgs }) => {
+      console.log('[App] Message request received from:', channel.participant?.username);
+      setMessageRequests(prev => {
+        if (prev.some(r => r.id === channel.id)) return prev;
+        return [...prev, channel];
+      });
+    });
+
+    // Message request list
+    s.on('dm:message-requests', ({ requests }) => {
+      setMessageRequests(requests || []);
+    });
+
+    // Message request accepted — move channel from requests to active DMs
+    s.on('dm:message-request:accepted', ({ channel, messages: msgs }) => {
+      console.log('[App] Message request accepted:', channel.id);
+      // Remove from message requests
+      setMessageRequests(prev => prev.filter(r => r.id !== channel.id));
+
+      // Add to personal server as active DM
+      setServerData(prev => {
+        const personalServer = Object.values(prev).find(srv => srv.isPersonal || srv.id?.startsWith('personal:'));
+        if (personalServer) {
+          const updated = { ...prev };
+          const existingChannels = personalServer.channels?.text || [];
+          // Remove any pending version and add the active one
+          const filteredChannels = existingChannels.filter(ch => ch.id !== channel.id);
+          updated[personalServer.id] = {
+            ...personalServer,
+            channels: {
+              ...personalServer.channels,
+              text: [...filteredChannels, { ...channel, messageRequest: null }]
+            }
+          };
+          return updated;
+        }
+        return prev;
+      });
+
+      // Load messages
+      if (msgs) {
+        setMessages(prev => ({ ...prev, [channel.id]: msgs }));
+      }
+
+      // Update active channel if it's currently this one (remove the pending banner)
+      setActiveChannel(prev => {
+        if (prev?.id === channel.id) {
+          return { ...prev, messageRequest: null };
+        }
+        return prev;
+      });
+    });
+
+    // Message request rejected — remove from both sides
+    s.on('dm:message-request:rejected', ({ channelId }) => {
+      console.log('[App] Message request rejected:', channelId);
+      setMessageRequests(prev => prev.filter(r => r.id !== channelId));
+      // Also remove from server data in case it was shown as a pending DM
+      setServerData(prev => {
+        const personalServer = Object.values(prev).find(srv => srv.isPersonal || srv.id?.startsWith('personal:'));
+        if (personalServer) {
+          const updated = { ...prev };
+          const existingChannels = personalServer.channels?.text || [];
+          updated[personalServer.id] = {
+            ...personalServer,
+            channels: {
+              ...personalServer.channels,
+              text: existingChannels.filter(ch => ch.id !== channelId)
+            }
+          };
+          return updated;
+        }
+        return prev;
+      });
+      // If currently viewing this channel, go back
+      setActiveChannel(prev => {
+        if (prev?.id === channelId) return null;
+        return prev;
+      });
     });
 
     // Group DM created
@@ -1848,6 +1932,7 @@ export default function App() {
         onCreateDM={handleCreateDM}
         friends={friends}
         pendingRequests={pendingRequests}
+        messageRequests={messageRequests}
         onFriendAction={handleFriendAction}
         className={mobileSidebarOpen ? 'mobile-open' : ''}
         channelUnreadCounts={channelUnreadCounts}
