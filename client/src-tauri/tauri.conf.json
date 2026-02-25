@@ -7,7 +7,7 @@
     "frontendDist": "../build",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm run start",
-    "beforeBuildCommand": "npx cross-env CI=false GENERATE_SOURCEMAP=false react-scripts build"
+    "beforeBuildCommand": "npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build"
   },
   "app": {
     "windows": [

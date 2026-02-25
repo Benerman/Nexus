@@ -2,6 +2,7 @@ import React from 'react';
 import './WebhookDocs.css';
 
 export default function WebhookDocs({ onClose }) {
+  const baseUrl = window.location.origin;
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
   };
@@ -53,13 +54,13 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>HTTP POST Request</span>
-                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
+                <button onClick={() => copyToClipboard(`curl -X POST "${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello from webhook!"}'`)}>
                   Copy
                 </button>
               </div>
-              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
+              <pre>{`curl -X POST "${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello from webhook!"}'`}</pre>
             </div>
@@ -311,13 +312,13 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>Bash</span>
-                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
+                <button onClick={() => copyToClipboard(`curl -X POST "${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello World!"}'`)}>
                   Copy
                 </button>
               </div>
-              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
+              <pre>{`curl -X POST "${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hello World!"}'`}</pre>
             </div>
@@ -326,7 +327,7 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>Bash</span>
-                <button onClick={() => copyToClipboard(`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
+                <button onClick={() => copyToClipboard(`curl -X POST "${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "content": "Daily report",
@@ -341,7 +342,7 @@ export default function WebhookDocs({ onClose }) {
                   Copy
                 </button>
               </div>
-              <pre>{`curl -X POST "http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN" \\
+              <pre>{`curl -X POST "${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
     "content": "Daily report",
@@ -364,7 +365,7 @@ export default function WebhookDocs({ onClose }) {
             <div className="code-block">
               <div className="code-header">
                 <span>JavaScript</span>
-                <button onClick={() => copyToClipboard(`const webhookUrl = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN';
+                <button onClick={() => copyToClipboard(`const webhookUrl = '${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN';
 
 const payload = {
   content: 'Hello from JavaScript!',
@@ -388,7 +389,7 @@ fetch(webhookUrl, {
                   Copy
                 </button>
               </div>
-              <pre>{`const webhookUrl = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN';
+              <pre>{`const webhookUrl = '${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN';
 
 const payload = {
   content: 'Hello from JavaScript!',
@@ -417,7 +418,7 @@ fetch(webhookUrl, {
                 <span>Python</span>
                 <button onClick={() => copyToClipboard(`import requests
 
-webhook_url = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN'
+webhook_url = '${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN'
 
 payload = {
     'content': 'Hello from Python!',
@@ -439,7 +440,7 @@ print(f'Response: {response.json()}')`)}>
               </div>
               <pre>{`import requests
 
-webhook_url = 'http://localhost:3000/api/webhooks/WEBHOOK_ID/TOKEN'
+webhook_url = '${baseUrl}/api/webhooks/WEBHOOK_ID/TOKEN'
 
 payload = {
     'content': 'Hello from Python!',
