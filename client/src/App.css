@@ -38,19 +38,57 @@
 
 .connection-banner {
   position: fixed; top: 0; left: 0; right: 0;
-  background: var(--yellow, #faa61a); color: #000; text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--yellow, #faa61a); color: #000;
   padding: 4px 12px; font-size: 13px; font-weight: 600; z-index: 10000;
   animation: slideDown 0.3s ease;
+}
+.connection-banner.reconnected {
+  background: var(--green, #3ba55d); color: #fff;
 }
 @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
 
 .update-banner {
   position: fixed; top: 0; left: 0; right: 0;
-  background: var(--green, #3ba55d); color: #fff; text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--green, #3ba55d); color: #fff;
   padding: 6px 12px; font-size: 13px; font-weight: 600; z-index: 10001;
   cursor: pointer; animation: slideDown 0.3s ease;
 }
 .update-banner:hover { filter: brightness(1.1); }
+
+.banner-close {
+  background: transparent; border: none; color: inherit;
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px;
+  opacity: 0.7; transition: opacity 0.15s;
+}
+.banner-close:hover { opacity: 1; }
+
+/* Empty state for new users with no servers */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex: 1; text-align: center; padding: 40px 20px;
+}
+.empty-state-icon { font-size: 64px; margin-bottom: 16px; }
+.empty-state-title {
+  color: var(--text-primary, #f2f3f5); font-size: 24px; font-weight: 700; margin: 0 0 8px;
+}
+.empty-state-text {
+  color: var(--text-muted, #b5bac1); font-size: 15px; margin: 0 0 24px; max-width: 400px;
+}
+.empty-state-actions { display: flex; gap: 12px; }
+.empty-state-btn {
+  border: none; border-radius: 6px; padding: 10px 24px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+}
+.empty-state-btn-primary {
+  background: var(--brand-500, #5865f2); color: #fff;
+}
+.empty-state-btn-primary:hover { background: var(--brand-560, #4752c4); }
+.empty-state-btn-secondary {
+  background: var(--bg-tertiary, #1e1f22); color: var(--text-primary, #f2f3f5);
+}
+.empty-state-btn-secondary:hover { background: var(--bg-modifier-hover, #393c41); }
 
 /* Mobile overlay - hidden by default */
 .mobile-overlay {

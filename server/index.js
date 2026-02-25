@@ -1268,24 +1268,16 @@ io.on('connection', (socket) => {
         console.warn('[Sounds] Failed to load user sounds:', err.message);
       }
 
-      const srv = state.servers[serverId] || state.servers[DEFAULT_SERVER_ID];
-      if (!srv.members[user.id]) {
-        // New member — add to server with default roles and persist
-        const memberProfile = { roles: ['everyone'], joinedAt: Date.now(), username: user.username, avatar: user.avatar, customAvatar: user.customAvatar || null, color: user.color || '#3B82F6' };
-        if (!srv.ownerId) {
-          srv.ownerId = user.id;
-          memberProfile.roles = ['everyone', 'admin'];
-          db.query('UPDATE servers SET owner_id = $1 WHERE id = $2', [user.id, srv.id]).catch(() => {});
+      // Update profile data for servers the user is already a member of
+      Object.values(state.servers).forEach(s => {
+        if (s.isPersonal || s.id.startsWith('personal:')) return;
+        if (s.members[user.id]) {
+          s.members[user.id].username = user.username;
+          s.members[user.id].avatar = user.avatar;
+          s.members[user.id].customAvatar = user.customAvatar || null;
+          s.members[user.id].color = user.color || '#3B82F6';
         }
-        srv.members[user.id] = memberProfile;
-        db.addServerMember(srv.id, user.id, memberProfile.roles).catch(() => {});
-      } else {
-        // Update profile data for existing member (they may have changed username/avatar since last seen)
-        srv.members[user.id].username = user.username;
-        srv.members[user.id].avatar = user.avatar;
-        srv.members[user.id].customAvatar = user.customAvatar || null;
-        srv.members[user.id].color = user.color || '#3B82F6';
-      }
+      });
 
       // ✅ Phase 2: Create Personal server with user's DM channels
       const dmChannels = await db.getDMChannelsForUser(user.id);
@@ -1299,13 +1291,16 @@ io.on('connection', (socket) => {
       // ✅ Combine: Personal server first, then regular servers
       const allServers = [personalServer, ...regularServers];
 
+      // If user has regular servers, use the first one as active; otherwise use personal server
+      const activeServer = regularServers.length > 0 ? regularServers[0] : personalServer;
+
       socket.emit('init', {
         user,
-        serverId: srv.id,
-        server: serializeServer(srv.id),
-        servers: allServers,  // ✅ Includes Personal server
+        serverId: activeServer.id,
+        server: activeServer,
+        servers: allServers,
         onlineUsers: getOnlineUsers(),
-        voiceChannels: getVoiceChannelState(srv.id)
+        voiceChannels: regularServers.length > 0 ? getVoiceChannelState(activeServer.id) : {}
       });
 
       socket.broadcast.emit('user:joined', { user, onlineUsers: getOnlineUsers() });
@@ -4537,6 +4532,41 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('[Invite] Error using invite:', error);
       socket.emit('error', { message: 'Failed to use invite' });
+    }
+  });
+
+  // ─── Join Default Server (opt-in from onboarding tour) ─────────────────────
+  socket.on('server:join-default', async () => {
+    const user = state.users[socket.id];
+    if (!user) return socket.emit('error', { message: 'Authentication required' });
+
+    try {
+      const srv = state.servers[DEFAULT_SERVER_ID];
+      if (!srv) return socket.emit('error', { message: 'Default server not found' });
+
+      // Already a member
+      if (srv.members[user.id]) {
+        const serialized = serializeServer(DEFAULT_SERVER_ID);
+        return socket.emit('invite:joined', { server: serialized });
+      }
+
+      // Check if banned
+      const isBanned = await db.isUserBanned(DEFAULT_SERVER_ID, user.id);
+      if (isBanned) {
+        return socket.emit('error', { message: 'You are banned from this server' });
+      }
+
+      // Add member
+      srv.members[user.id] = { roles: ['everyone'], joinedAt: Date.now(), username: user.username, avatar: user.avatar, customAvatar: user.customAvatar || null, color: user.color || '#3B82F6' };
+      await db.addServerMember(DEFAULT_SERVER_ID, user.id, ['everyone']);
+
+      const serialized = serializeServer(DEFAULT_SERVER_ID);
+      socket.emit('invite:joined', { server: serialized });
+      io.emit('server:updated', { server: serialized });
+      console.log(`[Join] ${user.username} joined default server via onboarding`);
+    } catch (error) {
+      console.error('[Join] Error joining default server:', error);
+      socket.emit('error', { message: 'Failed to join default server' });
     }
   });
 
