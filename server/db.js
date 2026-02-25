@@ -396,19 +396,98 @@ async function cleanupOldMessages(channelId, keepCount = 500) {
 
 /**
  * Create or get DM channel between two users
+ * @param {string} initiatorId - The user initiating the DM
+ * @param {string} targetId - The target user
+ * @param {string} status - Channel status: 'active' or 'pending'
  */
-async function getOrCreateDMChannel(user1Id, user2Id) {
+async function getOrCreateDMChannel(initiatorId, targetId, status = 'active') {
   // Ensure consistent ordering for unique constraint
-  const [p1, p2] = user1Id < user2Id ? [user1Id, user2Id] : [user2Id, user1Id];
+  const [p1, p2] = initiatorId < targetId ? [initiatorId, targetId] : [targetId, initiatorId];
 
   const result = await query(
-    `INSERT INTO dm_channels (participant_1, participant_2)
-     VALUES ($1, $2)
+    `INSERT INTO dm_channels (participant_1, participant_2, status, initiated_by)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (participant_1, participant_2) DO UPDATE SET participant_1 = dm_channels.participant_1
      RETURNING *`,
-    [p1, p2]
+    [p1, p2, status, initiatorId]
   );
   return result.rows[0];
+}
+
+/**
+ * Check if two users are friends (accepted friendship)
+ */
+async function areFriends(userId1, userId2) {
+  const result = await query(
+    `SELECT id FROM friendships
+     WHERE ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+       AND status = 'accepted'
+     LIMIT 1`,
+    [userId1, userId2]
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * Get pending message requests for a user (where they are the recipient)
+ */
+async function getMessageRequests(userId) {
+  const result = await query(
+    `SELECT dc.*,
+            a.id as sender_id, a.username as sender_username, a.avatar as sender_avatar,
+            a.custom_avatar as sender_custom_avatar, a.color as sender_color, a.bio as sender_bio
+     FROM dm_channels dc
+     JOIN accounts a ON dc.initiated_by = a.id
+     WHERE dc.status = 'pending'
+       AND dc.initiated_by != $1
+       AND (dc.participant_1 = $1 OR dc.participant_2 = $1)
+     ORDER BY dc.created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+/**
+ * Accept a message request (set DM channel status to 'active')
+ */
+async function acceptMessageRequest(channelId, userId) {
+  const result = await query(
+    `UPDATE dm_channels SET status = 'active'
+     WHERE id = $1 AND status = 'pending'
+       AND (participant_1 = $2 OR participant_2 = $2)
+       AND initiated_by != $2
+     RETURNING *`,
+    [channelId, userId]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Reject/ignore a message request (delete the DM channel and its messages)
+ */
+async function rejectMessageRequest(channelId, userId) {
+  // Delete messages first, then channel
+  await query('DELETE FROM messages WHERE channel_id = $1', [channelId]);
+  const result = await query(
+    `DELETE FROM dm_channels
+     WHERE id = $1 AND status = 'pending'
+       AND (participant_1 = $2 OR participant_2 = $2)
+       AND initiated_by != $2
+     RETURNING *`,
+    [channelId, userId]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Get the DM channel status
+ */
+async function getDMChannelStatus(channelId) {
+  const result = await query(
+    'SELECT status, initiated_by FROM dm_channels WHERE id = $1',
+    [channelId]
+  );
+  return result.rows[0] || null;
 }
 
 /**
@@ -1524,6 +1603,13 @@ module.exports = {
   createCustomEmoji,
   updateCustomEmoji,
   deleteCustomEmoji,
+
+  // Message request functions
+  areFriends,
+  getMessageRequests,
+  acceptMessageRequest,
+  rejectMessageRequest,
+  getDMChannelStatus,
 
   // Platform admin functions
   getAllAccounts,

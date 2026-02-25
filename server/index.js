@@ -934,6 +934,13 @@ async function createPersonalServer(userId, dmChannels) {
       participant.status = 'online';
     }
 
+    // Determine message request status for this channel
+    const isChannelPending = dmChannel.status === 'pending';
+    let messageRequest = null;
+    if (isChannelPending) {
+      messageRequest = dmChannel.initiated_by === userId ? 'sent' : 'received';
+    }
+
     return {
       id: dmChannel.id,
       name: participant.username,
@@ -941,6 +948,7 @@ async function createPersonalServer(userId, dmChannels) {
       isDM: true,
       participant,
       lastMessage,
+      messageRequest,
       unreadCount: unreadCounts[dmChannel.id] || 0,
       position: 0,
       createdAt: new Date(dmChannel.created_at).getTime()
@@ -3010,7 +3018,7 @@ io.on('connection', (socket) => {
       if (!perms.sendMessages && !perms.admin) return socket.emit('error', { message: 'No permission to send messages in this channel' });
     }
 
-    // For DM channels, check if either user has blocked the other
+    // For DM channels, check if either user has blocked the other and check message request status
     if (!srv) {
       try {
         const dmChannels = await db.getDMChannelsForUser(user.id);
@@ -3022,6 +3030,11 @@ io.on('connection', (socket) => {
           const blockRelation = await db.getBlockRelation(user.id, otherUserId);
           if (blockRelation) {
             return socket.emit('error', { message: 'Cannot send messages to this user' });
+          }
+
+          // Check message request status — only the sender (initiator) can send messages while pending
+          if (dmChannel.status === 'pending' && dmChannel.initiated_by !== user.id) {
+            return socket.emit('error', { message: 'You must accept this message request before replying' });
           }
         }
       } catch (err) {
@@ -3425,10 +3438,16 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: 'Cannot send DM to this user' });
       }
 
+      // Check friendship status to determine if this should be a message request
+      const friends = await db.areFriends(user.id, targetUserId);
+
       // Get or create DM channel in database
-      const dmChannel = await db.getOrCreateDMChannel(user.id, targetUserId);
-      // ✅ Phase 2: Use plain UUID, no 'dm:' prefix
+      // If not friends, create as 'pending' (message request); if friends or channel already exists, 'active'
+      const dmChannel = await db.getOrCreateDMChannel(user.id, targetUserId, friends ? 'active' : 'pending');
       const channelId = dmChannel.id;
+
+      // If the channel already existed as 'active', use it normally regardless of friendship
+      const isPending = dmChannel.status === 'pending';
 
       // Initialize message store if not exists
       if (!state.messages[channelId]) {
@@ -3492,6 +3511,7 @@ io.on('connection', (socket) => {
           type: 'dm',
           isDM: true,
           participant: targetUser,
+          messageRequest: isPending ? 'sent' : null,
           createdAt: new Date(dmChannel.created_at).getTime()
         },
         messages,
@@ -3519,23 +3539,39 @@ io.on('connection', (socket) => {
             bio: user.bio
           };
 
-          // Don't navigate — just add the DM to their sidebar
-          recipientSocket.emit('dm:created', {
-            channel: {
-              id: channelId,
-              name: senderUser.username,
-              type: 'dm',
-              isDM: true,
-              participant: senderUser,
-              createdAt: new Date(dmChannel.created_at).getTime()
-            },
-            messages,
-            navigate: false
-          });
+          if (isPending) {
+            // Send as message request notification — don't add to their main DM list
+            recipientSocket.emit('dm:message-request', {
+              channel: {
+                id: channelId,
+                name: senderUser.username,
+                type: 'dm',
+                isDM: true,
+                participant: senderUser,
+                messageRequest: 'received',
+                createdAt: new Date(dmChannel.created_at).getTime()
+              },
+              messages
+            });
+          } else {
+            // Don't navigate — just add the DM to their sidebar
+            recipientSocket.emit('dm:created', {
+              channel: {
+                id: channelId,
+                name: senderUser.username,
+                type: 'dm',
+                isDM: true,
+                participant: senderUser,
+                createdAt: new Date(dmChannel.created_at).getTime()
+              },
+              messages,
+              navigate: false
+            });
+          }
         }
       }
 
-      console.log(`[DM] ${user.username} opened DM with ${targetUser.username}`);
+      console.log(`[DM] ${user.username} ${isPending ? 'sent message request to' : 'opened DM with'} ${targetUser.username}`);
     } catch (error) {
       console.error('[DM] Error creating DM channel:', error);
       socket.emit('error', { message: 'Failed to create DM channel' });
@@ -3605,11 +3641,19 @@ io.on('connection', (socket) => {
           participant.status = 'online';
         }
 
+        // Determine message request status
+        const isChannelPending = dmChannel.status === 'pending';
+        let messageRequest = null;
+        if (isChannelPending) {
+          messageRequest = dmChannel.initiated_by === user.id ? 'sent' : 'received';
+        }
+
         return {
           id: channelId,
           type: 'dm',
           participant,
           lastMessage,
+          messageRequest,
           createdAt: new Date(dmChannel.created_at).getTime()
         };
       }));
@@ -3753,6 +3797,188 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('[DM] Error deleting DM:', error);
       socket.emit('error', { message: 'Failed to delete conversation' });
+    }
+  });
+
+  // ─── Message Request Handlers ─────────────────────────────────────────────────
+
+  // List pending message requests for current user
+  socket.on('dm:message-requests', async () => {
+    const user = state.users[socket.id];
+    if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
+
+    try {
+      const requests = await db.getMessageRequests(user.id);
+      const formatted = requests.map(req => ({
+        id: req.id,
+        name: req.sender_username,
+        type: 'dm',
+        isDM: true,
+        messageRequest: 'received',
+        participant: {
+          id: req.sender_id,
+          username: req.sender_username,
+          avatar: req.sender_avatar,
+          customAvatar: req.sender_custom_avatar,
+          color: req.sender_color,
+          bio: req.sender_bio,
+          status: Object.values(state.users).some(u => u.id === req.sender_id) ? 'online' : 'offline'
+        },
+        createdAt: new Date(req.created_at).getTime()
+      }));
+      socket.emit('dm:message-requests', { requests: formatted });
+    } catch (error) {
+      console.error('[DM] Error fetching message requests:', error);
+      socket.emit('error', { message: 'Failed to fetch message requests' });
+    }
+  });
+
+  // Accept a message request
+  socket.on('dm:message-request:accept', async ({ channelId }) => {
+    const user = state.users[socket.id];
+    if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
+
+    try {
+      const dmChannel = await db.acceptMessageRequest(channelId, user.id);
+      if (!dmChannel) {
+        return socket.emit('error', { message: 'Message request not found' });
+      }
+
+      // Get the other participant's info
+      const otherUserId = dmChannel.participant_1 === user.id ? dmChannel.participant_2 : dmChannel.participant_1;
+      const otherAccount = await db.getAccountById(otherUserId);
+
+      // Load messages for this channel
+      const dbMessages = await db.getChannelMessages(channelId, 50);
+      const messages = await Promise.all(dbMessages.map(async (dbMsg) => {
+        let author = Object.values(state.users).find(u => u.id === dbMsg.author_id);
+        if (!author) {
+          const account = await db.getAccountById(dbMsg.author_id);
+          if (account) {
+            author = { id: account.id, username: account.username, avatar: account.avatar, customAvatar: account.custom_avatar, color: account.color };
+          }
+        }
+        return {
+          id: dbMsg.id, channelId,
+          content: dbMsg.content,
+          attachments: typeof dbMsg.attachments === 'string' ? JSON.parse(dbMsg.attachments || '[]') : (dbMsg.attachments || []),
+          author: author || { id: dbMsg.author_id, username: 'Deleted User', avatar: '👻', color: '#80848E' },
+          timestamp: new Date(dbMsg.created_at).getTime(),
+          reactions: typeof dbMsg.reactions === 'string' ? JSON.parse(dbMsg.reactions || '{}') : (dbMsg.reactions || {}),
+          mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
+          commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null)
+        };
+      }));
+
+      state.messages[channelId] = messages;
+
+      const otherUser = otherAccount ? {
+        id: otherAccount.id, username: otherAccount.username, avatar: otherAccount.avatar,
+        customAvatar: otherAccount.custom_avatar, color: otherAccount.color,
+        status: otherAccount.status, bio: otherAccount.bio
+      } : { id: otherUserId, username: 'Unknown User', avatar: '❓', color: '#60A5FA' };
+
+      // Notify the acceptor — move from message requests to active DMs
+      socket.emit('dm:message-request:accepted', {
+        channel: {
+          id: channelId, name: otherUser.username, type: 'dm', isDM: true,
+          participant: otherUser,
+          createdAt: new Date(dmChannel.created_at).getTime()
+        },
+        messages
+      });
+
+      // Notify the original sender if online — update their channel status
+      const senderSocketId = Object.keys(state.users).find(sid => state.users[sid].id === otherUserId);
+      if (senderSocketId) {
+        const senderSocket = io.sockets.sockets.get(senderSocketId);
+        if (senderSocket) {
+          senderSocket.emit('dm:message-request:accepted', {
+            channel: {
+              id: channelId, name: user.username, type: 'dm', isDM: true,
+              participant: { id: user.id, username: user.username, avatar: user.avatar, customAvatar: user.customAvatar, color: user.color, status: user.status, bio: user.bio },
+              createdAt: new Date(dmChannel.created_at).getTime()
+            },
+            messages
+          });
+        }
+      }
+
+      console.log(`[DM] ${user.username} accepted message request from ${otherUser.username}`);
+    } catch (error) {
+      console.error('[DM] Error accepting message request:', error);
+      socket.emit('error', { message: 'Failed to accept message request' });
+    }
+  });
+
+  // Reject/ignore a message request
+  socket.on('dm:message-request:reject', async ({ channelId }) => {
+    const user = state.users[socket.id];
+    if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
+
+    try {
+      const dmChannel = await db.rejectMessageRequest(channelId, user.id);
+      if (!dmChannel) {
+        return socket.emit('error', { message: 'Message request not found' });
+      }
+
+      // Clean up in-memory messages
+      delete state.messages[channelId];
+
+      // Leave the room
+      socket.leave(`text:${channelId}`);
+
+      socket.emit('dm:message-request:rejected', { channelId });
+
+      // Notify the original sender if online — remove pending DM from their side
+      const otherUserId = dmChannel.participant_1 === user.id ? dmChannel.participant_2 : dmChannel.participant_1;
+      const senderSocketId = Object.keys(state.users).find(sid => state.users[sid].id === otherUserId);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit('dm:message-request:rejected', { channelId });
+      }
+
+      console.log(`[DM] ${user.username} rejected message request for channel ${channelId}`);
+    } catch (error) {
+      console.error('[DM] Error rejecting message request:', error);
+      socket.emit('error', { message: 'Failed to reject message request' });
+    }
+  });
+
+  // Block from message request (reject + block the sender)
+  socket.on('dm:message-request:block', async ({ channelId }) => {
+    const user = state.users[socket.id];
+    if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
+
+    try {
+      // Get the channel to find the sender
+      const channelStatus = await db.getDMChannelStatus(channelId);
+      if (!channelStatus || channelStatus.status !== 'pending') {
+        return socket.emit('error', { message: 'Message request not found' });
+      }
+
+      // Block the sender
+      await db.blockUser(user.id, channelStatus.initiated_by);
+
+      // Reject the message request
+      await db.rejectMessageRequest(channelId, user.id);
+
+      // Clean up in-memory messages
+      delete state.messages[channelId];
+      socket.leave(`text:${channelId}`);
+
+      socket.emit('dm:message-request:rejected', { channelId });
+      socket.emit('user:blocked', { userId: channelStatus.initiated_by });
+
+      // Notify the sender
+      const senderSocketId = Object.keys(state.users).find(sid => state.users[sid].id === channelStatus.initiated_by);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit('dm:message-request:rejected', { channelId });
+      }
+
+      console.log(`[DM] ${user.username} blocked sender from message request ${channelId}`);
+    } catch (error) {
+      console.error('[DM] Error blocking from message request:', error);
+      socket.emit('error', { message: 'Failed to block user' });
     }
   });
 

@@ -1504,6 +1504,82 @@
   .remove-attachment { width: 24px; height: 24px; font-size: 14px; }
 }
 
+/* ─── Message Request Banner ──────────────────────────────────────────────── */
+.message-request-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color, rgba(255,255,255,0.06));
+  flex-shrink: 0;
+}
+
+.message-request-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+.message-request-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.message-request-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.message-request-btn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.message-request-btn:hover {
+  opacity: 0.85;
+}
+
+.message-request-btn.accept {
+  background: #3ba55d;
+  color: #fff;
+}
+
+.message-request-btn.ignore {
+  background: var(--bg-tertiary, #2b2d31);
+  color: var(--text-normal);
+}
+
+.message-request-btn.block {
+  background: #ed4245;
+  color: #fff;
+}
+
+.chat-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .message-request-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .message-request-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 /* Landscape phones — hide chat header since mobile nav bar shows channel info */
 @media (max-height: 500px) and (orientation: landscape) {
   .chat-header {
