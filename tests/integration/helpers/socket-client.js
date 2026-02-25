@@ -57,7 +57,17 @@ async function connectAndJoin(serverUrl, token) {
     socket.on('connect', () => {
       const initPromise = waitForEvent(socket, 'init', 10000);
       socket.emit('join', { token });
-      initPromise.then((initData) => {
+      initPromise.then(async (initData) => {
+        // If user has no regular servers (only personal), join the default server
+        // so integration tests have a server with channels to work with
+        const hasRegularServer = initData.servers.some(s => !s.isPersonal && !s.id?.startsWith('personal:'));
+        if (!hasRegularServer) {
+          const joinedPromise = waitForEvent(socket, 'invite:joined', 10000);
+          socket.emit('server:join-default');
+          const { server } = await joinedPromise;
+          initData.server = server;
+          initData.servers.push(server);
+        }
         clearTimeout(timer);
         // Remove the error handler so it doesn't disconnect the socket
         // when tests intentionally trigger server-side errors later
