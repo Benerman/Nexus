@@ -16,6 +16,7 @@ import UserProfileModal from './components/UserProfileModal';
 import ReportModal from './components/ReportModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActivityPanel from './components/ActivityPanel';
+import WelcomeTour from './components/WelcomeTour';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
 import './App.css';
@@ -83,8 +84,12 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('nexus_pinned_dms') || '[]'); } catch { return []; }
   });
   const [connectionState, setConnectionState] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
+  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
+  const [showReconnectedBanner, setShowReconnectedBanner] = useState(false);
+  const connectionBannerTimer = useRef(null);
   const [soundboardPlayed, setSoundboardPlayed] = useState(null); // { soundId, userId, username, _ts }
   const [scrollToMessageId, setScrollToMessageId] = useState(null); // message id to scroll to after channel switch
+  const [showTour, setShowTour] = useState(false);
 
   // Mute & notification state
   const [mutedServers, setMutedServers] = useState(() => {
@@ -480,6 +485,18 @@ export default function App() {
     s.on('connect', () => {
       console.log('[App]  Socket connected' + (isReconnect ? ' (reconnect)' : ''));
       setConnectionState('connected');
+
+      // Clear reconnection banner timer and show brief "Reconnected" message
+      if (connectionBannerTimer.current) {
+        clearTimeout(connectionBannerTimer.current);
+        connectionBannerTimer.current = null;
+      }
+      if (isReconnect) {
+        setShowConnectionBanner(false);
+        setShowReconnectedBanner(true);
+        setTimeout(() => setShowReconnectedBanner(false), 4000);
+      }
+
       s.emit('join', { token, username });
 
       // On reconnect, also request a full data refresh and rejoin active channel
@@ -514,6 +531,12 @@ export default function App() {
     s.on('reconnect_attempt', (attemptNumber) => {
       console.log(`[App]  Reconnect attempt #${attemptNumber}`);
       setConnectionState('connecting');
+      // Only show banner after 5 seconds of reconnection attempts
+      if (!connectionBannerTimer.current) {
+        connectionBannerTimer.current = setTimeout(() => {
+          setShowConnectionBanner(true);
+        }, 5000);
+      }
     });
 
     s.on('connect_error', (err) => {
@@ -550,6 +573,14 @@ export default function App() {
       }
       setRestoringSession(false);
       setCurrentUser(user);
+
+      // Detect first-time users: no regular servers and onboarding not yet completed
+      const hasRegularServers = servers.some(s => !s.isPersonal && !s.id?.startsWith('personal:'));
+      const onboardingDone = localStorage.getItem('nexus_onboarding_completed') === 'true';
+      if (!hasRegularServers && !onboardingDone && !pendingInviteCode.current) {
+        setShowTour(true);
+      }
+
       setServers(applySavedServerOrder(servers));
       setActiveServerId(server.id);
       setServerData(() => {
@@ -1576,6 +1607,14 @@ export default function App() {
     }
   }, []);
 
+  const handleTourComplete = useCallback((joinDefault) => {
+    localStorage.setItem('nexus_onboarding_completed', 'true');
+    setShowTour(false);
+    if (joinDefault && socketRef.current) {
+      socketRef.current.emit('server:join-default');
+    }
+  }, []);
+
   const openSettings = useCallback((tab = 'profile') => {
     setSettingsTab(tab); setSettingsOpen(true);
   }, []);
@@ -1741,6 +1780,7 @@ export default function App() {
   const activeHasMore = channelHasMore[activeChannel?.id] || false;
   const activeTyping = Object.values(typingUsers[activeChannel?.id] || {})
     .filter(u => u.id !== currentUser.id);
+  const hasRegularServers = servers.some(s => !s.isPersonal && !s.id?.startsWith('personal:'));
 
   return (
     <div
@@ -1751,14 +1791,22 @@ export default function App() {
       onTouchEnd={handleTouchEnd}
     >
       {errorMsg && <div className="global-error">{errorMsg}</div>}
-      {connectionState !== 'connected' && (
+      {showConnectionBanner && connectionState !== 'connected' && (
         <div className="connection-banner">
-          {connectionState === 'connecting' ? 'Reconnecting...' : 'Disconnected — waiting to reconnect'}
+          <span>{connectionState === 'connecting' ? 'Reconnecting...' : 'Disconnected — waiting to reconnect'}</span>
+          <button className="banner-close" onClick={() => setShowConnectionBanner(false)}>&times;</button>
+        </div>
+      )}
+      {showReconnectedBanner && (
+        <div className="connection-banner reconnected">
+          <span>Reconnected</span>
+          <button className="banner-close" onClick={() => setShowReconnectedBanner(false)}>&times;</button>
         </div>
       )}
       {updateAvailable && (
         <div className="update-banner" onClick={() => updateAvailable.install?.()}>
-          Nexus v{updateAvailable.version} is available — click to update
+          <span>Nexus v{updateAvailable.version} is available — click to update</span>
+          <button className="banner-close" onClick={(e) => { e.stopPropagation(); setUpdateAvailable(null); }}>&times;</button>
         </div>
       )}
 
@@ -1930,6 +1978,18 @@ export default function App() {
             voiceQuality={webrtc.voiceQuality}
             voiceStatusMessage={webrtc.voiceStatusMessage}
           />
+        ) : !activeChannel && !hasRegularServers ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">🏠</div>
+            <h2 className="empty-state-title">Welcome to Nexus</h2>
+            <p className="empty-state-text">You're not in any servers yet. Join the community or create your own!</p>
+            <div className="empty-state-actions">
+              <button className="empty-state-btn empty-state-btn-primary" onClick={() => {
+                if (socketRef.current) socketRef.current.emit('server:join-default');
+              }}>Join Nexus Server</button>
+              <button className="empty-state-btn empty-state-btn-secondary" onClick={() => openSettings('servers')}>Create a Server</button>
+            </div>
+          </div>
         ) : (
           <ChatArea channel={activeChannel} messages={activeMessages}
             typingUsers={activeTyping} currentUser={currentUser}
@@ -1999,6 +2059,12 @@ export default function App() {
           developerMode={developerMode}
           onSetDeveloperMode={(val) => { setDeveloperMode(val); localStorage.setItem('nexus_developer_mode', val ? 'true' : 'false'); }}
           onNavigateToMessage={handleNavigateToMessage} />
+      )}
+      {showTour && (
+        <WelcomeTour
+          onComplete={handleTourComplete}
+          onSkip={() => { localStorage.setItem('nexus_onboarding_completed', 'true'); setShowTour(false); }}
+        />
       )}
       {contextMenu && (
         <UserContextMenu
