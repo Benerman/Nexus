@@ -48,9 +48,9 @@
     "cap:ios": "npx cap open ios",
     "cap:sync": "npx cap sync",
     "tauri": "tauri",
-    "tauri:dev": "npx tauri dev",
-    "tauri:build": "npx tauri build",
-    "build:desktop-tauri": "npx tauri build",
+    "tauri:dev": "cross-env REACT_APP_SERVER_URL=$SERVER_URL npx tauri dev",
+    "tauri:build": "cross-env REACT_APP_SERVER_URL=$SERVER_URL npx tauri build",
+    "build:desktop-tauri": "cross-env REACT_APP_SERVER_URL=$SERVER_URL npx tauri build",
     "electron:dev": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && electron .",
     "build:desktop-electron": "cross-env GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build && npx electron-builder --publish never"
   },
