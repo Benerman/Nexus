@@ -14,6 +14,7 @@
 
 .tour-modal {
   background: var(--bg-secondary, #2b2d31);
+  border: 1px solid var(--bg-modifier-hover, #393c41);
   border-radius: 12px;
   width: 480px;
   max-width: 90vw;
@@ -88,11 +89,13 @@
 }
 
 .tour-btn-secondary {
-  background: transparent;
-  color: var(--text-muted, #b5bac1);
+  background: var(--bg-tertiary, #1e1f22);
+  color: var(--text-primary, #f2f3f5);
+  border: 1px solid var(--bg-modifier-hover, #393c41);
 }
 
 .tour-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-modifier-hover, #393c41);
   color: var(--text-primary, #f2f3f5);
 }
 
@@ -127,8 +130,8 @@
 
 .tour-nav-btn {
   border: none;
-  background: none;
-  color: var(--text-muted, #b5bac1);
+  background: var(--bg-tertiary, #1e1f22);
+  color: var(--text-primary, #f2f3f5);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -143,12 +146,17 @@
 }
 
 .tour-nav-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: default;
 }
 
 .tour-nav-next {
-  color: var(--brand-500, #5865f2);
+  background: var(--brand-500, #5865f2);
+  color: #fff;
+}
+
+.tour-nav-next:hover:not(:disabled) {
+  background: var(--brand-560, #4752c4);
 }
 
 /* Dots */
@@ -161,7 +169,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--bg-tertiary, #1e1f22);
+  background: var(--bg-modifier-hover, #393c41);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -171,7 +179,7 @@
 }
 
 .tour-dot:hover:not(.active) {
-  background: var(--bg-modifier-hover, #393c41);
+  background: var(--text-muted, #b5bac1);
 }
 
 /* Tooltip Overlay */
@@ -198,6 +206,7 @@
   position: fixed;
   z-index: 10004;
   background: var(--bg-secondary, #2b2d31);
+  border: 1px solid var(--bg-modifier-hover, #393c41);
   border-radius: 8px;
   padding: 16px;
   width: 260px;
