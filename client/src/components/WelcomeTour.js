@@ -88,6 +88,13 @@ export default function WelcomeTour({ onComplete, onSkip }) {
   };
 
   const handleSkipToTooltips = () => {
+    // Check if tooltip target elements exist before entering tooltip phase
+    const firstEl = document.querySelector(TOOLTIP_STEPS[0].selector);
+    if (!firstEl) {
+      // No UI elements to highlight — finish the tour
+      onSkip();
+      return;
+    }
     setPhase('tooltips');
   };
 
@@ -148,21 +155,28 @@ export default function WelcomeTour({ onComplete, onSkip }) {
           )}
 
           <div className="tour-nav">
-            <button className="tour-nav-btn" onClick={handlePrevSlide} disabled={slideIndex === 0}>
-              Back
-            </button>
+            {slideIndex === 0 ? (
+              <button className="tour-nav-btn" onClick={onSkip}>
+                Skip
+              </button>
+            ) : (
+              <button className="tour-nav-btn" onClick={handlePrevSlide}>
+                Back
+              </button>
+            )}
             <div className="tour-dots">
               {SLIDES.map((_, i) => (
                 <span key={i} className={`tour-dot ${i === slideIndex ? 'active' : ''}`}
                   onClick={() => setSlideIndex(i)} />
               ))}
             </div>
-            {!isLastSlide && (
+            {!isLastSlide ? (
               <button className="tour-nav-btn tour-nav-next" onClick={handleNextSlide}>
                 Next
               </button>
+            ) : (
+              <div style={{ width: 60 }} />
             )}
-            {isLastSlide && <div style={{ width: 60 }} />}
           </div>
         </div>
       </div>,
@@ -170,32 +184,36 @@ export default function WelcomeTour({ onComplete, onSkip }) {
     );
   }
 
-  // Phase: tooltips
+  // Phase: tooltips — if no target element found, bail out
+  if (!tooltipRect) {
+    // Target element not in the DOM; end the tour gracefully
+    return ReactDOM.createPortal(
+      <div className="tour-tooltip-overlay" onClick={onSkip} />,
+      document.body
+    );
+  }
+
   return ReactDOM.createPortal(
-    <div className="tour-tooltip-overlay">
-      {tooltipRect && (
-        <div className="tour-spotlight" style={{
-          top: tooltipRect.top - 6,
-          left: tooltipRect.left - 6,
-          width: tooltipRect.width + 12,
-          height: tooltipRect.height + 12
-        }} />
-      )}
-      {tooltipRect && (
-        <div className="tour-tooltip" ref={tooltipRef} style={getTooltipStyle()}>
-          <p className="tour-tooltip-text">{currentStep.text}</p>
-          <div className="tour-tooltip-nav">
-            <button className="tour-btn tour-btn-small" onClick={handlePrevTooltip} disabled={tooltipStep === 0}>
-              Back
-            </button>
-            <span className="tour-tooltip-count">{tooltipStep + 1} / {TOOLTIP_STEPS.length}</span>
-            <button className="tour-btn tour-btn-small tour-btn-primary" onClick={handleNextTooltip}>
-              {tooltipStep === TOOLTIP_STEPS.length - 1 ? 'Finish' : 'Next'}
-            </button>
-          </div>
-          <button className="tour-tooltip-skip" onClick={onSkip}>Skip tour</button>
+    <div className="tour-tooltip-overlay" onClick={onSkip}>
+      <div className="tour-spotlight" style={{
+        top: tooltipRect.top - 6,
+        left: tooltipRect.left - 6,
+        width: tooltipRect.width + 12,
+        height: tooltipRect.height + 12
+      }} />
+      <div className="tour-tooltip" ref={tooltipRef} style={getTooltipStyle()} onClick={e => e.stopPropagation()}>
+        <p className="tour-tooltip-text">{currentStep.text}</p>
+        <div className="tour-tooltip-nav">
+          <button className="tour-btn tour-btn-small" onClick={handlePrevTooltip} disabled={tooltipStep === 0}>
+            Back
+          </button>
+          <span className="tour-tooltip-count">{tooltipStep + 1} / {TOOLTIP_STEPS.length}</span>
+          <button className="tour-btn tour-btn-small tour-btn-primary" onClick={handleNextTooltip}>
+            {tooltipStep === TOOLTIP_STEPS.length - 1 ? 'Finish' : 'Next'}
+          </button>
         </div>
-      )}
+        <button className="tour-tooltip-skip" onClick={onSkip}>Skip tour</button>
+      </div>
     </div>,
     document.body
   );
