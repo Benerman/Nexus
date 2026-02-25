@@ -109,6 +109,7 @@ See `.env.example` and `server/.env.example` for full list.
 - Permissions must be checked on both client and server side
 - Security: bcrypt (12 rounds), Helmet.js, CORS whitelist, input sanitization on all user data
 - Cross-platform: web is primary; Capacitor (mobile), Tauri (desktop), Electron (fallback) are secondary
+- Git workflow: always work on feature branches — never commit directly to main. Create a PR to merge changes.
 
 ## Icon Generation
 

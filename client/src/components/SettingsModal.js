@@ -3367,8 +3367,8 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   <strong>Webhook Created!</strong>
                   <p>Copy this URL — it won't be shown again:</p>
                   <div className="webhook-url">
-                    <code>{window.location.origin}{createdWebhook.url}</code>
-                    <button className="copy-btn" onClick={()=>navigator.clipboard.writeText(window.location.origin+createdWebhook.url)}>Copy</button>
+                    <code>{createdWebhook.url}</code>
+                    <button className="copy-btn" onClick={()=>navigator.clipboard.writeText(createdWebhook.url)}>Copy</button>
                   </div>
                   <button className="settings-btn" onClick={()=>setCreatedWebhook(null)}>Dismiss</button>
                 </div>

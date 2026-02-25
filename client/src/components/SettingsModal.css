@@ -301,13 +301,16 @@
 .webhook-url-box strong { color: var(--text-positive); }
 .webhook-url {
   display: flex; align-items: center; gap: 8px; background: var(--bg-tertiary);
-  border-radius: 4px; padding: 8px 12px; margin: 8px 0; overflow-x: auto;
+  border-radius: 4px; padding: 8px 12px; margin: 8px 0;
 }
-.webhook-url code { flex: 1; font-family: var(--font-code); font-size: 12px; color: var(--text-normal); }
+.webhook-url code {
+  flex: 1; font-family: var(--font-code); font-size: 12px; color: var(--text-normal);
+  overflow-x: auto; min-width: 0;
+}
 .copy-btn {
   background: var(--brand-500); color: #fff; border-radius: 4px;
   padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
-  transition: background 0.15s;
+  transition: background 0.15s; flex-shrink: 0;
 }
 .copy-btn:hover { background: var(--brand-600); }
 .webhook-channel-group { margin-bottom: 16px; }

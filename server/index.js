@@ -2362,7 +2362,7 @@ io.on('connection', (socket) => {
     const webhook = { id: webhookId, name: webhookName, channelId, createdBy: user.id, createdAt: Date.now() };
     if (!ch.webhooks) ch.webhooks = [];
     ch.webhooks.push(webhook);
-    const url = `/api/webhooks/${webhookId}/${token}`;
+    const url = `${config.client.url}/api/webhooks/${webhookId}/${token}`;
     socket.emit('webhook:created', { webhook: { ...webhook, url } });
     io.emit('channel:updated', { serverId, channel: ch, channels: srv.channels, categories: srv.categories });
   });
