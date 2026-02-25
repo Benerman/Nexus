@@ -183,6 +183,8 @@ async function authenticateAndNavigate(page, token, username) {
     localStorage.setItem('nexus_token', token);
     localStorage.setItem('nexus_username', username);
     localStorage.setItem('nexus_server_url', serverUrl);
+    // Skip onboarding tour in tests so it doesn't overlay the UI
+    localStorage.setItem('nexus_onboarding_completed', 'true');
   }, { token, username, serverUrl: SERVER_URL });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.app', { timeout: 30000 });
