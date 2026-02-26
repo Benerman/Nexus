@@ -36,6 +36,20 @@
   margin-bottom: 4px;
 }
 
+.channel-category.category-muted .channel-category-header {
+  opacity: 0.5;
+}
+
+.channel-category.category-muted .channel-item {
+  opacity: 0.5;
+}
+
+.category-muted-icon {
+  font-size: 10px;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
 .channel-category-header {
   display: flex;
   align-items: center;
@@ -613,6 +627,17 @@
 }
 .channel-item.has-unread .channel-icon {
   opacity: 1;
+}
+
+.channel-item.channel-muted {
+  opacity: 0.5;
+}
+
+.channel-muted-icon {
+  font-size: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 /* DM context menu in sidebar */

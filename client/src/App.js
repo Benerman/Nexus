@@ -12,6 +12,7 @@ import SettingsModal from './components/SettingsModal';
 import UserContextMenu from './components/UserContextMenu';
 import ServerContextMenu from './components/ServerContextMenu';
 import ChannelContextMenu from './components/ChannelContextMenu';
+import CategoryContextMenu from './components/CategoryContextMenu';
 import UserProfileModal from './components/UserProfileModal';
 import ReportModal from './components/ReportModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
@@ -72,6 +73,7 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState(null);
   const [serverContextMenu, setServerContextMenu] = useState(null);
   const [channelContextMenu, setChannelContextMenu] = useState(null);
+  const [categoryContextMenu, setCategoryContextMenu] = useState(null);
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [messageRequests, setMessageRequests] = useState([]); // pending DM message requests
@@ -98,6 +100,9 @@ export default function App() {
   });
   const [mutedChannels, setMutedChannels] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nexus_muted_channels') || '{}'); } catch { return {}; }
+  });
+  const [mutedCategories, setMutedCategories] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nexus_muted_categories') || '{}'); } catch { return {}; }
   });
   const [messageSoundsEnabled, setMessageSoundsEnabled] = useState(() => localStorage.getItem('nexus_message_sounds_enabled') !== 'false');
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('nexus_notifications_enabled') !== 'false');
@@ -210,6 +215,38 @@ export default function App() {
       const next = { ...prev };
       delete next[channelId];
       localStorage.setItem('nexus_muted_channels', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const isCategoryMuted = useCallback((categoryId) => {
+    const entry = mutedCategories[categoryId];
+    if (!entry) return false;
+    if (entry.until === 'forever') return true;
+    if (Date.now() < entry.until) return true;
+    setMutedCategories(prev => {
+      const next = { ...prev };
+      delete next[categoryId];
+      localStorage.setItem('nexus_muted_categories', JSON.stringify(next));
+      return next;
+    });
+    return false;
+  }, [mutedCategories]);
+
+  const handleMuteCategory = useCallback((categoryId, duration) => {
+    const until = duration === 'forever' ? 'forever' : Date.now() + duration;
+    setMutedCategories(prev => {
+      const next = { ...prev, [categoryId]: { until } };
+      localStorage.setItem('nexus_muted_categories', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const handleUnmuteCategory = useCallback((categoryId) => {
+    setMutedCategories(prev => {
+      const next = { ...prev };
+      delete next[categoryId];
+      localStorage.setItem('nexus_muted_categories', JSON.stringify(next));
       return next;
     });
   }, []);
@@ -357,6 +394,10 @@ export default function App() {
   useEffect(() => { mutedServersRef.current = mutedServers; }, [mutedServers]);
   const mutedChannelsRef = useRef(mutedChannels);
   useEffect(() => { mutedChannelsRef.current = mutedChannels; }, [mutedChannels]);
+  const mutedCategoriesRef = useRef(mutedCategories);
+  useEffect(() => { mutedCategoriesRef.current = mutedCategories; }, [mutedCategories]);
+  const serverDataRef = useRef(serverData);
+  useEffect(() => { serverDataRef.current = serverData; }, [serverData]);
   const messageSoundsEnabledRef = useRef(messageSoundsEnabled);
   useEffect(() => { messageSoundsEnabledRef.current = messageSoundsEnabled; }, [messageSoundsEnabled]);
   const notificationsEnabledRef = useRef(notificationsEnabled);
@@ -698,7 +739,19 @@ export default function App() {
         const channelMute = mutedChannelsRef.current[msg.channelId];
         const isServerMuted = serverMute && (serverMute.until === 'forever' || Date.now() < serverMute.until);
         const isChannelMuted = channelMute && (channelMute.until === 'forever' || Date.now() < channelMute.until);
-        if (!isServerMuted && !isChannelMuted) {
+        // Check if the channel's category is muted
+        let isCatMuted = false;
+        const srv = serverDataRef.current[msg.serverId];
+        if (srv?.categories) {
+          const catId = Object.keys(srv.categories).find(cid =>
+            srv.categories[cid].channels?.includes(msg.channelId)
+          );
+          if (catId) {
+            const catMute = mutedCategoriesRef.current[catId];
+            isCatMuted = catMute && (catMute.until === 'forever' || Date.now() < catMute.until);
+          }
+        }
+        if (!isServerMuted && !isChannelMuted && !isCatMuted) {
           // Play sound — always if mentioned, otherwise only when not viewing channel
           if (messageSoundsEnabledRef.current && (isMentioned || !isViewingChannel)) {
             playMessageSound();
@@ -1570,6 +1623,11 @@ export default function App() {
     setChannelContextMenu({ channel, position: { x: event.clientX, y: event.clientY } });
   }, []);
 
+  const handleCategoryContextMenu = useCallback((event, category) => {
+    event.preventDefault();
+    setCategoryContextMenu({ category, position: { x: event.clientX, y: event.clientY } });
+  }, []);
+
   // ✅ Phase 2: Removed handleSelectDM - DM channels are selected like regular channels
 
   // Navigate to a DM channel directly (used by promoted/pinned DMs and friend clicks)
@@ -1869,7 +1927,7 @@ export default function App() {
   return (
     <div
       className="app"
-      onClick={() => { setContextMenu(null); setServerContextMenu(null); setChannelContextMenu(null); }}
+      onClick={() => { setContextMenu(null); setServerContextMenu(null); setChannelContextMenu(null); setCategoryContextMenu(null); }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -1947,6 +2005,8 @@ export default function App() {
         onNavigateToVoice={handleNavigateToVoice}
         dmCallActive={dmCallActive}
         onChannelContextMenu={handleChannelContextMenu}
+        mutedCategories={mutedCategories}
+        onCategoryContextMenu={handleCategoryContextMenu}
         activityCount={activeJobCount}
         onToggleActivity={() => setActivityOpen(o => !o)}
       />
@@ -2215,6 +2275,17 @@ export default function App() {
           mutedChannels={mutedChannels}
           onMuteChannel={handleMuteChannel}
           onUnmuteChannel={handleUnmuteChannel}
+        />
+      )}
+      {categoryContextMenu && (
+        <CategoryContextMenu
+          category={categoryContextMenu.category}
+          position={categoryContextMenu.position}
+          onClose={() => setCategoryContextMenu(null)}
+          developerMode={developerMode}
+          mutedCategories={mutedCategories}
+          onMuteCategory={handleMuteCategory}
+          onUnmuteCategory={handleUnmuteCategory}
         />
       )}
     </div>
