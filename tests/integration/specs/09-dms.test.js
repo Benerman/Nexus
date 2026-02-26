@@ -13,6 +13,17 @@ describe('Direct Messages', () => {
     user1 = await users.createConnected('dm1');
     user2 = await users.createConnected('dm2');
     user3 = await users.createConnected('dm3');
+
+    // Make user1 and user2 friends so DM creation emits dm:created to both
+    const sentPromise = waitForEvent(user1.socket, 'friend:request:sent', 5000);
+    const receivedPromise = waitForEvent(user2.socket, 'friend:request:received', 5000);
+    user1.socket.emit('friend:request', { targetUsername: user2.username });
+    await sentPromise;
+    const received = await receivedPromise;
+
+    const acceptedPromise = waitForEvent(user1.socket, 'friend:accepted', 5000);
+    user2.socket.emit('friend:accept', { requestId: received.requestId });
+    await acceptedPromise;
   });
 
   afterAll(async () => {
