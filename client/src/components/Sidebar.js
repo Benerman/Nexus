@@ -181,6 +181,7 @@ const Sidebar = React.memo(function Sidebar({
   mutedChannels = {}, onMuteChannel, onUnmuteChannel,
   onNavigateToVoice, dmCallActive,
   onChannelContextMenu,
+  mutedCategories = {}, onCategoryContextMenu,
   activityCount = 0, onToggleActivity
 }) {
   const [collapsed, setCollapsedRaw] = useState(() => {
@@ -633,11 +634,18 @@ const Sidebar = React.memo(function Sidebar({
             if (!cat) return null;
             const catChannels = (cat.channels || []).map(id => allChannels.find(c => c.id === id)).filter(Boolean);
             const isCollapsed = collapsed[catId];
+            const catMuteEntry = mutedCategories[catId];
+            const isCatMuted = catMuteEntry && (catMuteEntry.until === 'forever' || Date.now() < catMuteEntry.until);
             return (
-              <div key={catId} className="channel-category">
-                <button className="channel-category-header" onClick={() => toggleCategory(catId)}>
+              <div key={catId} className={`channel-category ${isCatMuted ? 'category-muted' : ''}`}>
+                <button
+                  className="channel-category-header"
+                  onClick={() => toggleCategory(catId)}
+                  onContextMenu={(e) => { e.preventDefault(); onCategoryContextMenu?.(e, cat); }}
+                >
                   <span className={`collapse-arrow ${isCollapsed ? 'collapsed' : ''}`}>▶</span>
                   <span>{cat.name}</span>
+                  {isCatMuted && <span className="category-muted-icon" title="Muted">🔕</span>}
                   <button className="add-channel-btn"
                     onClick={e => { e.stopPropagation(); onOpenSettings?.('channels'); }}
                     title="Add channel">+</button>
