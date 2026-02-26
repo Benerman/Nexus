@@ -313,7 +313,8 @@ app.post('/api/webhooks/:webhookId/:token', async (req, res) => {
             webhookUsername: displayUsername,
             webhookAvatar: displayAvatar,
             replyTo: null,
-            mentions: webhookMentions
+            mentions: webhookMentions,
+            embeds: validEmbeds
           });
         } catch (error) {
           console.error('[Webhook] Error saving webhook message to database:', error);
@@ -2943,42 +2944,28 @@ io.on('connection', (socket) => {
   socket.on('messages:fetch-older', async ({ channelId, beforeTimestamp, limit = 30 }, callback) => {
     const user = state.users[socket.id];
     if (!user) return;
+    if (typeof callback !== 'function') return;
+
     try {
-      const allMsgs = state.messages[channelId] || [];
-      const beforeIdx = allMsgs.findIndex(m => m.timestamp >= beforeTimestamp);
-      let olderMsgs;
-      if (beforeIdx > 0) {
-        olderMsgs = allMsgs.slice(Math.max(0, beforeIdx - limit), beforeIdx);
-      } else if (beforeIdx === 0) {
-        olderMsgs = [];
-      } else {
-        // All messages are before the timestamp — check the DB
-        olderMsgs = [];
-      }
-      // If we have fewer than requested from memory, try the database
-      if (olderMsgs.length < limit) {
-        try {
-          const dbMsgs = await db.getChannelMessages(channelId, limit + 10);
-          if (dbMsgs.length > 0) {
-            const converted = await convertDbMessages(dbMsgs, channelId);
-            // Merge into state (dedup by id)
-            const existingIds = new Set(allMsgs.map(m => m.id));
-            const newMsgs = converted.filter(m => !existingIds.has(m.id));
-            if (newMsgs.length > 0) {
-              state.messages[channelId] = [...newMsgs, ...allMsgs].sort((a, b) => a.timestamp - b.timestamp);
-              // Re-search for older messages
-              const updatedAll = state.messages[channelId];
-              const idx = updatedAll.findIndex(m => m.timestamp >= beforeTimestamp);
-              if (idx > 0) {
-                olderMsgs = updatedAll.slice(Math.max(0, idx - limit), idx);
-              }
-            }
+      const dbMsgs = await db.getMessagesBefore(channelId, beforeTimestamp, limit);
+
+      let olderMsgs = [];
+      if (dbMsgs.length > 0) {
+        olderMsgs = await convertDbMessages(dbMsgs, channelId);
+
+        // Merge into memory cache for edit/delete/reaction consistency
+        const allMsgs = state.messages[channelId] || [];
+        const existingIds = new Set(allMsgs.map(m => m.id));
+        const newMsgs = olderMsgs.filter(m => !existingIds.has(m.id));
+        if (newMsgs.length > 0) {
+          state.messages[channelId] = [...newMsgs, ...allMsgs].sort((a, b) => a.timestamp - b.timestamp);
+          if (state.messages[channelId].length > 500) {
+            state.messages[channelId] = state.messages[channelId].slice(-500);
           }
-        } catch (err) {
-          console.warn('[Messages] DB fetch for older messages failed:', err.message);
         }
       }
-      // For DM channels, filter out messages before the user's delete timestamp
+
+      // DM deleted-message filtering
       try {
         const account = await db.getAccountById(user.id);
         const deletedDMs = account?.settings?.deleted_dms || {};
@@ -2988,10 +2975,10 @@ io.on('connection', (socket) => {
         }
       } catch (err) { /* ignore */ }
 
-      if (typeof callback === 'function') callback({ messages: olderMsgs, hasMore: olderMsgs.length >= limit });
+      callback({ messages: olderMsgs, hasMore: dbMsgs.length >= limit });
     } catch (err) {
       console.error('[Messages] Error fetching older messages:', err.message);
-      if (typeof callback === 'function') callback({ messages: [], hasMore: false });
+      callback({ messages: [], hasMore: false });
     }
   });
 
@@ -3461,15 +3448,25 @@ io.on('connection', (socket) => {
       const messages = await Promise.all(dbMessages.map(async (dbMsg) => {
         let author = Object.values(state.users).find(u => u.id === dbMsg.author_id);
         if (!author) {
-          const account = await db.getAccountById(dbMsg.author_id);
-          if (account) {
+          if (dbMsg.is_webhook) {
             author = {
-              id: account.id,
-              username: account.username,
-              avatar: account.avatar,
-              customAvatar: account.custom_avatar,
-              color: account.color
+              id: `webhook:${dbMsg.id}`,
+              username: dbMsg.webhook_username || 'Webhook',
+              avatar: dbMsg.webhook_avatar || '🤖',
+              color: '#60A5FA',
+              isWebhook: true
             };
+          } else {
+            const account = await db.getAccountById(dbMsg.author_id);
+            if (account) {
+              author = {
+                id: account.id,
+                username: account.username,
+                avatar: account.avatar,
+                customAvatar: account.custom_avatar,
+                color: account.color
+              };
+            }
           }
         }
 
@@ -3481,8 +3478,13 @@ io.on('connection', (socket) => {
           author: author || { id: dbMsg.author_id, username: 'Deleted User', avatar: '👻', color: '#80848E' },
           timestamp: new Date(dbMsg.created_at).getTime(),
           reactions: typeof dbMsg.reactions === 'string' ? JSON.parse(dbMsg.reactions || '{}') : (dbMsg.reactions || {}),
+          replyTo: dbMsg.reply_to || null,
+          isWebhook: dbMsg.is_webhook || false,
+          webhookUsername: dbMsg.webhook_username || null,
+          webhookAvatar: dbMsg.webhook_avatar || null,
           mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
-          commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null)
+          commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
+          embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
         };
       }));
 
@@ -3853,9 +3855,19 @@ io.on('connection', (socket) => {
       const messages = await Promise.all(dbMessages.map(async (dbMsg) => {
         let author = Object.values(state.users).find(u => u.id === dbMsg.author_id);
         if (!author) {
-          const account = await db.getAccountById(dbMsg.author_id);
-          if (account) {
-            author = { id: account.id, username: account.username, avatar: account.avatar, customAvatar: account.custom_avatar, color: account.color };
+          if (dbMsg.is_webhook) {
+            author = {
+              id: `webhook:${dbMsg.id}`,
+              username: dbMsg.webhook_username || 'Webhook',
+              avatar: dbMsg.webhook_avatar || '🤖',
+              color: '#60A5FA',
+              isWebhook: true
+            };
+          } else {
+            const account = await db.getAccountById(dbMsg.author_id);
+            if (account) {
+              author = { id: account.id, username: account.username, avatar: account.avatar, customAvatar: account.custom_avatar, color: account.color };
+            }
           }
         }
         return {
@@ -3865,8 +3877,13 @@ io.on('connection', (socket) => {
           author: author || { id: dbMsg.author_id, username: 'Deleted User', avatar: '👻', color: '#80848E' },
           timestamp: new Date(dbMsg.created_at).getTime(),
           reactions: typeof dbMsg.reactions === 'string' ? JSON.parse(dbMsg.reactions || '{}') : (dbMsg.reactions || {}),
+          replyTo: dbMsg.reply_to || null,
+          isWebhook: dbMsg.is_webhook || false,
+          webhookUsername: dbMsg.webhook_username || null,
+          webhookAvatar: dbMsg.webhook_avatar || null,
           mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
-          commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null)
+          commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
+          embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
         };
       }));
 
@@ -5054,15 +5071,25 @@ async function convertDbMessages(dbMessages, channelId) {
   return Promise.all(dbMessages.map(async (dbMsg) => {
     let author = Object.values(state.users).find(u => u.id === dbMsg.author_id);
     if (!author) {
-      const account = await db.getAccountById(dbMsg.author_id);
-      if (account) {
+      if (dbMsg.is_webhook) {
         author = {
-          id: account.id,
-          username: account.username,
-          avatar: account.avatar,
-          customAvatar: account.custom_avatar,
-          color: account.color
+          id: `webhook:${dbMsg.id}`,
+          username: dbMsg.webhook_username || 'Webhook',
+          avatar: dbMsg.webhook_avatar || '🤖',
+          color: '#60A5FA',
+          isWebhook: true
         };
+      } else {
+        const account = await db.getAccountById(dbMsg.author_id);
+        if (account) {
+          author = {
+            id: account.id,
+            username: account.username,
+            avatar: account.avatar,
+            customAvatar: account.custom_avatar,
+            color: account.color
+          };
+        }
       }
     }
     return {
@@ -5078,7 +5105,8 @@ async function convertDbMessages(dbMessages, channelId) {
       webhookUsername: dbMsg.webhook_username || null,
       webhookAvatar: dbMsg.webhook_avatar || null,
       mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
-      commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null)
+      commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
+      embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
     };
   }));
 }
