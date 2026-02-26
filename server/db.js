@@ -312,12 +312,12 @@ async function getServerMembers(serverId) {
 /**
  * Save a message
  */
-async function saveMessage({ id, channelId, authorId, content, attachments = [], isWebhook = false, webhookUsername, webhookAvatar, replyTo = null, mentions = null, commandData = null }) {
+async function saveMessage({ id, channelId, authorId, content, attachments = [], isWebhook = false, webhookUsername, webhookAvatar, replyTo = null, mentions = null, commandData = null, embeds = [] }) {
   const result = await query(
-    `INSERT INTO messages (id, channel_id, author_id, content, attachments, is_webhook, webhook_username, webhook_avatar, reply_to, mentions, command_data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO messages (id, channel_id, author_id, content, attachments, is_webhook, webhook_username, webhook_avatar, reply_to, mentions, command_data, embeds)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
-    [id, channelId, authorId, content, JSON.stringify(attachments), isWebhook, webhookUsername, webhookAvatar, replyTo, mentions ? JSON.stringify(mentions) : '{}', commandData ? JSON.stringify(commandData) : null]
+    [id, channelId, authorId, content, JSON.stringify(attachments), isWebhook, webhookUsername, webhookAvatar, replyTo, mentions ? JSON.stringify(mentions) : '{}', commandData ? JSON.stringify(commandData) : null, JSON.stringify(embeds)]
   );
   return result.rows[0];
 }
@@ -331,6 +331,17 @@ async function getChannelMessages(channelId, limit = 50, offset = 0) {
     [channelId, limit, offset]
   );
   return result.rows.reverse(); // Return in chronological order
+}
+
+/**
+ * Get messages before a given timestamp (cursor-based pagination)
+ */
+async function getMessagesBefore(channelId, beforeTimestamp, limit = 30) {
+  const result = await query(
+    'SELECT * FROM messages WHERE channel_id = $1 AND created_at < $2 ORDER BY created_at DESC LIMIT $3',
+    [channelId, new Date(beforeTimestamp), limit]
+  );
+  return result.rows.reverse();
 }
 
 /**
@@ -1527,6 +1538,7 @@ module.exports = {
   // Message functions
   saveMessage,
   getChannelMessages,
+  getMessagesBefore,
   updateMessage,
   updateMessageReactions,
   deleteMessage,
