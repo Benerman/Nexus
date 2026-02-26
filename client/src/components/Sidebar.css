@@ -629,6 +629,17 @@
   opacity: 1;
 }
 
+.channel-item.channel-muted {
+  opacity: 0.5;
+}
+
+.channel-muted-icon {
+  font-size: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
 /* DM context menu in sidebar */
 .dm-sidebar-ctx-menu {
   background: var(--bg-floating, #18191c);

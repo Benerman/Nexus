@@ -264,17 +264,20 @@ const Sidebar = React.memo(function Sidebar({
     const inThis = currentVoiceChannel === ch.id;
     const isActive = activeChannel?.id === ch.id && activeChannelType === ch.type;
     const unreadCount = isText ? (channelUnreadCounts[ch.id] || 0) : 0;
+    const chMuteEntry = mutedChannels[ch.id];
+    const isChMuted = chMuteEntry && (chMuteEntry.until === 'forever' || Date.now() < chMuteEntry.until);
 
     return (
       <div key={ch.id}>
         <button
-          className={`channel-item ${isActive ? 'active' : ''} ${inThis ? 'voice-active' : ''} ${unreadCount > 0 && !isActive ? 'has-unread' : ''}`}
+          className={`channel-item ${isActive ? 'active' : ''} ${inThis ? 'voice-active' : ''} ${unreadCount > 0 && !isActive ? 'has-unread' : ''} ${isChMuted ? 'channel-muted' : ''}`}
           onClick={() => onSelectChannel(ch, ch.type)}
           onContextMenu={(e) => { e.preventDefault(); onChannelContextMenu?.(e, ch); }}
         >
           <span className="channel-icon">{isText ? <HashIcon /> : <SpeakerIcon />}</span>
           <span className="channel-name">{ch.name}</span>
           {ch.isPrivate && <LockIcon />}
+          {isChMuted && <span className="channel-muted-icon" title="Muted">🔕</span>}
           {!isText && chData.users.length > 0 && <span className="voice-count">{chData.users.length}</span>}
           {isText && (ch.webhooks || []).length > 0 && <span className="channel-webhook-dot">LINK</span>}
           {isText && !isActive && unreadCount > 0 && (
