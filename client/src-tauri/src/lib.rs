@@ -105,7 +105,8 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon@2x.png"))?)
+                .icon_as_template(true)
                 .tooltip("Nexus")
                 .menu(&tray_menu)
                 .on_menu_event(move |_app, event| {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import WebhookDocs from './WebhookDocs';
+import CustomSelect from './CustomSelect';
 import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/socketTimeout';
 import { getServerUrl, isStandaloneApp, isTauriApp, isCapacitorApp, openExternalUrl } from '../config';
 import { checkForUpdates } from '../utils/updater';
@@ -356,6 +357,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const passwordTimeoutRef = useRef(null);
+
+  // Logout / Change Server confirmation (window.confirm doesn't work in Tauri macOS release builds)
+  const [confirmAction, setConfirmAction] = useState(null); // 'logout' | 'changeServer' | null
 
   // Delete account
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -1927,22 +1931,42 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
                     Connected to: <span style={{ color: 'var(--text-normal)', fontWeight: 500 }}>{getServerUrl() || 'Default'}</span>
                   </div>
-                  <button
-                    className="settings-btn"
-                    style={{ background: 'rgba(59,130,246,0.15)', color: '#3B82F6', border: '2px solid rgba(59,130,246,0.2)', fontWeight: 600 }}
-                    onClick={() => { if (window.confirm('This will disconnect you and return to the server setup screen. Continue?')) onChangeServer?.(); }}
-                  >
-                    Change Server
-                  </button>
+                  {confirmAction === 'changeServer' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>This will disconnect you and return to the server setup screen. Continue?</p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="settings-btn" style={{ background: 'rgba(59,130,246,0.15)', color: '#3B82F6', border: '2px solid rgba(59,130,246,0.2)', fontWeight: 600, flex: 1 }} onClick={() => { setConfirmAction(null); onChangeServer?.(); }}>Yes, Change</button>
+                        <button className="settings-btn" style={{ flex: 1 }} onClick={() => setConfirmAction(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="settings-btn"
+                      style={{ background: 'rgba(59,130,246,0.15)', color: '#3B82F6', border: '2px solid rgba(59,130,246,0.2)', fontWeight: 600 }}
+                      onClick={() => setConfirmAction('changeServer')}
+                    >
+                      Change Server
+                    </button>
+                  )}
                 </>
               )}
-              <button
-                className="settings-btn"
-                style={{ background: 'rgba(237,66,69,0.15)', color: 'var(--red)', border: '2px solid rgba(237,66,69,0.2)', fontWeight: 600 }}
-                onClick={() => { if (window.confirm('Are you sure you want to log out?')) onLogout?.(); }}
-              >
-                Log Out
-              </button>
+              {confirmAction === 'logout' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>Are you sure you want to log out?</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="settings-btn" style={{ background: 'rgba(237,66,69,0.15)', color: 'var(--red)', border: '2px solid rgba(237,66,69,0.2)', fontWeight: 600, flex: 1 }} onClick={() => { setConfirmAction(null); onLogout?.(); }}>Yes, Log Out</button>
+                    <button className="settings-btn" style={{ flex: 1 }} onClick={() => setConfirmAction(null)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="settings-btn"
+                  style={{ background: 'rgba(237,66,69,0.15)', color: 'var(--red)', border: '2px solid rgba(237,66,69,0.2)', fontWeight: 600 }}
+                  onClick={() => setConfirmAction('logout')}
+                >
+                  Log Out
+                </button>
+              )}
 
               {/* Delete Account */}
               <div style={{ marginTop: 16, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
@@ -2019,24 +2043,23 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
               <h2>Audio Settings</h2>
 
               <h3>Input Device</h3>
-              <select
+              <CustomSelect
                 className="settings-select"
                 value={selectedInputDevice}
-                onChange={e => {
-                  setSelectedInputDevice(e.target.value);
-                  localStorage.setItem('nexus_audio_input', e.target.value);
+                onChange={val => {
+                  setSelectedInputDevice(val);
+                  localStorage.setItem('nexus_audio_input', val);
                   syncSettingsToServer();
-                  // Restart mic test with new device if testing
                   if (micTesting) { stopMicTest(); setTimeout(startMicTest, 100); }
                 }}
-              >
-                <option value="default">Default</option>
-                {audioInputDevices.map(device => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Microphone ${device.deviceId.slice(0, 5)}`}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: 'default', label: 'Default' },
+                  ...audioInputDevices.map(device => ({
+                    value: device.deviceId,
+                    label: device.label || `Microphone ${device.deviceId.slice(0, 5)}`
+                  }))
+                ]}
+              />
 
               <label className="settings-label">Input Volume: {inputVolume}%</label>
               <input
@@ -2185,22 +2208,22 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
 
               <div style={{marginTop:32, paddingTop:24, borderTop:'1px solid var(--bg-modifier-hover)'}}>
                 <h3>Output Device</h3>
-                <select
+                <CustomSelect
                   className="settings-select"
                   value={selectedOutputDevice}
-                  onChange={e => {
-                    setSelectedOutputDevice(e.target.value);
-                    localStorage.setItem('nexus_audio_output', e.target.value);
+                  onChange={val => {
+                    setSelectedOutputDevice(val);
+                    localStorage.setItem('nexus_audio_output', val);
                     syncSettingsToServer();
                   }}
-                >
-                  <option value="default">Default</option>
-                  {audioOutputDevices.map(device => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Speaker ${device.deviceId.slice(0, 5)}`}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: 'default', label: 'Default' },
+                    ...audioOutputDevices.map(device => ({
+                      value: device.deviceId,
+                      label: device.label || `Speaker ${device.deviceId.slice(0, 5)}`
+                    }))
+                  ]}
+                />
 
                 <label className="settings-label">Output Volume: {outputVolume}%</label>
                 <input
@@ -2855,15 +2878,21 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             ) : (
                               <div>
                                 <label className="settings-label">Select New Owner</label>
-                                <select className="settings-input" value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)}>
-                                  <option value="">Choose a member...</option>
-                                  {Object.entries(server.members || {})
-                                    .filter(([uid]) => uid !== currentUser.id && !uid.startsWith('guest:'))
-                                    .map(([uid]) => {
-                                      const member = onlineUsers.find(u => u.id === uid);
-                                      return <option key={uid} value={uid}>{member?.username || uid}</option>;
-                                    })}
-                                </select>
+                                <CustomSelect
+                                  className="settings-input"
+                                  value={transferTargetId}
+                                  onChange={val => setTransferTargetId(val)}
+                                  placeholder="Choose a member..."
+                                  options={[
+                                    { value: '', label: 'Choose a member...' },
+                                    ...Object.entries(server.members || {})
+                                      .filter(([uid]) => uid !== currentUser.id && !uid.startsWith('guest:'))
+                                      .map(([uid]) => {
+                                        const member = onlineUsers.find(u => u.id === uid);
+                                        return { value: uid, label: member?.username || uid };
+                                      })
+                                  ]}
+                                />
                                 <div className="settings-row" style={{ marginTop: 12 }}>
                                   <button className="settings-btn primary" disabled={!transferTargetId}
                                     onClick={() => {
@@ -2938,12 +2967,17 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   <h3>Permission Overrides</h3>
                   <p className="settings-hint">Override server-level permissions for this channel. null = inherit from role.</p>
                   <label className="settings-label">Override target</label>
-                  <select className="settings-select" value={chPermTarget} onChange={e=>setChPermTarget(e.target.value)}>
-                    <option value="role:everyone">@everyone</option>
-                    {Object.values(roles).filter(r=>r.id!=='everyone').map(r=>(
-                      <option key={r.id} value={`role:${r.id}`}>{r.name}</option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    className="settings-select"
+                    value={chPermTarget}
+                    onChange={val=>setChPermTarget(val)}
+                    options={[
+                      { value: 'role:everyone', label: '@everyone' },
+                      ...Object.values(roles).filter(r=>r.id!=='everyone').map(r=>({
+                        value: `role:${r.id}`, label: r.name
+                      }))
+                    ]}
+                  />
                   <div className="ch-perms-table">
                     {Object.entries(CH_PERM_LABELS).map(([key,label])=>{
                       const val = getChPermValue(key);
@@ -3068,11 +3102,16 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   <div className="create-category-form">
                     <h3>Create New...</h3>
                     <label className="settings-label">Type</label>
-                    <select className="settings-select" value={creationType} onChange={e=>setCreationType(e.target.value)}>
-                      <option value="category">Category</option>
-                      <option value="text">Text Channel</option>
-                      <option value="voice">Voice Channel</option>
-                    </select>
+                    <CustomSelect
+                      className="settings-select"
+                      value={creationType}
+                      onChange={val=>setCreationType(val)}
+                      options={[
+                        { value: 'category', label: 'Category' },
+                        { value: 'text', label: 'Text Channel' },
+                        { value: 'voice', label: 'Voice Channel' },
+                      ]}
+                    />
 
                     {creationType === 'category' && (
                       <>
@@ -3105,14 +3144,19 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                         <input className="settings-input" placeholder="Channel description" value={newChannelDescription} onChange={e=>setNewChannelDescription(e.target.value)} maxLength={128}/>
 
                         <label className="settings-label">Parent Category</label>
-                        <select className="settings-select" value={newChannelCategory} onChange={e=>setNewChannelCategory(e.target.value)}>
-                          <option value="">No Category</option>
-                          {categoryOrder.map(catId => {
-                            const cat = categories[catId];
-                            if (!cat) return null;
-                            return <option key={catId} value={catId}>{cat.name}</option>;
-                          })}
-                        </select>
+                        <CustomSelect
+                          className="settings-select"
+                          value={newChannelCategory}
+                          onChange={val=>setNewChannelCategory(val)}
+                          options={[
+                            { value: '', label: 'No Category' },
+                            ...categoryOrder.map(catId => {
+                              const cat = categories[catId];
+                              if (!cat) return null;
+                              return { value: catId, label: cat.name };
+                            }).filter(Boolean)
+                          ]}
+                        />
 
                         <label className="settings-label">Visibility</label>
                         <div className="settings-row">
@@ -3326,14 +3370,15 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                           })}
                         </div>
                       </div>
-                      <select className="settings-select member-role-select"
-                        onChange={e=>{ if(e.target.value) { assignRole(uid,e.target.value,'add'); e.target.value=''; }}}
-                        defaultValue="">
-                        <option value="">+ Add role</option>
-                        {Object.values(roles).filter(r=>r.id!=='everyone'&&!(member?.roles||[]).includes(r.id)&&canManageRole(r)).map(r=>(
-                          <option key={r.id} value={r.id}>{r.name}</option>
-                        ))}
-                      </select>
+                      <CustomSelect
+                        className="settings-select member-role-select"
+                        value=""
+                        onChange={val=>{ if(val) { assignRole(uid,val,'add'); }}}
+                        placeholder="+ Add role"
+                        options={Object.values(roles).filter(r=>r.id!=='everyone'&&!(member?.roles||[]).includes(r.id)&&canManageRole(r)).map(r=>({
+                          value: r.id, label: r.name
+                        }))}
+                      />
                     </div>
                   ))
                 }
@@ -3404,12 +3449,18 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 maxLength={32}
               />
               <label className="settings-label">Channel</label>
-              <select className="settings-select" value={selectedWebhookCh} onChange={e=>setSelectedWebhookCh(e.target.value)}>
-                <option value="">Select channel...</option>
-                {(server.channels?.text||[]).map(ch=>(
-                  <option key={ch.id} value={ch.id}>#{ch.name}</option>
-                ))}
-              </select>
+              <CustomSelect
+                className="settings-select"
+                value={selectedWebhookCh}
+                onChange={val=>setSelectedWebhookCh(val)}
+                placeholder="Select channel..."
+                options={[
+                  { value: '', label: 'Select channel...' },
+                  ...(server.channels?.text||[]).map(ch=>({
+                    value: ch.id, label: `#${ch.name}`
+                  }))
+                ]}
+              />
               <button
                 className={`settings-btn ${webhookCreated ? '' : 'primary'}`}
                 onClick={createWebhook}
