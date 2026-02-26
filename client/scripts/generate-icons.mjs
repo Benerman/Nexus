@@ -14,9 +14,11 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
-// Master SVG
+// Master SVGs
 const SVG_PATH = join(__dirname, 'icon-master.svg');
+const TRAY_SVG_PATH = join(__dirname, 'icon-master-tray.svg');
 const svgBuffer = readFileSync(SVG_PATH);
+const traySvgBuffer = readFileSync(TRAY_SVG_PATH);
 
 // Output directories
 const PUBLIC_DIR = join(ROOT, 'public');
@@ -34,12 +36,43 @@ const foregroundSvg = Buffer.from(
 </svg>`
 );
 
+// Apple icon corner radius: ~22.37% of icon size
+const APPLE_CORNER_RADIUS_RATIO = 0.2237;
+
 async function generatePng(size, outputPath) {
   await sharp(svgBuffer)
     .resize(size, size, { fit: 'contain', background: { r: 43, g: 45, b: 49, alpha: 1 } })
     .png()
     .toFile(outputPath);
   console.log(`  ✓ ${outputPath} (${size}x${size})`);
+}
+
+async function generateRoundedPng(size, outputPath) {
+  const radius = Math.round(size * APPLE_CORNER_RADIUS_RATIO);
+  const mask = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+      <rect x="0" y="0" width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="white"/>
+    </svg>`
+  );
+
+  const base = await sharp(svgBuffer)
+    .resize(size, size, { fit: 'contain', background: { r: 43, g: 45, b: 49, alpha: 1 } })
+    .png()
+    .toBuffer();
+
+  await sharp(base)
+    .composite([{ input: await sharp(mask).resize(size, size).png().toBuffer(), blend: 'dest-in' }])
+    .png()
+    .toFile(outputPath);
+  console.log(`  ✓ ${outputPath} (${size}x${size}, rounded)`);
+}
+
+async function generateTrayPng(size, outputPath) {
+  await sharp(traySvgBuffer)
+    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(outputPath);
+  console.log(`  ✓ ${outputPath} (${size}x${size}, tray)`);
 }
 
 async function generateIco(sizes, outputPath) {
@@ -125,15 +158,27 @@ async function generateIcns(outputPath) {
   ];
 
   for (const { name, size } of iconsetSizes) {
-    await sharp(svgBuffer)
+    const radius = Math.round(size * APPLE_CORNER_RADIUS_RATIO);
+    const mask = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+        <rect x="0" y="0" width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="white"/>
+      </svg>`
+    );
+
+    const base = await sharp(svgBuffer)
       .resize(size, size, { fit: 'contain', background: { r: 43, g: 45, b: 49, alpha: 1 } })
+      .png()
+      .toBuffer();
+
+    await sharp(base)
+      .composite([{ input: await sharp(mask).resize(size, size).png().toBuffer(), blend: 'dest-in' }])
       .png()
       .toFile(join(iconsetDir, name));
   }
 
   execSync(`iconutil -c icns "${iconsetDir}" -o "${outputPath}"`);
   rmSync(iconsetDir, { recursive: true });
-  console.log(`  ✓ ${outputPath} (icns)`);
+  console.log(`  ✓ ${outputPath} (icns, rounded)`);
 }
 
 async function generateAndroidIcons() {
@@ -215,7 +260,7 @@ async function main() {
   console.log('Web icons (client/public/):');
   await generatePng(16, join(PUBLIC_DIR, 'favicon-16x16.png'));
   await generatePng(32, join(PUBLIC_DIR, 'favicon-32x32.png'));
-  await generatePng(180, join(PUBLIC_DIR, 'apple-touch-icon.png'));
+  await generateRoundedPng(180, join(PUBLIC_DIR, 'apple-touch-icon.png'));
   await generatePng(192, join(PUBLIC_DIR, 'logo192.png'));
   await generatePng(512, join(PUBLIC_DIR, 'logo512.png'));
   await generateIco([16, 32, 48], join(PUBLIC_DIR, 'favicon.ico'));
@@ -242,8 +287,13 @@ async function main() {
   // Windows ICO (multi-size)
   await generateIco([16, 24, 32, 48, 64, 128, 256], join(TAURI_ICONS_DIR, 'icon.ico'));
 
-  // macOS ICNS
+  // macOS ICNS (with rounded corners)
   await generateIcns(join(TAURI_ICONS_DIR, 'icon.icns'));
+
+  // macOS tray icons (white hexagon on transparent, template images)
+  console.log('\nTray icons (client/src-tauri/icons/):');
+  await generateTrayPng(22, join(TAURI_ICONS_DIR, 'tray-icon.png'));
+  await generateTrayPng(44, join(TAURI_ICONS_DIR, 'tray-icon@2x.png'));
 
   // --- Android icons ---
   await generateAndroidIcons();
