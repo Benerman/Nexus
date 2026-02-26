@@ -45,6 +45,8 @@ async function applySchemaPatches(databaseUrl) {
       ALTER TABLE dm_channels ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
       CREATE INDEX IF NOT EXISTS idx_dm_channels_status ON dm_channels(status);
       ALTER TABLE dm_channels ADD COLUMN IF NOT EXISTS initiated_by UUID REFERENCES accounts(id) ON DELETE SET NULL;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS embeds JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE messages ALTER COLUMN webhook_avatar TYPE TEXT;
     `);
     await pool.end();
     console.log('Schema patches applied successfully');
