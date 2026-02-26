@@ -1560,7 +1560,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     {id:'notifications', label:'Notifications', icon: <BellIcon size={16} />},
     {id:'friends', label:'Friends', icon: <FriendsIcon size={16} />},
     {id:'servers', label:'My Servers', icon: <HexagonIcon size={16} />},
-    ...(server ? [
+    ...(server && !server.isPersonal ? [
       {id:'server-settings', label:'Server Settings', icon: <SettingsIcon size={16} />},
       ...(userPerms.manageChannels || userPerms.admin ? [{id:'channels', label:'Channels', icon: <span style={{fontSize: 14}}>#</span>}] : []),
       ...(userPerms.manageRoles || userPerms.admin ? [{id:'roles', label:'Roles', icon: <span style={{fontSize: 14}}>@</span>}] : []),
