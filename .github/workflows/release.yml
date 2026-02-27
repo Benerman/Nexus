@@ -48,7 +48,6 @@ jobs:
             | macOS (Apple Silicon) | `.dmg` |
             | macOS (Intel) | `.dmg` |
             | Linux | `.AppImage`, `.deb` |
-            | iOS | `.ipa` |
             | Android | `.apk` |
 
             ## What's Changed
@@ -162,116 +161,10 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-  build-ios:
-    needs: prepare
-    runs-on: [self-hosted, macOS]
-    continue-on-error: true
-    timeout-minutes: 120
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup macOS environment
-        run: |
-          # Ensure Homebrew paths are available
-          if [ -d "/opt/homebrew/bin" ]; then
-            echo "/opt/homebrew/bin" >> $GITHUB_PATH
-            echo "/opt/homebrew/sbin" >> $GITHUB_PATH
-          fi
-          # Use Homebrew Ruby and its gem bin directory (system Ruby 2.6 is too old for CocoaPods)
-          if [ -d "/opt/homebrew/opt/ruby/bin" ]; then
-            echo "/opt/homebrew/opt/ruby/bin" >> $GITHUB_PATH
-            GEM_HOME=$(/opt/homebrew/opt/ruby/bin/ruby -e 'puts Gem.user_dir')/bin
-            echo "$GEM_HOME" >> $GITHUB_PATH
-            echo "/opt/homebrew/lib/ruby/gems/$(/opt/homebrew/opt/ruby/bin/ruby -e 'puts RbConfig::CONFIG["ruby_version"]')/bin" >> $GITHUB_PATH
-          fi
-
-      - name: Install client dependencies
-        run: npm ci
-        working-directory: client
-
-      - name: Build React app
-        run: npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=${{ env.SERVER_URL }} react-scripts build
-        working-directory: client
-
-      - name: Add iOS platform and sync
-        run: rm -rf ios && npx cap add ios && npx cap sync ios
-        working-directory: client
-
-      - name: Install CocoaPods dependencies
-        run: pod install
-        working-directory: client/ios/App
-
-      - name: Build iOS app
-        run: |
-          xcodebuild \
-            -workspace client/ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath build/Nexus.xcarchive \
-            archive \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Export IPA
-        run: |
-          if [ -n "${{ secrets.IOS_CERTIFICATE_BASE64 }}" ]; then
-            # Decode and install certificate
-            echo "${{ secrets.IOS_CERTIFICATE_BASE64 }}" | base64 -d > /tmp/certificate.p12
-            security create-keychain -p "" build.keychain
-            security default-keychain -s build.keychain
-            security unlock-keychain -p "" build.keychain
-            security import /tmp/certificate.p12 -k build.keychain -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
-
-            # Decode provisioning profile
-            echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 -d > /tmp/profile.mobileprovision
-            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-            cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
-
-            # Create export options plist
-            cat > /tmp/ExportOptions.plist << 'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>ad-hoc</string>
-              <key>teamID</key>
-              <string>${{ secrets.APPLE_TEAM_ID }}</string>
-          </dict>
-          </plist>
-          PLIST
-
-            xcodebuild -exportArchive \
-              -archivePath build/Nexus.xcarchive \
-              -exportOptionsPlist /tmp/ExportOptions.plist \
-              -exportPath build/export
-
-            # Clean up keychain
-            security delete-keychain build.keychain
-          else
-            echo "No signing certificates configured - creating unsigned archive only"
-            mkdir -p build/export
-            cd build/Nexus.xcarchive/Products/Applications
-            zip -r ../../../export/Nexus-iOS-unsigned.zip *.app
-          fi
-
-      - name: Upload iOS build to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          files: |
-            build/export/*.ipa
-            build/export/*.zip
+  # build-ios:
+  #   Disabled until signing certificates are configured.
+  #   Re-enable and add IOS_CERTIFICATE_BASE64, IOS_CERTIFICATE_PASSWORD,
+  #   IOS_PROVISION_PROFILE_BASE64, and APPLE_TEAM_ID secrets to proceed.
 
   build-android:
     needs: prepare
