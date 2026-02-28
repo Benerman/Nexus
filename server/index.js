@@ -38,6 +38,7 @@ const ALLOWED_ORIGINS = [
   'http://localhost',
   'https://localhost',
   'tauri://localhost',
+  'http://tauri.localhost',
   'https://tauri.localhost',
   // Support additional origins via comma-separated ALLOWED_ORIGINS env var
   ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : []),
