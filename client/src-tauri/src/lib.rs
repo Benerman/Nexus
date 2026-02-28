@@ -5,6 +5,12 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Disable DMA-BUF renderer in WebKitGTK — the default renderer causes
+    // gray/blank screens on many Linux systems (especially NVIDIA GPUs).
+    // See: https://github.com/tauri-apps/tauri/issues/9304
+    #[cfg(target_os = "linux")]
+    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
