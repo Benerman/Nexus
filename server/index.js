@@ -112,7 +112,9 @@ const requireApiAuth = async (req, res, next) => {
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: corsOptions,
-  maxHttpBufferSize: 20e6
+  maxHttpBufferSize: 20e6,
+  pingTimeout: 300000,
+  pingInterval: 25000,
 });
 
 // Rate limiter for Socket.io messages (30 messages per 10 seconds)

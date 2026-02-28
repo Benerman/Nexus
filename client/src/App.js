@@ -1335,6 +1335,14 @@ export default function App() {
         const s = socketRef.current;
         if (!s) return;
 
+        if (hiddenDuration > 300000 && s.connected) {
+          // Hidden longer than server pingTimeout — connection is likely dead
+          console.log('[App]  Hidden too long, forcing reconnect');
+          s.disconnect();
+          s.connect();
+          return;
+        }
+
         if (!s.connected) {
           // Socket disconnected while hidden - reconnect
           console.log('[App]  Socket disconnected, reconnecting...');

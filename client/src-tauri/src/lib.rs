@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::menu::{AboutMetadata, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::utils::config::BackgroundThrottlingPolicy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,10 +26,26 @@ pub fn run() {
                 )?;
             }
 
+            // Create main window programmatically so we can set
+            // BackgroundThrottlingPolicy::Disabled — prevents macOS from
+            // suspending the WebView's JS timers & WebSocket when backgrounded.
+            let main_window = tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+                .title("Nexus")
+                .inner_size(1280.0, 800.0)
+                .min_inner_size(940.0, 560.0)
+                .resizable(true)
+                .fullscreen(false)
+                .decorations(true)
+                .background_throttling(BackgroundThrottlingPolicy::Disabled)
+                .build()?;
+
             // Auto-grant media permissions on Linux (WebKit2GTK)
             #[cfg(target_os = "linux")]
             {
-                let main_window = app.get_webview_window("main").unwrap();
                 main_window.with_webview(|webview| {
                     use webkit2gtk::{PermissionRequestExt, SettingsExt, WebViewExt};
 
@@ -50,7 +67,6 @@ pub fn run() {
             // Auto-grant all permissions on Windows (WebView2)
             #[cfg(target_os = "windows")]
             {
-                let main_window = app.get_webview_window("main").unwrap();
                 main_window.with_webview(|webview| {
                     unsafe {
                         use webview2_com::Microsoft::Web::WebView2::Win32::*;
@@ -82,8 +98,6 @@ pub fn run() {
                 .map(|s| s.trim() != "false")
                 .unwrap_or(true);
             let minimize_to_tray = Arc::new(Mutex::new(minimize_to_tray_initial));
-
-            let main_window = app.get_webview_window("main").unwrap();
 
             // Set the window icon so macOS screen sharing picker shows the Nexus icon
             // instead of the default Tauri icon

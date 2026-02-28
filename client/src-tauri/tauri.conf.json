@@ -10,18 +10,7 @@
     "beforeBuildCommand": "npx cross-env CI=false GENERATE_SOURCEMAP=false REACT_APP_SERVER_URL=$SERVER_URL react-scripts build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Nexus",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 940,
-        "minHeight": 560,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' ipc://localhost ws: wss: http: https:; img-src 'self' data: https: blob:; media-src 'self' blob: data:;"
     }
