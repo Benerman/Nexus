@@ -78,6 +78,12 @@ pub fn run() {
             let minimize_to_tray = Arc::new(Mutex::new(minimize_to_tray_initial));
 
             let main_window = app.get_webview_window("main").unwrap();
+
+            // Set the window icon so macOS screen sharing picker shows the Nexus icon
+            // instead of the default Tauri icon
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+            main_window.set_icon(icon)?;
+
             let window_for_close = main_window.clone();
             let app_handle_for_close = app.handle().clone();
             let minimize_for_close = minimize_to_tray.clone();
