@@ -402,6 +402,89 @@ async function cleanupOldMessages(channelId, keepCount = 500) {
 }
 
 // ============================================================================
+// BATCH QUERY FUNCTIONS (N+1 elimination)
+// ============================================================================
+
+/**
+ * Get channel messages with author data JOINed — eliminates per-message DB lookups
+ */
+async function getChannelMessagesWithAuthors(channelId, limit = 50) {
+  const result = await query(
+    `SELECT m.*, a.username AS author_username, a.avatar AS author_avatar,
+            a.custom_avatar AS author_custom_avatar, a.color AS author_color
+     FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     WHERE m.channel_id = $1 ORDER BY m.created_at DESC LIMIT $2`,
+    [channelId, limit]
+  );
+  return result.rows.reverse();
+}
+
+/**
+ * Get messages before a timestamp with author data JOINed
+ */
+async function getMessagesBeforeWithAuthors(channelId, beforeTimestamp, limit = 30) {
+  const result = await query(
+    `SELECT m.*, a.username AS author_username, a.avatar AS author_avatar,
+            a.custom_avatar AS author_custom_avatar, a.color AS author_color
+     FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     WHERE m.channel_id = $1 AND m.created_at < $2
+     ORDER BY m.created_at DESC LIMIT $3`,
+    [channelId, new Date(beforeTimestamp), limit]
+  );
+  return result.rows.reverse();
+}
+
+/**
+ * Get DM channels with participant details and last message in a single query.
+ * Replaces 3N queries in dm:list (account + last message + online check per DM).
+ */
+async function getDMChannelsWithDetails(userId) {
+  const result = await query(
+    `SELECT dc.*,
+            a1.username AS p1_username, a1.avatar AS p1_avatar,
+            a1.custom_avatar AS p1_custom_avatar, a1.color AS p1_color,
+            a1.status AS p1_status, a1.bio AS p1_bio,
+            a2.username AS p2_username, a2.avatar AS p2_avatar,
+            a2.custom_avatar AS p2_custom_avatar, a2.color AS p2_color,
+            a2.status AS p2_status, a2.bio AS p2_bio,
+            lm.id AS last_msg_id, lm.content AS last_msg_content,
+            lm.created_at AS last_msg_created_at, lm.author_id AS last_msg_author_id
+     FROM dm_channels dc
+     LEFT JOIN dm_participants dp ON dc.id = dp.channel_id
+     LEFT JOIN accounts a1 ON dc.participant_1 = a1.id
+     LEFT JOIN accounts a2 ON dc.participant_2 = a2.id
+     LEFT JOIN LATERAL (
+       SELECT id, content, created_at, author_id
+       FROM messages WHERE channel_id = dc.id
+       ORDER BY created_at DESC LIMIT 1
+     ) lm ON true
+     WHERE dc.participant_1 = $1 OR dc.participant_2 = $1 OR dp.user_id = $1
+     ORDER BY COALESCE(lm.created_at, dc.created_at) DESC`,
+    [userId]
+  );
+  // Deduplicate (dm_participants join can cause dupes for group DMs)
+  const seen = new Set();
+  return result.rows.filter(row => {
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
+/**
+ * Batch fetch accounts by IDs — single query with ANY()
+ */
+async function getAccountsByIds(ids) {
+  if (!ids || ids.length === 0) return [];
+  const result = await query(
+    `SELECT id, username, avatar, custom_avatar, color, bio, status, created_at
+     FROM accounts WHERE id = ANY($1)`,
+    [ids]
+  );
+  return result.rows;
+}
+
+// ============================================================================
 // DM & SOCIAL FUNCTIONS
 // ============================================================================
 
@@ -1755,11 +1838,17 @@ module.exports = {
   saveMessage,
   getChannelMessages,
   getMessagesBefore,
+  getChannelMessagesWithAuthors,
+  getMessagesBeforeWithAuthors,
   updateMessage,
   updateMessageReactions,
   deleteMessage,
   getMessageById,
   cleanupOldMessages,
+
+  // Batch query functions
+  getDMChannelsWithDetails,
+  getAccountsByIds,
 
   // DM & Social functions
   getOrCreateDMChannel,
