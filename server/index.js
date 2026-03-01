@@ -3331,29 +3331,35 @@ io.on('connection', (socket) => {
 
     const messages = state.messages[channelId] || [];
     const msgIndex = messages.findIndex(m => m.id === messageId);
-    if (msgIndex === -1) return;
 
-    const msg = messages[msgIndex];
-
-    // Check permissions: author can delete own, or manageMessages/admin can delete any
-    const isAuthor = msg.author.id === user.id;
+    // Check permissions using in-memory message or fall back to database
     const srv = findServerByChannelId(channelId);
     const perms = srv ? getUserPerms(user.id, srv.id, channelId) : {};
     const canManage = perms.manageMessages || perms.admin;
 
-    if (!isAuthor && !canManage) {
-      return socket.emit('error', { message: 'You do not have permission to delete this message' });
+    if (msgIndex !== -1) {
+      const msg = messages[msgIndex];
+      const isAuthor = msg.author?.id === user.id;
+      if (!isAuthor && !canManage) {
+        return socket.emit('error', { message: 'You do not have permission to delete this message' });
+      }
+      // Remove from memory
+      state.messages[channelId].splice(msgIndex, 1);
+    } else {
+      // Message not in memory — verify it exists in DB and check permissions
+      const dbMsg = await db.getMessageById(messageId);
+      if (!dbMsg) return;
+      const isAuthor = dbMsg.author_id === user.id;
+      if (!isAuthor && !canManage) {
+        return socket.emit('error', { message: 'You do not have permission to delete this message' });
+      }
     }
 
-    // Remove from memory
-    state.messages[channelId].splice(msgIndex, 1);
-
-    // ✅ Delete from database (all messages)
+    // Delete from database
     try {
       await db.deleteMessage(messageId);
     } catch (error) {
       console.error('[Message] Error deleting message from database:', error);
-      // Continue even if database delete fails
     }
 
     // Broadcast deletion
