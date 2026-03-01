@@ -66,7 +66,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-22.04
+          - platform: [self-hosted, Linux]
             args: ""
             rust_targets: ""
           - platform: macos-latest
@@ -124,6 +124,26 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Rename Linux release assets
+        if: runner.os == 'Linux'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.prepare.outputs.tag }}"
+          # Get all release assets and rename any containing "ubuntu" to "linux"
+          gh release view "$TAG" --json assets -q '.assets[].name' | while read -r name; do
+            if echo "$name" | grep -qi "ubuntu"; then
+              new_name=$(echo "$name" | sed 's/[Uu]buntu/linux/g')
+              echo "Renaming: $name -> $new_name"
+              # Download, delete old, upload with new name
+              gh release download "$TAG" -p "$name" -D /tmp/release-rename
+              gh release delete-asset "$TAG" "$name" --yes
+              gh release upload "$TAG" "/tmp/release-rename/$name#$new_name"
+              rm -f "/tmp/release-rename/$name"
+            fi
+          done
+          rmdir /tmp/release-rename 2>/dev/null || true
 
   build-ios:
     needs: prepare
