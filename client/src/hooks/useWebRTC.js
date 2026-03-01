@@ -165,7 +165,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   const isDeafenedRef = useRef(isDeafened);      // Ref mirror for use in socket handlers
   const audioElementsRef = useRef({});  // socketId -> HTMLAudioElement
   const gainNodesRef = useRef({});      // socketId -> { ctx, gain, source } for volume boost >100%
-  const audioProcessingRef = useRef(null); // { ctx, source, highpass, analyser, gateGain, autoGain, outputGain, destination, intervalId, currentAutoGain }
+  const audioProcessingRef = useRef(null); // { ctx, source, highpass, analyser, compressor, destination, workletNode?, usingWorklet, intervalId?, gateGain?, autoGain?, outputGain? }
   const qualityIntervalRef = useRef(null); // Interval for polling WebRTC stats
   const autoReconnectRef = useRef(null); // Timeout for auto-reconnect
   const reconnectAttemptsRef = useRef(0);
@@ -657,12 +657,14 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   // Clean up audio processing chain
   const cleanupAudioProcessing = useCallback(() => {
     if (audioProcessingRef.current) {
-      clearInterval(audioProcessingRef.current.intervalId);
+      if (audioProcessingRef.current.intervalId) clearInterval(audioProcessingRef.current.intervalId);
+      try { audioProcessingRef.current.rnnoiseNode?.disconnect(); } catch (_) {}
+      try { audioProcessingRef.current.workletNode?.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.source.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.highpass.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.analyser.disconnect(); } catch (_) {}
-      try { audioProcessingRef.current.gateGain.disconnect(); } catch (_) {}
-      try { audioProcessingRef.current.autoGain.disconnect(); } catch (_) {}
+      try { audioProcessingRef.current.gateGain?.disconnect(); } catch (_) {}
+      try { audioProcessingRef.current.autoGain?.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.outputGain?.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.compressor?.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.ctx.close(); } catch (_) {}
@@ -670,8 +672,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     }
   }, []);
 
-  // Set up audio processing chain: highpass → analyser → noise gate → auto gain → output gain → destination
-  const setupAudioProcessing = useCallback((stream) => {
+  // Set up audio processing chain (async — tries AudioWorklet first, falls back to setInterval)
+  // Worklet path:  source → highpass → analyser → AudioWorkletNode → compressor → destination
+  // Fallback path: source → highpass → analyser → gateGain → autoGain → outputGain → compressor → destination
+  const setupAudioProcessing = useCallback(async (stream) => {
     cleanupAudioProcessing();
 
     try {
@@ -683,103 +687,185 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       highpass.type = 'highpass';
       highpass.frequency.value = 80;
 
-      // Analyser for level metering and gate/gain decisions
+      // Analyser for potential UI metering
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
 
-      // Noise gate gain node
-      const gateGain = ctx.createGain();
-      gateGain.gain.value = 1.0;
-
-      // Auto gain node
-      const autoGain = ctx.createGain();
-      autoGain.gain.value = 1.0;
-
-      // Output gain node — compensates for Web Audio API signal loss and applies input volume
-      // The createMediaStreamDestination path typically loses ~3-6dB vs raw getUserMedia.
-      // A base boost of 1.8x (~5dB) compensates for this.
-      const inputVol = parseInt(localStorage.getItem('nexus_audio_input_volume') || '100') / 100;
-      const outputGain = ctx.createGain();
-      outputGain.gain.value = 1.8 * inputVol;
-
-      // Compressor to prevent clipping from the boost — keeps peaks from distorting
+      // Compressor to prevent clipping — keeps peaks from distorting
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -6;   // Start compressing at -6dB
-      compressor.knee.value = 6;          // Soft knee for natural sound
-      compressor.ratio.value = 4;         // 4:1 compression above threshold
-      compressor.attack.value = 0.003;    // 3ms attack (catch transients)
-      compressor.release.value = 0.1;     // 100ms release
+      compressor.threshold.value = -6;
+      compressor.knee.value = 6;
+      compressor.ratio.value = 4;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.1;
 
       // Output destination (creates a new MediaStream)
       const destination = ctx.createMediaStreamDestination();
 
-      // Connect chain: source → highpass → analyser → gateGain → autoGain → outputGain → compressor → destination
-      source.connect(highpass);
-      highpass.connect(analyser);
-      analyser.connect(gateGain);
-      gateGain.connect(autoGain);
-      autoGain.connect(outputGain);
-      outputGain.connect(compressor);
-      compressor.connect(destination);
-
-      let currentAutoGainValue = 1.0;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-
-      // Processing loop at 50Hz
-      const intervalId = setInterval(() => {
-        if (!audioProcessingRef.current || ctx.state === 'closed') {
-          clearInterval(intervalId);
-          return;
-        }
-
-        analyser.getByteFrequencyData(data);
-
-        // Calculate RMS
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) {
-          sum += data[i] * data[i];
-        }
-        const rms = Math.sqrt(sum / data.length);
-        const dbFS = rms > 0 ? 20 * Math.log10(rms / 255) : -100;
-
-        const now = ctx.currentTime;
-
-        // Read live settings
-        const liveGateEnabled = localStorage.getItem('nexus_noise_gate_enabled') !== 'false';
-        const liveGateThreshold = parseFloat(localStorage.getItem('nexus_noise_gate_threshold')) || -50;
-        const liveAgcEnabled = localStorage.getItem('nexus_auto_gain_enabled') === 'true';
-        const liveAgcTarget = parseFloat(localStorage.getItem('nexus_auto_gain_target')) || -20;
-
-        // Update output gain with live input volume setting
-        const liveInputVol = parseInt(localStorage.getItem('nexus_audio_input_volume') || '100') / 100;
-        outputGain.gain.setTargetAtTime(1.8 * liveInputVol, now, 0.05);
-
-        // Noise gate
-        if (liveGateEnabled) {
-          if (dbFS > liveGateThreshold) {
-            gateGain.gain.setTargetAtTime(1.0, now, 0.005); // 5ms attack
-          } else {
-            gateGain.gain.setTargetAtTime(0.0, now, 0.05); // 50ms release
-          }
-        } else {
-          gateGain.gain.setTargetAtTime(1.0, now, 0.005);
-        }
-
-        // Auto gain — more aggressive target and smoother convergence
-        if (liveAgcEnabled && dbFS > -70) {
-          const diff = liveAgcTarget - dbFS;
-          const adjustment = 1 + (diff * 0.03);
-          currentAutoGainValue = Math.max(0.2, Math.min(8.0, currentAutoGainValue * adjustment));
-          autoGain.gain.setTargetAtTime(currentAutoGainValue, now, 0.08);
-        } else if (!liveAgcEnabled) {
-          currentAutoGainValue = 1.0;
-          autoGain.gain.setTargetAtTime(1.0, now, 0.05);
-        }
-      }, 20);
-
-      audioProcessingRef.current = {
-        ctx, source, highpass, analyser, gateGain, autoGain, outputGain, compressor, destination, intervalId, currentAutoGainValue
+      // Read initial settings from localStorage
+      const initialSettings = {
+        type: 'settings',
+        gateEnabled: localStorage.getItem('nexus_noise_gate_enabled') !== 'false',
+        gateThreshold: parseFloat(localStorage.getItem('nexus_noise_gate_threshold')) || -50,
+        agcEnabled: localStorage.getItem('nexus_auto_gain_enabled') === 'true',
+        agcTarget: parseFloat(localStorage.getItem('nexus_auto_gain_target')) || -20,
+        inputVolume: parseInt(localStorage.getItem('nexus_audio_input_volume') || '100') / 100,
       };
+
+      // Try AudioWorklet path
+      let usingWorklet = false;
+      let workletNode = null;
+
+      try {
+        await ctx.audioWorklet.addModule('/audio-processor.js');
+        workletNode = new AudioWorkletNode(ctx, 'nexus-audio-processor');
+
+        // Send initial settings
+        workletNode.port.postMessage(initialSettings);
+
+        // Listen for speaking state from worklet
+        workletNode.port.onmessage = (e) => {
+          if (e.data.type === 'speaking') {
+            const wasSpeaking = activeSpeakersRef.current.has('local');
+            if (e.data.isSpeaking !== wasSpeaking) {
+              if (e.data.isSpeaking) activeSpeakersRef.current.add('local');
+              else activeSpeakersRef.current.delete('local');
+              setActiveSpeakers(new Set(activeSpeakersRef.current));
+            }
+          }
+        };
+
+        usingWorklet = true;
+        console.log('[Audio] Using AudioWorklet processor');
+      } catch (workletErr) {
+        console.warn('[Audio] AudioWorklet unavailable, falling back to setInterval:', workletErr.message);
+      }
+
+      // Try loading RNNoise ML noise cancellation (only when worklet path succeeded)
+      let rnnoiseNode = null;
+      if (usingWorklet) {
+        try {
+          // Fetch and compile RNNoise WASM on main thread
+          const wasmResponse = await fetch('/rnnoise.wasm');
+          const wasmBinary = await wasmResponse.arrayBuffer();
+          const wasmModule = await WebAssembly.compile(wasmBinary);
+
+          // Load RNNoise worklet processor
+          await ctx.audioWorklet.addModule('/rnnoise-processor.js');
+          rnnoiseNode = new AudioWorkletNode(ctx, 'rnnoise-processor', {
+            processorOptions: { wasmModule }
+          });
+
+          // Send initial settings
+          rnnoiseNode.port.postMessage({
+            type: 'settings',
+            noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false'
+          });
+
+          console.log('[Audio] RNNoise noise cancellation loaded');
+        } catch (rnnoiseErr) {
+          console.warn('[Audio] RNNoise unavailable, skipping ML noise cancellation:', rnnoiseErr.message);
+          rnnoiseNode = null;
+        }
+      }
+
+      if (usingWorklet) {
+        if (rnnoiseNode) {
+          // Full chain: source → highpass → analyser → rnnoiseNode → workletNode → compressor → destination
+          source.connect(highpass);
+          highpass.connect(analyser);
+          analyser.connect(rnnoiseNode);
+          rnnoiseNode.connect(workletNode);
+          workletNode.connect(compressor);
+          compressor.connect(destination);
+        } else {
+          // Without RNNoise: source → highpass → analyser → workletNode → compressor → destination
+          source.connect(highpass);
+          highpass.connect(analyser);
+          analyser.connect(workletNode);
+          workletNode.connect(compressor);
+          compressor.connect(destination);
+        }
+      }
+
+      if (!usingWorklet) {
+        // Fallback: GainNode + setInterval approach (original implementation)
+        const gateGain = ctx.createGain();
+        gateGain.gain.value = 1.0;
+
+        const autoGain = ctx.createGain();
+        autoGain.gain.value = 1.0;
+
+        const inputVol = initialSettings.inputVolume;
+        const outputGain = ctx.createGain();
+        outputGain.gain.value = 1.8 * inputVol;
+
+        // Connect: source → highpass → analyser → gateGain → autoGain → outputGain → compressor → destination
+        source.connect(highpass);
+        highpass.connect(analyser);
+        analyser.connect(gateGain);
+        gateGain.connect(autoGain);
+        autoGain.connect(outputGain);
+        outputGain.connect(compressor);
+        compressor.connect(destination);
+
+        let currentAutoGainValue = 1.0;
+        const data = new Uint8Array(analyser.frequencyBinCount);
+
+        const intervalId = setInterval(() => {
+          if (!audioProcessingRef.current || ctx.state === 'closed') {
+            clearInterval(intervalId);
+            return;
+          }
+
+          analyser.getByteFrequencyData(data);
+
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            sum += data[i] * data[i];
+          }
+          const rms = Math.sqrt(sum / data.length);
+          const dbFS = rms > 0 ? 20 * Math.log10(rms / 255) : -100;
+
+          const now = ctx.currentTime;
+
+          const liveGateEnabled = localStorage.getItem('nexus_noise_gate_enabled') !== 'false';
+          const liveGateThreshold = parseFloat(localStorage.getItem('nexus_noise_gate_threshold')) || -50;
+          const liveAgcEnabled = localStorage.getItem('nexus_auto_gain_enabled') === 'true';
+          const liveAgcTarget = parseFloat(localStorage.getItem('nexus_auto_gain_target')) || -20;
+
+          const liveInputVol = parseInt(localStorage.getItem('nexus_audio_input_volume') || '100') / 100;
+          outputGain.gain.setTargetAtTime(1.8 * liveInputVol, now, 0.05);
+
+          if (liveGateEnabled) {
+            if (dbFS > liveGateThreshold) {
+              gateGain.gain.setTargetAtTime(1.0, now, 0.005);
+            } else {
+              gateGain.gain.setTargetAtTime(0.0, now, 0.05);
+            }
+          } else {
+            gateGain.gain.setTargetAtTime(1.0, now, 0.005);
+          }
+
+          if (liveAgcEnabled && dbFS > -70) {
+            const diff = liveAgcTarget - dbFS;
+            const adjustment = 1 + (diff * 0.03);
+            currentAutoGainValue = Math.max(0.2, Math.min(8.0, currentAutoGainValue * adjustment));
+            autoGain.gain.setTargetAtTime(currentAutoGainValue, now, 0.08);
+          } else if (!liveAgcEnabled) {
+            currentAutoGainValue = 1.0;
+            autoGain.gain.setTargetAtTime(1.0, now, 0.05);
+          }
+        }, 20);
+
+        audioProcessingRef.current = {
+          ctx, source, highpass, analyser, gateGain, autoGain, outputGain, compressor, destination, intervalId, usingWorklet: false
+        };
+      } else {
+        audioProcessingRef.current = {
+          ctx, source, highpass, analyser, workletNode, rnnoiseNode, compressor, destination, usingWorklet: true
+        };
+      }
 
       // Verify the destination stream has a live audio track
       const destTrack = destination.stream.getAudioTracks()[0];
@@ -793,15 +879,36 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     } catch (err) {
       console.warn('Audio processing setup failed, using raw stream:', err);
       cleanupAudioProcessing();
-      return stream; // Fallback to raw stream
+      return stream;
     }
   }, [cleanupAudioProcessing]);
 
   // Update audio processing settings live (called from SettingsModal)
   const updateAudioProcessing = useCallback(() => {
-    // Settings are read from localStorage in the processing loop, so this is a no-op signal
-    // But we can use it to verify processing is active
-    return !!audioProcessingRef.current;
+    if (!audioProcessingRef.current) return false;
+
+    // When using worklet, push current settings via MessagePort
+    if (audioProcessingRef.current.usingWorklet && audioProcessingRef.current.workletNode) {
+      audioProcessingRef.current.workletNode.port.postMessage({
+        type: 'settings',
+        gateEnabled: localStorage.getItem('nexus_noise_gate_enabled') !== 'false',
+        gateThreshold: parseFloat(localStorage.getItem('nexus_noise_gate_threshold')) || -50,
+        agcEnabled: localStorage.getItem('nexus_auto_gain_enabled') === 'true',
+        agcTarget: parseFloat(localStorage.getItem('nexus_auto_gain_target')) || -20,
+        inputVolume: parseInt(localStorage.getItem('nexus_audio_input_volume') || '100') / 100,
+      });
+    }
+    // Forward noise cancellation setting to RNNoise worklet
+    if (audioProcessingRef.current.rnnoiseNode) {
+      audioProcessingRef.current.rnnoiseNode.port.postMessage({
+        type: 'settings',
+        noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false',
+      });
+    }
+
+    // Fallback path reads from localStorage in its setInterval loop — no action needed
+
+    return true;
   }, []);
 
   const joinVoice = useCallback(async (channelId, serverId) => {
@@ -858,7 +965,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       rawStreamRef.current = rawStream;
 
       // Set up audio processing chain (noise gate + auto gain + volume boost)
-      const processedStream = setupAudioProcessing(rawStream);
+      const processedStream = await setupAudioProcessing(rawStream);
       localStreamRef.current = processedStream;
       setLocalStream(processedStream);
 
@@ -868,7 +975,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         audioTrack.enabled = !isMuted;
       }
 
-      startSpeakingDetection(processedStream, 'local');
+      // Only use setInterval-based speaking detection if worklet is not handling it
+      if (!audioProcessingRef.current?.usingWorklet) {
+        startSpeakingDetection(processedStream, 'local');
+      }
       setCurrentVoiceChannel(channelId);
       currentVoiceChannelRef.current = channelId;
       socket.emit('voice:join', { channelId });
@@ -1058,14 +1168,16 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       }
       rawStreamRef.current = rawStream;
 
-      const processedStream = setupAudioProcessing(rawStream);
+      const processedStream = await setupAudioProcessing(rawStream);
       localStreamRef.current = processedStream;
       setLocalStream(processedStream);
 
       const audioTrack = processedStream.getAudioTracks()[0];
       if (audioTrack) audioTrack.enabled = !isMuted;
 
-      startSpeakingDetection(processedStream, 'local');
+      if (!audioProcessingRef.current?.usingWorklet) {
+        startSpeakingDetection(processedStream, 'local');
+      }
       socket.emit('voice:join', { channelId });
     } catch (err) {
       console.error('Reconnect failed:', err);

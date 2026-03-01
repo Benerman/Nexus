@@ -140,3 +140,33 @@ Requires `sharp` (listed as a devDependency). On macOS, `iconutil` (bundled with
 - **`deploy.yml`** — Auto-deploys on push to `main`/`master` via self-hosted runner (Docker rebuild + health checks)
 - **`dev.yml`** — Manual trigger for pre-release builds (Tauri, Electron, Capacitor)
 - **`release.yml`** — Manual trigger for versioned releases (reads version from `client/package.json`)
+
+## TODO — Audio Processing Improvements
+
+Current state: AudioWorklet processor (`client/public/audio-processor.js`) handles noise gate, AGC, and output gain on the audio thread. The items below bring the pipeline closer to industry standard (Discord/Teams/Zoom level).
+
+### Noise Gate
+
+- [x] **Add Attack state to gate FSM** — Current gate has 4 states (closed/open/hold/closing). Add explicit Attack state so gain ramps from 0→1 over 1-2ms instead of jumping. Prevents click artifacts on gate open.
+- [x] **Use soft gate floor instead of hard mute** — Instead of attenuating to 0.0 when closed, attenuate to -40dB (0.01). Sounds more natural in conversation — a downward expander approach. Make floor configurable.
+- [x] **Reduce hold time from 150ms to 50ms** — Industry standard for voice VoIP is 25-50ms. 150ms lets too much noise through after speech ends. Keep the hysteresis (6dB) which handles inter-word pauses better than long hold times.
+- [x] **Band-pass sidechain filtering** — Run the envelope detector on a filtered version of the signal (300Hz-3kHz) so the gate responds to speech frequencies, not low-frequency rumble or high-frequency hiss that happen to exceed the threshold.
+
+### Auto Gain Control (AGC)
+
+- [x] **VAD-gated gain updates** — Only update AGC gain during frames classified as speech (gate open + signal > noise floor). Currently freezes when gate is closed, but should also freeze during non-speech noise that passes through the gate. Prevents the "pumping" artifact.
+- [x] **Separate leveler + limiter stages** — Replace single AGC with two stages: (1) slow leveler (500ms attack, 2s release, high ratio) that brings all levels to target, (2) fast limiter (5ms attack, 200ms release, 4:1 ratio) that catches transients. Current single-speed approach can't handle both gradual drift and sudden changes well.
+- [x] **Compute gain in dB domain** — Current AGC uses linear multiplication (`1 + diff * 0.03`) which makes the time constant dependent on signal level. Switch to `desired_gain = 10^((target - baseline) / 20)` with exponential smoothing in dB domain for level-independent behavior. (Worklet already does this correctly; fallback path does not.)
+- [x] **Limit max gain based on noise floor** — Track noise floor estimate and cap AGC gain so it never boosts more than `target - noise_floor - 6dB_margin`. Prevents noise amplification even without gate interaction.
+- [ ] **Tune DynamicsCompressor** — Current compressor threshold is -6dB with 4:1 ratio. Consider -12dB threshold with soft knee of 10dB for more transparent limiting. Current settings can audibly squash loud speech.
+
+### Background Noise Cancellation
+
+- [x] **Integrate RNNoise via WASM** — RNNoise (Xiph.org) is the industry standard open-source ML noise suppression. Runs in ~1ms per 10ms frame, MIT licensed. Compile to WASM and run as a second AudioWorklet processor in the chain before the gate/AGC worklet. Processes 22 frequency bands with a GRU neural network to separate speech from noise.
+- [x] **Add noise suppression toggle to Audio Settings** — New setting `nexus_noise_cancellation_enabled` (default: true). Separate from the existing browser-level `noiseSuppression` constraint. Label: "AI Noise Cancellation" with hint "Uses machine learning to remove background noise (keyboard, fans, etc.)"
+- [ ] **Noise suppression aggressiveness levels** — Offer Low/Medium/High like Zoom. Controls the RNNoise output gain floor (how aggressively it attenuates non-speech bands). Low = more natural but some noise leaks; High = cleaner but can affect voice quality.
+
+### Pipeline Architecture
+
+- [x] **Correct processing order** — Industry standard is: AEC → Noise Suppression → Noise Gate → AGC → Limiter. Current order (highpass → gate → AGC → compressor) is missing the noise suppression stage. When RNNoise is added, insert it between highpass and gate.
+- [x] **Adaptive noise floor estimation** — Continuously estimate background noise level using minimum statistics (track the minimum RMS over a sliding 2-5 second window during non-speech frames). Use this to auto-adjust gate threshold and AGC gain ceiling. Eliminates the need for users to manually tune the gate threshold for different environments.

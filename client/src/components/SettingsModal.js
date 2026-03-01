@@ -510,6 +510,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [noiseGateThreshold, setNoiseGateThreshold] = useState(() => parseFloat(localStorage.getItem('nexus_noise_gate_threshold')) || -50);
   const [autoGainEnabled, setAutoGainEnabled] = useState(() => localStorage.getItem('nexus_auto_gain_enabled') === 'true');
   const [autoGainTarget, setAutoGainTarget] = useState(() => parseFloat(localStorage.getItem('nexus_auto_gain_target')) || -20);
+  const [noiseCancellationEnabled, setNoiseCancellationEnabled] = useState(() => localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false');
 
   // Mic test meter
   const [micTesting, setMicTesting] = useState(false);
@@ -586,6 +587,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       noise_gate_threshold: localStorage.getItem('nexus_noise_gate_threshold') || '-50',
       auto_gain_enabled: localStorage.getItem('nexus_auto_gain_enabled') || 'false',
       auto_gain_target: localStorage.getItem('nexus_auto_gain_target') || '-20',
+      noise_cancellation_enabled: localStorage.getItem('nexus_noise_cancellation_enabled') || 'true',
     };
     socket.emit('user:settings-update', { settings });
   };
@@ -2071,6 +2073,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   setInputVolume(parseInt(e.target.value));
                   localStorage.setItem('nexus_audio_input_volume', e.target.value);
                   syncSettingsToServer();
+                  updateAudioProcessing?.();
                 }}
                 style={{width: '100%'}}
               />
@@ -2112,7 +2115,26 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 </button>
                 {audioAdvancedOpen && (
                   <div className="collapsible-body">
-                    <h3>Noise Suppression</h3>
+                    <h3>AI Noise Cancellation</h3>
+                    <p className="settings-hint">Uses machine learning to remove background noise like keyboard clicks, fans, and ambient sounds. Takes effect immediately.</p>
+                    <div className="audio-toggle">
+                      <span className="audio-toggle-label">AI Noise Cancellation</span>
+                      <label className="toggle-switch">
+                        <input
+                          type="checkbox"
+                          checked={noiseCancellationEnabled}
+                          onChange={e => {
+                            setNoiseCancellationEnabled(e.target.checked);
+                            localStorage.setItem('nexus_noise_cancellation_enabled', String(e.target.checked));
+                            syncSettingsToServer();
+                            updateAudioProcessing?.();
+                          }}
+                        />
+                        <span className="toggle-slider" />
+                      </label>
+                    </div>
+
+                    <h3 style={{marginTop: 24}}>Noise Suppression</h3>
                     <p className="settings-hint">Browser-level noise reduction and echo cancellation. Changes take effect next time you join a voice channel.</p>
                     <div className="audio-toggle">
                       <span className="audio-toggle-label">Noise Suppression</span>
@@ -2157,6 +2179,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             setNoiseGateEnabled(e.target.checked);
                             localStorage.setItem('nexus_noise_gate_enabled', String(e.target.checked));
                             syncSettingsToServer();
+                            updateAudioProcessing?.();
                           }}
                         />
                         <span className="toggle-slider" />
@@ -2166,7 +2189,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       <>
                         <label className="settings-label">Gate Threshold: {noiseGateThreshold} dB</label>
                         <input type="range" min="-80" max="-5" step="1" value={noiseGateThreshold}
-                          onChange={e => { const val = parseInt(e.target.value); setNoiseGateThreshold(val); localStorage.setItem('nexus_noise_gate_threshold', String(val)); syncSettingsToServer(); }}
+                          onChange={e => { const val = parseInt(e.target.value); setNoiseGateThreshold(val); localStorage.setItem('nexus_noise_gate_threshold', String(val)); syncSettingsToServer(); updateAudioProcessing?.(); }}
                           style={{width: '100%'}} />
                         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)'}}>
                           <span>-80 (sensitive)</span><span>-5 (aggressive)</span>
@@ -2186,6 +2209,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             setAutoGainEnabled(e.target.checked);
                             localStorage.setItem('nexus_auto_gain_enabled', String(e.target.checked));
                             syncSettingsToServer();
+                            updateAudioProcessing?.();
                           }}
                         />
                         <span className="toggle-slider" />
@@ -2195,7 +2219,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       <>
                         <label className="settings-label">Target Level: {autoGainTarget} dB</label>
                         <input type="range" min="-40" max="-10" step="1" value={autoGainTarget}
-                          onChange={e => { const val = parseInt(e.target.value); setAutoGainTarget(val); localStorage.setItem('nexus_auto_gain_target', String(val)); syncSettingsToServer(); }}
+                          onChange={e => { const val = parseInt(e.target.value); setAutoGainTarget(val); localStorage.setItem('nexus_auto_gain_target', String(val)); syncSettingsToServer(); updateAudioProcessing?.(); }}
                           style={{width: '100%'}} />
                         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)'}}>
                           <span>-40 (quieter)</span><span>-10 (louder)</span>
