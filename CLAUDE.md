@@ -33,7 +33,7 @@ docker-compose logs -f client
 npm start          # Run server
 npm run dev        # Dev mode with nodemon
 npm run migrate    # Run database migrations
-npm test           # Run Jest tests (225 tests: validation, utils, permissions, config, security)
+npm test           # Run Jest tests (299 tests: validation, utils, permissions, config, security)
 ```
 
 ### Client (from `client/`)
@@ -53,8 +53,24 @@ docker exec nexus-postgres psql -U postgres -d nexus_db
 ## Architecture
 
 ### Server (`server/`)
-- **`index.js`** (4649 lines) — Express server with 89+ Socket.IO event handlers. All real-time communication goes through Socket.IO; REST is only used for auth, file uploads, GIF search, and URL previews.
-- **`db.js`** (100+ functions) — All PostgreSQL queries. Uses connection pooling (max 20 clients). Use `getClient()` for explicit transactions on multi-step operations.
+- **`index.js`** (~920 lines) — Express server, REST routes, middleware, and Socket.IO connection wiring. Delegates all socket event handlers to modules in `handlers/`. All real-time communication goes through Socket.IO; REST is only used for auth, file uploads, GIF search, and URL previews.
+- **`state.js`** — Shared in-memory state (`users`, `servers`, `messages`, `voiceChannels`) and O(1) user-to-socket index (`userIdToSocketId` Map). Exports `addUser`/`removeUser`/`getSocketIdForUser`/`isUserOnline`.
+- **`helpers.js`** — Extracted utility functions: `convertDbMessagesToRuntime` (synchronous, uses JOIN data), `serializeServer`, `getUserPerms`, `leaveVoice`, `handleSlashCommand`, rate limiters, etc.
+- **`handlers/`** — 13 Socket.IO handler modules, each exporting `function(io, socket)`:
+  - `auth.js` — join, disconnect, user updates, password change
+  - `servers.js` — server CRUD, kick/ban/timeout (server:create uses DB transaction)
+  - `channels.js` — channel/category CRUD, moderation queries
+  - `messages.js` — message send/edit/delete, reactions, pins, search, threads
+  - `roles.js` — role CRUD, member role assignment (DB-first pattern)
+  - `dms.js` — DM create/list/message, group DMs, message requests, calls
+  - `social.js` — friends, blocks, reports, invites
+  - `voice.js` — voice/WebRTC signaling, soundboard, screen sharing
+  - `webhooks.js` — webhook create/delete
+  - `emoji.js` — custom emoji CRUD
+  - `admin.js` — platform admin operations
+  - `bookmarks.js` — bookmark list/IDs
+  - `audit.js` — audit log retrieval
+- **`db.js`** (100+ functions) — All PostgreSQL queries. Uses connection pooling (max 20 clients). Use `getClient()` for explicit transactions on multi-step operations. Includes batch queries with JOINs (`getChannelMessagesWithAuthors`, `getDMChannelsWithDetails`) to avoid N+1 patterns.
 - **`config.js`** — Environment variable loading with validation. Production fails fast if `JWT_SECRET` or `DATABASE_URL` are missing. Also loads `PLATFORM_ADMIN` for platform-level admin designation.
 - **`validation.js`** — Input validation and sanitization for all user inputs.
 - **`utils.js`** — Permission checking with complex role hierarchy: @everyone defaults → role stacking (highest position wins) → channel-level overrides. Server owner has all permissions.
@@ -89,7 +105,7 @@ All events use domain-prefixed names: `message:send`, `channel:create`, `voice:j
 
 ## Testing
 
-**Automated:** 225 Jest tests in `tests/automated/` — run with `npm test` from `server/`. Tests cover validation, utils, permissions, config, and security. Can run without the full server stack.
+**Automated:** 299 Jest tests in `tests/automated/` — run with `npm test` from `server/`. Tests cover validation, utils, permissions, config, and security. Can run without the full server stack.
 
 **Manual:** 40 test cases in `tests/manual/` (8 categories: auth, messaging, channels, emoji, voice, social, moderation, UI).
 
