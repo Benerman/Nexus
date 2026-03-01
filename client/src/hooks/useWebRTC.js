@@ -207,6 +207,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
           delete speakingIntervalsRef.current[socketId];
           return;
         }
+        if (document.hidden) return; // Skip speaking detection when tab is backgrounded
         analyser.getByteFrequencyData(data);
         const avg = data.reduce((a, b) => a + b, 0) / data.length;
         const isSpeaking = avg > 15;
@@ -560,6 +561,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     let prevTimestamp = 0;
 
     qualityIntervalRef.current = setInterval(async () => {
+      if (document.hidden) return; // Skip quality monitoring when tab is backgrounded
       const peers = Object.values(peersRef.current);
       if (peers.length === 0) return;
 
@@ -817,6 +819,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
             clearInterval(intervalId);
             return;
           }
+          if (document.hidden) return; // Skip fallback audio processing when tab is backgrounded
 
           analyser.getByteFrequencyData(data);
 

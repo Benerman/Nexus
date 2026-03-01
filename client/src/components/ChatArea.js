@@ -499,6 +499,24 @@ const ChatArea = React.memo(function ChatArea({
     }, 1500);
   }, [socket, channel, resizeTextarea]);
 
+  // Clean up typing timeout and mobile actions timer on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      if (mobileActionsTimerRef.current) {
+        clearTimeout(mobileActionsTimerRef.current);
+        mobileActionsTimerRef.current = null;
+      }
+      if (isTypingRef.current && socket && channel) {
+        isTypingRef.current = false;
+        socket.emit('typing:stop', { channelId: channel.id });
+      }
+    };
+  }, [socket, channel]);
+
   // Compute mention suggestions
   const mentionSuggestions = React.useMemo(() => {
     if (!mentionQuery || !server) return [];

@@ -516,7 +516,7 @@ export default function App() {
     const s = io(getServerUrl(), {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: Infinity,
+      reconnectionAttempts: 50,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 15000,
       timeout: 10000
@@ -649,6 +649,7 @@ export default function App() {
       // Start periodic heartbeat for real-time state sync
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       heartbeatRef.current = setInterval(() => {
+        if (document.hidden) return; // Skip heartbeat when tab is backgrounded
         if (s.connected) s.emit('data:refresh');
       }, 30000); // Refresh every 30 seconds
 
