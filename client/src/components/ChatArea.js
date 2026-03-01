@@ -972,6 +972,7 @@ const ChatArea = React.memo(function ChatArea({
           message={contextMenu.message}
           currentUser={currentUser}
           isAdmin={server?.members?.[currentUser?.id]?.roles?.includes('admin')}
+          isServerOwner={server?.owner === currentUser?.id}
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
           onDelete={handleDeleteMessage}

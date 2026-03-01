@@ -154,24 +154,24 @@
 }
 
 @media (max-width: 768px) {
-  /* Active pill on bottom for horizontal layout */
+  /* Active pill on top for horizontal layout */
   .server-active-pill {
     left: 50% !important;
-    top: auto !important;
-    bottom: -8px;
+    top: -8px !important;
+    bottom: auto !important;
     transform: translateX(-50%) !important;
     width: 24px !important;
     height: 3px !important;
-    border-radius: 3px 3px 0 0 !important;
+    border-radius: 0 0 3px 3px !important;
   }
   .server-unread-pill {
     left: 50% !important;
-    top: auto !important;
-    bottom: -6px;
+    top: -6px !important;
+    bottom: auto !important;
     transform: translateX(-50%) !important;
     width: 12px !important;
     height: 3px !important;
-    border-radius: 3px 3px 0 0 !important;
+    border-radius: 0 0 3px 3px !important;
   }
   .server-unread-badge {
     bottom: auto;

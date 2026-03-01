@@ -760,10 +760,36 @@ export default function App() {
           const notPaused = !notificationsPausedUntilRef.current || Date.now() > notificationsPausedUntilRef.current;
           const shouldNotify = (document.visibilityState === 'hidden' || isMentioned) && notificationsEnabledRef.current && notPaused;
           if (shouldNotify) {
+            // Find channel/server context for notification
+            let channelName = null;
+            const srvData = serverDataRef.current;
+            for (const sId of Object.keys(srvData)) {
+              const s = srvData[sId];
+              if (s.isPersonal) continue;
+              const ch = s.channels?.text?.find(c => c.id === msg.channelId);
+              if (ch) { channelName = ch.name; break; }
+            }
+
             const authorName = msg.author?.username || msg.username || 'New message';
-            const prefix = isMentioned ? `[Mention] ${authorName}` : authorName;
-            sendNotification(prefix, {
-              body: (msg.content || '').replace(/[*_~`>#\[\]()\\|]/g, '').replace(/\s+/g, ' ').trim().substring(0, 100) || '(attachment)',
+            const title = isMentioned
+              ? `[Mention] ${authorName}${channelName ? ` in #${channelName}` : ''}`
+              : `${authorName}${channelName ? ` in #${channelName}` : ''}`;
+
+            // Build body — prefer content, fall back to embed info, then attachment notice
+            let body = (msg.content || '').replace(/[*_~`>#\[\]()\\|]/g, '').replace(/\s+/g, ' ').trim().substring(0, 100);
+            if (!body) {
+              if (msg.embeds?.length) {
+                const e = msg.embeds[0];
+                body = e.title || e.description?.substring(0, 100) || 'sent an embed';
+              } else if (msg.attachments?.length) {
+                body = 'sent an attachment';
+              } else {
+                body = 'sent a message';
+              }
+            }
+
+            sendNotification(title, {
+              body,
               icon: msg.author?.customAvatar || msg.author?.avatar || msg.avatar || '/favicon.ico',
               tag: isMentioned ? `mention-${msg.id}` : msg.channelId,
               silent: true,
