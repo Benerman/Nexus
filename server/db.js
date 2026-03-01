@@ -1487,6 +1487,222 @@ async function deleteCustomEmoji(emojiId) {
 /**
  * Close database connections
  */
+// ============================================================================
+// PIN FUNCTIONS
+// ============================================================================
+
+async function pinMessage(messageId, pinnedBy) {
+  const result = await query(
+    'UPDATE messages SET pinned = TRUE, pinned_at = NOW(), pinned_by = $1 WHERE id = $2 RETURNING *',
+    [pinnedBy, messageId]
+  );
+  return result.rows[0];
+}
+
+async function unpinMessage(messageId) {
+  const result = await query(
+    'UPDATE messages SET pinned = FALSE, pinned_at = NULL, pinned_by = NULL WHERE id = $1 RETURNING *',
+    [messageId]
+  );
+  return result.rows[0];
+}
+
+async function getPinnedMessages(channelId) {
+  const result = await query(
+    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color
+     FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     WHERE m.channel_id = $1 AND m.pinned = TRUE
+     ORDER BY m.pinned_at DESC`,
+    [channelId]
+  );
+  return result.rows;
+}
+
+async function getPinnedCount(channelId) {
+  const result = await query(
+    'SELECT COUNT(*) as count FROM messages WHERE channel_id = $1 AND pinned = TRUE',
+    [channelId]
+  );
+  return parseInt(result.rows[0].count);
+}
+
+// ============================================================================
+// SEARCH FUNCTIONS
+// ============================================================================
+
+async function searchMessages(serverId, options = {}) {
+  const { query: searchQuery, channelId, authorId, before, after, limit = 25 } = options;
+  const params = [];
+  const conditions = [];
+  let paramIdx = 1;
+
+  // Get all channel IDs for this server
+  if (channelId) {
+    conditions.push(`m.channel_id = $${paramIdx++}`);
+    params.push(channelId);
+  } else {
+    conditions.push(`m.channel_id IN (SELECT id FROM channels WHERE server_id = $${paramIdx++})`);
+    params.push(serverId);
+  }
+
+  if (searchQuery) {
+    conditions.push(`to_tsvector('english', m.content) @@ plainto_tsquery('english', $${paramIdx++})`);
+    params.push(searchQuery);
+  }
+
+  if (authorId) {
+    conditions.push(`m.author_id = $${paramIdx++}`);
+    params.push(authorId);
+  }
+
+  if (before) {
+    conditions.push(`m.created_at < to_timestamp($${paramIdx++} / 1000.0)`);
+    params.push(before);
+  }
+
+  if (after) {
+    conditions.push(`m.created_at > to_timestamp($${paramIdx++} / 1000.0)`);
+    params.push(after);
+  }
+
+  params.push(limit);
+
+  const result = await query(
+    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color
+     FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY m.created_at DESC
+     LIMIT $${paramIdx}`,
+    params
+  );
+  return result.rows;
+}
+
+// ============================================================================
+// THREAD FUNCTIONS
+// ============================================================================
+
+async function getThreadMessages(threadId, limit = 50) {
+  const result = await query(
+    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color
+     FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     WHERE m.thread_id = $1
+     ORDER BY m.created_at ASC
+     LIMIT $2`,
+    [threadId, limit]
+  );
+  return result.rows;
+}
+
+async function getThreadInfo(messageId) {
+  const result = await query(
+    `SELECT COUNT(*) as reply_count, MAX(created_at) as last_reply_at
+     FROM messages WHERE thread_id = $1`,
+    [messageId]
+  );
+  return result.rows[0];
+}
+
+async function saveThreadMessage({ id, channelId, authorId, content, attachments = [], threadId, mentions = null }) {
+  const result = await query(
+    `INSERT INTO messages (id, channel_id, author_id, content, attachments, thread_id, mentions)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [id, channelId, authorId, content, JSON.stringify(attachments), threadId, mentions ? JSON.stringify(mentions) : '{}']
+  );
+  return result.rows[0];
+}
+
+// ============================================================================
+// BOOKMARK / SAVED MESSAGE FUNCTIONS
+// ============================================================================
+
+async function saveBookmark(userId, messageId, channelId, serverId = null) {
+  const result = await query(
+    `INSERT INTO saved_messages (user_id, message_id, channel_id, server_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, message_id) DO NOTHING
+     RETURNING *`,
+    [userId, messageId, channelId, serverId]
+  );
+  return result.rows[0];
+}
+
+async function removeBookmark(userId, messageId) {
+  await query('DELETE FROM saved_messages WHERE user_id = $1 AND message_id = $2', [userId, messageId]);
+}
+
+async function getBookmarks(userId) {
+  const result = await query(
+    `SELECT sm.*, m.content, m.created_at as message_created_at, m.attachments,
+            a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color
+     FROM saved_messages sm
+     JOIN messages m ON sm.message_id = m.id
+     LEFT JOIN accounts a ON m.author_id = a.id
+     WHERE sm.user_id = $1
+     ORDER BY sm.saved_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+async function getUserBookmarkIds(userId) {
+  const result = await query(
+    'SELECT message_id FROM saved_messages WHERE user_id = $1',
+    [userId]
+  );
+  return result.rows.map(r => r.message_id);
+}
+
+// ============================================================================
+// AUDIT LOG FUNCTIONS
+// ============================================================================
+
+async function createAuditLog(serverId, action, actorId, targetId = null, changes = {}) {
+  const result = await query(
+    `INSERT INTO audit_logs (server_id, action, actor_id, target_id, changes)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [serverId, action, actorId, targetId, JSON.stringify(changes)]
+  );
+  return result.rows[0];
+}
+
+async function getAuditLogs(serverId, options = {}) {
+  const { action, actorId, limit = 50, before } = options;
+  const params = [serverId];
+  const conditions = ['server_id = $1'];
+  let paramIdx = 2;
+
+  if (action) {
+    conditions.push(`action = $${paramIdx++}`);
+    params.push(action);
+  }
+
+  if (actorId) {
+    conditions.push(`actor_id = $${paramIdx++}`);
+    params.push(actorId);
+  }
+
+  if (before) {
+    conditions.push(`created_at < $${paramIdx++}`);
+    params.push(new Date(before));
+  }
+
+  params.push(limit);
+
+  const result = await query(
+    `SELECT al.*, a.username as actor_username, a.avatar as actor_avatar
+     FROM audit_logs al
+     LEFT JOIN accounts a ON al.actor_id = a.id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY al.created_at DESC
+     LIMIT $${paramIdx}`,
+    params
+  );
+  return result.rows;
+}
+
 async function close() {
   await pool.end();
   console.log('[DB] Database connections closed');
@@ -1627,6 +1843,30 @@ module.exports = {
   getAllAccounts,
   getOrphanedDataStats,
   cleanupEmptyDMs,
+
+  // Pin functions
+  pinMessage,
+  unpinMessage,
+  getPinnedMessages,
+  getPinnedCount,
+
+  // Search functions
+  searchMessages,
+
+  // Thread functions
+  getThreadMessages,
+  getThreadInfo,
+  saveThreadMessage,
+
+  // Bookmark functions
+  saveBookmark,
+  removeBookmark,
+  getBookmarks,
+  getUserBookmarkIds,
+
+  // Audit log functions
+  createAuditLog,
+  getAuditLogs,
 
   // Maintenance
   initializeDatabase,

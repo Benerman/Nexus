@@ -1876,6 +1876,7 @@ io.on('connection', (socket) => {
       io.emit('user:kicked', { serverId, userId, username: kickedUsername, kickedBy: user.id });
 
       console.log(`[Moderation] ${user.username} kicked user ${userId} from ${srv.name}`);
+      db.createAuditLog(serverId, 'member_kick', user.id, userId, { username: kickedUsername }).catch(() => {});
     } catch (error) {
       console.error('[Moderation] Error kicking user:', error);
       socket.emit('error', { message: 'Failed to kick user' });
@@ -1932,6 +1933,7 @@ io.on('connection', (socket) => {
       io.emit('user:banned', { serverId, userId, username: bannedUsername, bannedBy: user.id });
 
       console.log(`[Moderation] ${user.username} banned user ${userId} from ${srv.name}`);
+      db.createAuditLog(serverId, 'member_ban', user.id, userId, { username: bannedUsername }).catch(() => {});
     } catch (error) {
       console.error('[Moderation] Error banning user:', error);
       socket.emit('error', { message: 'Failed to ban user' });
@@ -1982,6 +1984,7 @@ io.on('connection', (socket) => {
       });
 
       console.log(`[Moderation] ${user.username} timed out user ${userId} in ${srv.name} for ${duration} minutes`);
+      db.createAuditLog(serverId, 'member_timeout', user.id, userId, { duration }).catch(() => {});
     } catch (error) {
       console.error('[Moderation] Error timing out user:', error);
       socket.emit('error', { message: 'Failed to timeout user' });
@@ -2171,6 +2174,8 @@ io.on('connection', (socket) => {
       console.error('[Channel] Failed to persist channel to database:', err.message);
     });
 
+    db.createAuditLog(serverId, 'channel_create', user.id, channelId, { name: ch.name, type: ch.type }).catch(() => {});
+
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 
@@ -2239,6 +2244,8 @@ io.on('connection', (socket) => {
     db.query('DELETE FROM channels WHERE id = $1', [channelId]).catch(err => {
       console.error('[Channel] Failed to delete channel from database:', err.message);
     });
+
+    db.createAuditLog(serverId, 'channel_delete', user.id, channelId, {}).catch(() => {});
 
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
@@ -2783,6 +2790,8 @@ io.on('connection', (socket) => {
       console.error('[Roles] Failed to persist role to database:', err.message);
     });
 
+    db.createAuditLog(serverId, 'role_create', user.id, roleId, { name: roleName }).catch(() => {});
+
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 
@@ -2852,6 +2861,8 @@ io.on('connection', (socket) => {
     db.query('DELETE FROM roles WHERE id = $1 AND server_id = $2', [roleId, serverId]).catch(err => {
       console.error('[Roles] Failed to delete role from database:', err.message);
     });
+
+    db.createAuditLog(serverId, 'role_delete', user.id, roleId, { name: role.name }).catch(() => {});
 
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
@@ -3406,6 +3417,364 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Message Pinning ─────────────────────────────────────────────────────────
+  socket.on('message:pin', async ({ channelId, messageId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    const srv = findServerByChannelId(channelId);
+    if (!srv) return socket.emit('error', { message: 'Channel not found' });
+
+    const perms = getUserPerms(user.id, srv.id, channelId);
+    if (!perms.manageMessages && !perms.admin) {
+      return socket.emit('error', { message: 'You need Manage Messages permission to pin messages' });
+    }
+
+    // Check pin limit (50 per channel)
+    const pinCount = await db.getPinnedCount(channelId);
+    if (pinCount >= 50) {
+      return socket.emit('error', { message: 'This channel has reached the maximum of 50 pinned messages' });
+    }
+
+    try {
+      await db.pinMessage(messageId, user.id);
+
+      // Update in-memory message if present
+      const msgs = state.messages[channelId] || [];
+      const msg = msgs.find(m => m.id === messageId);
+      if (msg) {
+        msg.pinned = true;
+        msg.pinnedAt = Date.now();
+        msg.pinnedBy = user.id;
+      }
+
+      io.to(`text:${channelId}`).emit('message:pinned', { channelId, messageId, pinnedBy: user.id, pinnedAt: Date.now() });
+
+      db.createAuditLog(srv.id, 'message_pin', user.id, messageId, { channelId }).catch(() => {});
+    } catch (err) {
+      console.error('[Pin] Error pinning message:', err.message);
+      socket.emit('error', { message: 'Failed to pin message' });
+    }
+  });
+
+  socket.on('message:unpin', async ({ channelId, messageId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    const srv = findServerByChannelId(channelId);
+    if (!srv) return socket.emit('error', { message: 'Channel not found' });
+
+    const perms = getUserPerms(user.id, srv.id, channelId);
+    if (!perms.manageMessages && !perms.admin) {
+      return socket.emit('error', { message: 'You need Manage Messages permission to unpin messages' });
+    }
+
+    try {
+      await db.unpinMessage(messageId);
+
+      const msgs = state.messages[channelId] || [];
+      const msg = msgs.find(m => m.id === messageId);
+      if (msg) {
+        msg.pinned = false;
+        msg.pinnedAt = null;
+        msg.pinnedBy = null;
+      }
+
+      io.to(`text:${channelId}`).emit('message:unpinned', { channelId, messageId });
+
+      db.createAuditLog(srv.id, 'message_unpin', user.id, messageId, { channelId }).catch(() => {});
+    } catch (err) {
+      console.error('[Pin] Error unpinning message:', err.message);
+      socket.emit('error', { message: 'Failed to unpin message' });
+    }
+  });
+
+  socket.on('messages:get-pinned', async ({ channelId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    try {
+      const dbPinned = await db.getPinnedMessages(channelId);
+      const pinned = dbPinned.map(row => ({
+        id: row.id,
+        channelId: row.channel_id,
+        content: row.content,
+        attachments: typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : (row.attachments || []),
+        author: {
+          id: row.author_id,
+          username: row.author_username || 'Deleted User',
+          avatar: row.author_avatar || '👻',
+          customAvatar: row.author_custom_avatar,
+          color: row.author_color || '#80848E'
+        },
+        timestamp: new Date(row.created_at).getTime(),
+        reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {}),
+        pinned: true,
+        pinnedAt: row.pinned_at ? new Date(row.pinned_at).getTime() : null,
+        pinnedBy: row.pinned_by
+      }));
+      socket.emit('messages:pinned', { channelId, messages: pinned });
+    } catch (err) {
+      console.error('[Pin] Error fetching pinned messages:', err.message);
+    }
+  });
+
+  // ─── Message Search ─────────────────────────────────────────────────────────
+  socket.on('messages:search', async ({ serverId, query: searchQuery, channelId, authorId, before, after }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    if (!searchQuery?.trim()) return;
+
+    const srv = state.servers[serverId];
+    if (!srv) return socket.emit('error', { message: 'Server not found' });
+    if (!srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
+
+    try {
+      const dbResults = await db.searchMessages(serverId, {
+        query: searchQuery.trim(),
+        channelId,
+        authorId,
+        before,
+        after,
+        limit: 25
+      });
+
+      const results = dbResults.map(row => ({
+        id: row.id,
+        channelId: row.channel_id,
+        content: row.content,
+        attachments: typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : (row.attachments || []),
+        author: {
+          id: row.author_id,
+          username: row.author_username || 'Deleted User',
+          avatar: row.author_avatar || '👻',
+          customAvatar: row.author_custom_avatar,
+          color: row.author_color || '#80848E'
+        },
+        timestamp: new Date(row.created_at).getTime(),
+        reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {})
+      }));
+
+      socket.emit('messages:search-results', { results, query: searchQuery });
+    } catch (err) {
+      console.error('[Search] Error searching messages:', err.message);
+      socket.emit('error', { message: 'Search failed' });
+    }
+  });
+
+  // ─── Message Threads ────────────────────────────────────────────────────────
+  socket.on('thread:reply', async ({ channelId, threadId, content, attachments }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    if (!content?.trim() && !attachments?.length) return;
+
+    try {
+      await messageLimiter.consume(user.id);
+    } catch (error) {
+      return socket.emit('error', { message: 'You are sending messages too quickly.' });
+    }
+
+    const srv = findServerByChannelId(channelId);
+    if (srv) {
+      const perms = getUserPerms(user.id, srv.id, channelId);
+      if (!perms.sendMessages && !perms.admin) {
+        return socket.emit('error', { message: 'No permission to send messages' });
+      }
+    }
+
+    const msgId = uuidv4();
+    const trimmedContent = content ? content.trim().slice(0, 2000) : '';
+
+    try {
+      await db.saveThreadMessage({
+        id: msgId,
+        channelId,
+        authorId: user.id,
+        content: trimmedContent,
+        attachments: (attachments || []).slice(0, 4),
+        threadId
+      });
+
+      const threadMsg = {
+        id: msgId,
+        channelId,
+        threadId,
+        content: trimmedContent,
+        attachments: (attachments || []).slice(0, 4),
+        author: user,
+        timestamp: Date.now(),
+        reactions: {}
+      };
+
+      // Get updated thread info
+      const threadInfo = await db.getThreadInfo(threadId);
+
+      io.to(`text:${channelId}`).emit('thread:new-reply', {
+        channelId,
+        threadId,
+        message: threadMsg,
+        replyCount: parseInt(threadInfo.reply_count),
+        lastReplyAt: new Date(threadInfo.last_reply_at).getTime()
+      });
+    } catch (err) {
+      console.error('[Thread] Error saving thread reply:', err.message);
+      socket.emit('error', { message: 'Failed to send thread reply' });
+    }
+  });
+
+  socket.on('thread:get', async ({ channelId, threadId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    try {
+      const dbMessages = await db.getThreadMessages(threadId);
+      const parentMsg = await db.getMessageById(threadId);
+
+      const messages = dbMessages.map(row => ({
+        id: row.id,
+        channelId: row.channel_id,
+        threadId: row.thread_id,
+        content: row.content,
+        attachments: typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : (row.attachments || []),
+        author: {
+          id: row.author_id,
+          username: row.author_username || 'Deleted User',
+          avatar: row.author_avatar || '👻',
+          customAvatar: row.author_custom_avatar,
+          color: row.author_color || '#80848E'
+        },
+        timestamp: new Date(row.created_at).getTime(),
+        reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {})
+      }));
+
+      let parent = null;
+      if (parentMsg) {
+        let author = Object.values(state.users).find(u => u.id === parentMsg.author_id);
+        if (!author) {
+          author = {
+            id: parentMsg.author_id,
+            username: parentMsg.author_username || 'Deleted User',
+            avatar: parentMsg.author_avatar || '👻',
+            customAvatar: parentMsg.author_custom_avatar,
+            color: parentMsg.author_color || '#80848E'
+          };
+        }
+        parent = {
+          id: parentMsg.id,
+          channelId: parentMsg.channel_id,
+          content: parentMsg.content,
+          attachments: typeof parentMsg.attachments === 'string' ? JSON.parse(parentMsg.attachments || '[]') : (parentMsg.attachments || []),
+          author,
+          timestamp: new Date(parentMsg.created_at).getTime(),
+          reactions: typeof parentMsg.reactions === 'string' ? JSON.parse(parentMsg.reactions || '{}') : (parentMsg.reactions || {})
+        };
+      }
+
+      socket.emit('thread:messages', { channelId, threadId, parent, messages });
+    } catch (err) {
+      console.error('[Thread] Error fetching thread:', err.message);
+    }
+  });
+
+  // ─── Bookmarks / Saved Messages ─────────────────────────────────────────────
+  socket.on('message:save', async ({ messageId, channelId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    const srv = findServerByChannelId(channelId);
+    const serverId = srv ? srv.id : null;
+
+    try {
+      await db.saveBookmark(user.id, messageId, channelId, serverId);
+      socket.emit('message:saved', { messageId });
+    } catch (err) {
+      console.error('[Bookmark] Error saving bookmark:', err.message);
+    }
+  });
+
+  socket.on('message:unsave', async ({ messageId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    try {
+      await db.removeBookmark(user.id, messageId);
+      socket.emit('message:unsaved', { messageId });
+    } catch (err) {
+      console.error('[Bookmark] Error removing bookmark:', err.message);
+    }
+  });
+
+  socket.on('bookmarks:list', async () => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    try {
+      const dbBookmarks = await db.getBookmarks(user.id);
+      const bookmarks = dbBookmarks.map(row => ({
+        id: row.id,
+        messageId: row.message_id,
+        channelId: row.channel_id,
+        serverId: row.server_id,
+        savedAt: new Date(row.saved_at).getTime(),
+        content: row.content,
+        messageCreatedAt: new Date(row.message_created_at).getTime(),
+        attachments: typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : (row.attachments || []),
+        author: {
+          username: row.author_username || 'Deleted User',
+          avatar: row.author_avatar || '👻',
+          customAvatar: row.author_custom_avatar,
+          color: row.author_color || '#80848E'
+        }
+      }));
+      socket.emit('bookmarks:list', { bookmarks });
+    } catch (err) {
+      console.error('[Bookmark] Error fetching bookmarks:', err.message);
+    }
+  });
+
+  socket.on('bookmarks:get-ids', async () => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    try {
+      const ids = await db.getUserBookmarkIds(user.id);
+      socket.emit('bookmarks:ids', { ids });
+    } catch (err) {
+      console.error('[Bookmark] Error fetching bookmark IDs:', err.message);
+    }
+  });
+
+  // ─── Audit Log ──────────────────────────────────────────────────────────────
+  socket.on('audit:get-logs', async ({ serverId, action, actorId, before, limit }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    const srv = state.servers[serverId];
+    if (!srv) return socket.emit('error', { message: 'Server not found' });
+
+    const perms = getUserPerms(user.id, srv.id);
+    if (!perms.admin && srv.ownerId !== user.id) {
+      return socket.emit('error', { message: 'You need Admin permission to view audit logs' });
+    }
+
+    try {
+      const logs = await db.getAuditLogs(serverId, { action, actorId, limit: limit || 50, before });
+      const formatted = logs.map(log => ({
+        id: log.id,
+        action: log.action,
+        actorId: log.actor_id,
+        actorUsername: log.actor_username || 'Deleted User',
+        actorAvatar: log.actor_avatar || '👻',
+        targetId: log.target_id,
+        changes: typeof log.changes === 'string' ? JSON.parse(log.changes) : (log.changes || {}),
+        createdAt: new Date(log.created_at).getTime()
+      }));
+      socket.emit('audit:logs', { serverId, logs: formatted });
+    } catch (err) {
+      console.error('[Audit] Error fetching audit logs:', err.message);
+    }
+  });
+
   // ─── Direct Messages ──────────────────────────────────────────────────────────
   socket.on('dm:create', async ({ targetUserId }) => {
     const user = state.users[socket.id];
@@ -3494,7 +3863,11 @@ io.on('connection', (socket) => {
           webhookAvatar: dbMsg.webhook_avatar || null,
           mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
           commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
-          embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
+          embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || []),
+          pinned: dbMsg.pinned || false,
+          pinnedAt: dbMsg.pinned_at ? new Date(dbMsg.pinned_at).getTime() : null,
+          pinnedBy: dbMsg.pinned_by || null,
+          threadId: dbMsg.thread_id || null
         };
       }));
 
@@ -3893,7 +4266,11 @@ io.on('connection', (socket) => {
           webhookAvatar: dbMsg.webhook_avatar || null,
           mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
           commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
-          embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
+          embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || []),
+          pinned: dbMsg.pinned || false,
+          pinnedAt: dbMsg.pinned_at ? new Date(dbMsg.pinned_at).getTime() : null,
+          pinnedBy: dbMsg.pinned_by || null,
+          threadId: dbMsg.thread_id || null
         };
       }));
 
@@ -5117,7 +5494,11 @@ async function convertDbMessages(dbMessages, channelId) {
         webhookAvatar: dbMsg.webhook_avatar || null,
         mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
         commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
-        embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
+        embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || []),
+        pinned: dbMsg.pinned || false,
+        pinnedAt: dbMsg.pinned_at ? new Date(dbMsg.pinned_at).getTime() : null,
+        pinnedBy: dbMsg.pinned_by || null,
+        threadId: dbMsg.thread_id || null
       };
     } catch (err) {
       console.error(`[Messages] Error converting message ${dbMsg.id} (webhook=${dbMsg.is_webhook}):`, err.message);

@@ -300,7 +300,11 @@ const ChatArea = React.memo(function ChatArea({
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
   developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete, onRefreshData,
-  onTrackJob, onCompleteJob, onFailJob, showConfirm
+  onTrackJob, onCompleteJob, onFailJob, showConfirm,
+  showPinnedPanel, onTogglePinnedPanel, pinnedMessages,
+  showSearchPanel, onToggleSearchPanel, searchResults, onSearch, searchQuery,
+  savedMessageIds, onSaveMessage, onUnsaveMessage,
+  threadPanel, onOpenThread, onCloseThread, onThreadReply,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -328,6 +332,7 @@ const ChatArea = React.memo(function ChatArea({
   const [commandQuery, setCommandQuery] = useState(null); // string or null - text after /
   const [commandIndex, setCommandIndex] = useState(0);
   const [pollCreatorOpen, setPollCreatorOpen] = useState(false);
+  const [threadInput, setThreadInput] = useState('');
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const messageRefs = useRef({}); // refs for all messages
@@ -1049,6 +1054,16 @@ const ChatArea = React.memo(function ChatArea({
               <LinkIcon size={18} color="var(--text-muted)" />
             </button>
           )}
+          {onTogglePinnedPanel && (
+            <button className="header-icon-btn" onClick={onTogglePinnedPanel} title="Pinned Messages" style={{ background: showPinnedPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showPinnedPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+            </button>
+          )}
+          {onToggleSearchPanel && (
+            <button className="header-icon-btn" onClick={onToggleSearchPanel} title="Search" style={{ background: showSearchPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showSearchPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            </button>
+          )}
           {!channel.isDM && (
             <button className="header-action-btn" onClick={onToggleMemberSidebar}
               title={memberSidebarVisible ? 'Hide member list' : 'Show member list'}>
@@ -1156,6 +1171,7 @@ const ChatArea = React.memo(function ChatArea({
               {showDate && <div className="message-date-divider"><span>{formatDate(msg.timestamp)}</span></div>}
               <div
                 ref={el => messageRefs.current[msg.id] = el}
+                data-message-id={msg.id}
                 className={`message ${msg.isGrouped?'grouped':''} ${msg.author.id===currentUser?.id?'own':''} ${msg.isWebhook?'webhook-msg':''} ${isEditing?'editing':''} ${highlightedMessageId===msg.id?'highlighted':''} ${mobileActionsId===msg.id?'mobile-actions-visible':''} ${(msg.mentions?.everyone || msg.mentions?.users?.some(u => u.id === currentUser?.id)) ? 'mention-highlight' : ''}`}
                 onContextMenu={(e) => handleMessageContextMenu(e, msg)}
                 onTouchStart={(e) => {
@@ -1187,6 +1203,7 @@ const ChatArea = React.memo(function ChatArea({
                       <span className="message-author" style={{color:msg.author.color}}>{msg.author.username}</span>
                       {msg.isWebhook && <span className="webhook-badge">BOT</span>}
                       <span className="message-time">{formatTime(msg.timestamp)}</span>
+                      {msg.pinned && <span style={{ color: '#ed4245', marginLeft: '4px', fontSize: '12px' }} title="Pinned">📌</span>}
                       {msg.editedAt && <span className="edited-badge">(edited)</span>}
                     </div>
                   )}
@@ -1314,12 +1331,21 @@ const ChatArea = React.memo(function ChatArea({
                       ))}
                     </div>
                   )}
+                  {msg.threadReplyCount > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', marginTop: '4px', cursor: 'pointer', color: '#00a8fc', fontSize: '13px' }} onClick={() => onOpenThread && onOpenThread(channel.id, msg.id)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                      <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
+                    </div>
+                  )}
                 </div>
                 {!isEditing && (
                   <div className="message-actions">
                     <button className="reply-action-btn"
                       onClick={e=>{e.stopPropagation();handleReplyToMessage(msg);}}
                       title="Reply">↩</button>
+                    <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (msg.pinned) { socket.emit('message:unpin', { channelId: channel.id, messageId: msg.id }); } else { socket.emit('message:pin', { channelId: channel.id, messageId: msg.id }); } }} title={msg.pinned ? "Unpin" : "Pin"} style={{ color: msg.pinned ? '#ed4245' : undefined }}>📌</button>
+                    {onSaveMessage && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (savedMessageIds?.has(msg.id)) { onUnsaveMessage(msg.id); } else { onSaveMessage(msg.id, channel.id); } }} title={savedMessageIds?.has(msg.id) ? "Remove Bookmark" : "Bookmark"} style={{ color: savedMessageIds?.has(msg.id) ? '#f0b132' : undefined }}>🔖</button>}
+                    {onOpenThread && !msg.threadId && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); onOpenThread(channel.id, msg.id); }} title="Start Thread">💬</button>}
                     <button className="reaction-btn"
                       onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
                     <button className="message-options-btn"
@@ -1535,6 +1561,85 @@ const ChatArea = React.memo(function ChatArea({
           </div>
         </div>
       </div>
+
+      {showPinnedPanel && (
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Pinned Messages</h3>
+            <button onClick={onTogglePinnedPanel} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            {(pinnedMessages || []).length === 0 ? (
+              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No pinned messages in this channel</div>
+            ) : (pinnedMessages || []).map(msg => (
+              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = document.querySelector(`[data-message-id="${msg.id}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{msg.author?.username}</span>
+                  <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(msg.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{msg.content?.substring(0, 200)}{msg.content?.length > 200 ? '...' : ''}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showSearchPanel && (
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e' }}>
+            <h3 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '16px' }}>Search Messages</h3>
+            <input type="text" placeholder="Search..." value={searchQuery} onChange={e => onSearch(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#1e1f22', border: '1px solid #3a3a3e', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
+            <button onClick={onToggleSearchPanel} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            {!searchResults ? (
+              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>Enter a search term to find messages</div>
+            ) : searchResults.length === 0 ? (
+              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No results found</div>
+            ) : searchResults.map(msg => (
+              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = document.querySelector(`[data-message-id="${msg.id}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{msg.author?.username}</span>
+                  <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(msg.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{msg.content?.substring(0, 200)}{msg.content?.length > 200 ? '...' : ''}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {threadPanel && (
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '400px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Thread</h3>
+            <button onClick={onCloseThread} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          </div>
+          {threadPanel.parent && (
+            <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', background: '#1e1f22' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ color: threadPanel.parent.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{threadPanel.parent.author?.username}</span>
+                <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(threadPanel.parent.timestamp).toLocaleString()}</span>
+              </div>
+              <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{threadPanel.parent.content}</div>
+            </div>
+          )}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            {(threadPanel.messages || []).map(msg => (
+              <div key={msg.id} style={{ padding: '8px 12px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                  <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '13px' }}>{msg.author?.username}</span>
+                  <span style={{ color: '#72767d', fontSize: '11px' }}>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{msg.content}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '12px', borderTop: '1px solid #3a3a3e' }}>
+            <input type="text" placeholder="Reply to thread..." value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && threadInput.trim() && onThreadReply) { onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} style={{ width: '100%', padding: '10px 12px', background: '#383a40', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 });

@@ -449,6 +449,11 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [modLoading, setModLoading] = useState(false);
   const [modSearch, setModSearch] = useState('');
 
+  // Audit Log
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditFilter, setAuditFilter] = useState('all');
+
   // Platform Admin
   const [adminSection, setAdminSection] = useState('servers');
   const [adminServers, setAdminServers] = useState([]);
@@ -540,6 +545,19 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     socket.on('user:password-changed', handlePasswordChanged);
     return () => { socket.off('webhook:created', h); socket.off('user:password-changed', handlePasswordChanged); };
   }, [socket]);
+
+  // Listen for audit log data
+  useEffect(() => {
+    if (!socket) return;
+    const handleAuditLogs = ({ serverId: sid, logs }) => {
+      if (sid === server?.id) {
+        setAuditLogs(logs);
+        setAuditLoading(false);
+      }
+    };
+    socket.on('audit:logs', handleAuditLogs);
+    return () => socket.off('audit:logs', handleAuditLogs);
+  }, [socket, server?.id]);
 
   // Check ownership early (needed by ICE config effect below)
   const isOwner = server?.ownerId === currentUser?.id;
@@ -999,6 +1017,15 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       loadModData();
     }
   }, [tab, server?.id]);
+
+  // Load audit log data when tab opens
+  useEffect(() => {
+    if (tab === 'audit-log' && socket && server) {
+      setAuditLoading(true);
+      setAuditFilter('all');
+      socket.emit('audit:get-logs', { serverId: server.id });
+    }
+  }, [tab, socket, server?.id]);
 
   // Load platform admin data when tab opens
   useEffect(() => {
@@ -1596,6 +1623,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       ...(userPerms.manageServer || userPerms.admin ? [{id:'soundboard', label:'Soundboard', icon: <SoundboardIcon size={16} />}] : []),
       ...(userPerms.manageEmojis || userPerms.admin ? [{id:'emojis', label:'Emojis', icon: <EmojiIcon size={16} />}] : []),
       ...(userPerms.admin || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
+      ...(userPerms.admin || isOwner ? [{id:'audit-log', label:'Audit Log', icon: <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>}] : []),
     ] : []),
     ...(currentUser?.isPlatformAdmin ? [{id:'platform-admin', label:'Platform Admin', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15l-4-4 1.41-1.41L11 13.17l6.59-6.59L19 8l-8 8z"/></svg>}] : []),
     {id:'about', label:'About', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>}
@@ -4138,6 +4166,45 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       )}
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── AUDIT LOG ── */}
+          {tab==='audit-log' && (userPerms.admin || isOwner) && (
+            <div className="settings-section">
+              <h2>Audit Log</h2>
+              <p style={{ color: '#b5bac1', fontSize: '14px', marginBottom: '16px' }}>Review recent actions taken in this server.</p>
+
+              <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {['all', 'member_kick', 'member_ban', 'member_timeout', 'channel_create', 'channel_delete', 'role_create', 'role_delete', 'message_pin', 'message_unpin'].map(filter => (
+                  <button key={filter} onClick={() => { setAuditFilter(filter); setAuditLoading(true); socket.emit('audit:get-logs', { serverId: server.id, action: filter === 'all' ? undefined : filter }); }} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid ' + (auditFilter === filter ? '#ed4245' : '#3a3a3e'), background: auditFilter === filter ? 'rgba(237, 66, 69, 0.15)' : 'transparent', color: auditFilter === filter ? '#ed4245' : '#b5bac1', cursor: 'pointer', fontSize: '12px', textTransform: 'capitalize' }}>
+                    {filter === 'all' ? 'All' : filter.replace(/_/g, ' ')}
+                  </button>
+                ))}
+              </div>
+
+              {auditLoading ? (
+                <div style={{ color: '#72767d', textAlign: 'center', padding: '20px' }}>Loading...</div>
+              ) : auditLogs.length === 0 ? (
+                <div style={{ color: '#72767d', textAlign: 'center', padding: '40px', fontSize: '14px' }}>No audit log entries found</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {auditLogs.map(log => (
+                    <div key={log.id} style={{ padding: '12px 16px', background: '#1e1f22', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                          <span style={{ color: '#fff', fontWeight: 600, fontSize: '14px' }}>{log.actorUsername}</span>
+                          <span style={{ color: '#b5bac1', fontSize: '13px' }}>{log.action.replace(/_/g, ' ')}</span>
+                          {log.changes?.username && <span style={{ color: '#ed4245', fontSize: '13px' }}>{log.changes.username}</span>}
+                          {log.changes?.name && <span style={{ color: '#00a8fc', fontSize: '13px' }}>{log.changes.name}</span>}
+                          {log.changes?.duration && <span style={{ color: '#f0b132', fontSize: '13px' }}>({log.changes.duration} min)</span>}
+                        </div>
+                        <div style={{ color: '#72767d', fontSize: '12px' }}>{new Date(log.createdAt).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
