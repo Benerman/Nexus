@@ -132,7 +132,7 @@ describe('Message Search', () => {
   });
 
   test('Non-member cannot search server messages -> error', async () => {
-    const outsider = await users.createConnected('searchoutsider');
+    const outsider = await users.createConnected('srchout');
 
     const errorPromise = waitForEvent(outsider.socket, 'error', 3000).catch(() => 'timeout');
     outsider.socket.emit('messages:search', { serverId, query: uniqueWord });
