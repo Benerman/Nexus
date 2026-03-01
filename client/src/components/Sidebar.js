@@ -245,8 +245,8 @@ const Sidebar = React.memo(function Sidebar({
     // Clean up immediately on mount
     cleanupDuplicates();
 
-    // Keep cleaning up every 100ms to prevent accumulation
-    const interval = setInterval(cleanupDuplicates, 100);
+    // Keep cleaning up every 2s as a safety net
+    const interval = setInterval(cleanupDuplicates, 2000);
 
     return () => clearInterval(interval);
   }, []); // Run once on mount
