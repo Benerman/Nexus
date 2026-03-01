@@ -11,4 +11,8 @@ ALTER TABLE dm_channels ADD CONSTRAINT dm_channels_participant_2_fkey
 
 -- Drop constraints that don't work with NULL participants
 ALTER TABLE dm_channels DROP CONSTRAINT IF EXISTS no_self_dm;
+
+-- Re-create unique constraint (needed by getOrCreateDMChannel's ON CONFLICT clause).
+-- PostgreSQL UNIQUE treats NULLs as distinct, so deleted-account rows won't conflict.
 ALTER TABLE dm_channels DROP CONSTRAINT IF EXISTS unique_dm;
+ALTER TABLE dm_channels ADD CONSTRAINT unique_dm UNIQUE(participant_1, participant_2);

@@ -51,5 +51,5 @@ export default function useLongPress(callback, delay = 350) {
     }
   }, [clear]);
 
-  return { onTouchStart, onTouchMove, onTouchEnd };
+  return { onTouchStart, onTouchMove, onTouchEnd, firedRef };
 }
