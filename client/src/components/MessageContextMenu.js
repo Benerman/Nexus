@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import './MessageContextMenu.css';
 
-const MessageContextMenu = ({ message, currentUser, isAdmin, position, onClose, onDelete, onEdit, onReply, onCopyUrl, onReport, developerMode }) => {
+const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, position, onClose, onDelete, onEdit, onReply, onCopyUrl, onReport, developerMode }) => {
   const menuRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [adjustedPosition, setAdjustedPosition] = useState(position);
   const [ready, setReady] = useState(false);
   const isAuthor = message.author.id === currentUser?.id;
-  const canDelete = isAuthor || isAdmin;
+  const canDelete = isAuthor || isAdmin || isServerOwner;
 
   // Delay overlay click sensitivity so the touch-end from long press
   // doesn't immediately trigger the ghost click that dismisses the menu
