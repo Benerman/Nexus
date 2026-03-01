@@ -695,10 +695,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
 
       // Compressor to prevent clipping — keeps peaks from distorting
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -6;
-      compressor.knee.value = 6;
-      compressor.ratio.value = 4;
-      compressor.attack.value = 0.003;
+      compressor.threshold.value = -12;
+      compressor.knee.value = 10;
+      compressor.ratio.value = 2;
+      compressor.attack.value = 0.010;
       compressor.release.value = 0.1;
 
       // Output destination (creates a new MediaStream)

@@ -230,7 +230,7 @@ class NexusAudioProcessor extends AudioWorkletProcessor {
         }
       }
 
-      if (gateIsOpen && dbFS > -70) {
+      if (this._gateState === 'open' && dbFS > -70) {
         // 5b. Leveler — slow tracking of input level
         const levCoeff = dbFS > this._levelerBaseline ? this._levelerAttackCoeff : this._levelerReleaseCoeff;
         this._levelerBaseline += levCoeff * (dbFS - this._levelerBaseline);

@@ -48,9 +48,11 @@ function applySavedServerOrder(serverList) {
 }
 
 export default function App() {
-  renderCount++;
-  const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
-  console.log(`[App] RENDER #${renderCount} at ${timestamp}`);
+  if (process.env.NODE_ENV === 'development') {
+    renderCount++;
+    const timestamp = new Date().toISOString().split('T')[1].slice(0, 12);
+    console.log(`[App] RENDER #${renderCount} at ${timestamp}`);
+  }
 
   const [serverSetupNeeded, setServerSetupNeeded] = useState(() => needsServerSetup());
   const [socket, setSocket] = useState(null);
