@@ -2071,6 +2071,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   setInputVolume(parseInt(e.target.value));
                   localStorage.setItem('nexus_audio_input_volume', e.target.value);
                   syncSettingsToServer();
+                  updateAudioProcessing?.();
                 }}
                 style={{width: '100%'}}
               />
@@ -2157,6 +2158,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             setNoiseGateEnabled(e.target.checked);
                             localStorage.setItem('nexus_noise_gate_enabled', String(e.target.checked));
                             syncSettingsToServer();
+                            updateAudioProcessing?.();
                           }}
                         />
                         <span className="toggle-slider" />
@@ -2166,7 +2168,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       <>
                         <label className="settings-label">Gate Threshold: {noiseGateThreshold} dB</label>
                         <input type="range" min="-80" max="-5" step="1" value={noiseGateThreshold}
-                          onChange={e => { const val = parseInt(e.target.value); setNoiseGateThreshold(val); localStorage.setItem('nexus_noise_gate_threshold', String(val)); syncSettingsToServer(); }}
+                          onChange={e => { const val = parseInt(e.target.value); setNoiseGateThreshold(val); localStorage.setItem('nexus_noise_gate_threshold', String(val)); syncSettingsToServer(); updateAudioProcessing?.(); }}
                           style={{width: '100%'}} />
                         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)'}}>
                           <span>-80 (sensitive)</span><span>-5 (aggressive)</span>
@@ -2186,6 +2188,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             setAutoGainEnabled(e.target.checked);
                             localStorage.setItem('nexus_auto_gain_enabled', String(e.target.checked));
                             syncSettingsToServer();
+                            updateAudioProcessing?.();
                           }}
                         />
                         <span className="toggle-slider" />
@@ -2195,7 +2198,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       <>
                         <label className="settings-label">Target Level: {autoGainTarget} dB</label>
                         <input type="range" min="-40" max="-10" step="1" value={autoGainTarget}
-                          onChange={e => { const val = parseInt(e.target.value); setAutoGainTarget(val); localStorage.setItem('nexus_auto_gain_target', String(val)); syncSettingsToServer(); }}
+                          onChange={e => { const val = parseInt(e.target.value); setAutoGainTarget(val); localStorage.setItem('nexus_auto_gain_target', String(val)); syncSettingsToServer(); updateAudioProcessing?.(); }}
                           style={{width: '100%'}} />
                         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)'}}>
                           <span>-40 (quieter)</span><span>-10 (louder)</span>
