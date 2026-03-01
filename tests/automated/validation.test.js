@@ -505,12 +505,12 @@ describe('RateLimiter', () => {
   });
 
   test('expired requests are removed on next check', () => {
-    const limiter = new RateLimiter(1, 1); // 1 request per 1ms
+    const limiter = new RateLimiter(1, 50); // 1 request per 50ms
 
     limiter.check('user1');
     expect(limiter.check('user1').allowed).toBe(false);
 
-    return new Promise(resolve => setTimeout(resolve, 10)).then(() => {
+    return new Promise(resolve => setTimeout(resolve, 100)).then(() => {
       // After window passes, user should be allowed again
       expect(limiter.check('user1').allowed).toBe(true);
     });
