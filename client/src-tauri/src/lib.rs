@@ -104,6 +104,7 @@ pub fn run() {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
             main_window.set_icon(icon)?;
 
+            #[cfg(not(target_os = "macos"))]
             let window_for_close = main_window.clone();
             let app_handle_for_close = app.handle().clone();
             let minimize_for_close = minimize_to_tray.clone();
@@ -111,6 +112,18 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     if *minimize_for_close.lock().unwrap() {
                         api.prevent_close();
+                        // On macOS, hide the app (not just the window) so clicking
+                        // the dock icon automatically restores it via the native
+                        // applicationShouldHandleReopen delegate
+                        #[cfg(target_os = "macos")]
+                        {
+                            use objc2_app_kit::NSApplication;
+                            use objc2::MainThreadMarker;
+                            let mtm = unsafe { MainThreadMarker::new_unchecked() };
+                            let ns_app = NSApplication::sharedApplication(mtm);
+                            ns_app.hide(None);
+                        }
+                        #[cfg(not(target_os = "macos"))]
                         let _ = window_for_close.hide();
                     } else {
                         app_handle_for_close.exit(0);
