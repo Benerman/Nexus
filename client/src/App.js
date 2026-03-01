@@ -140,6 +140,15 @@ export default function App() {
   const [activityOpen, setActivityOpen] = useState(false);
   const activityTimers = useRef({});
 
+  // Pinned messages, search, bookmarks, and thread state
+  const [pinnedMessages, setPinnedMessages] = useState({});  // channelId -> [messages]
+  const [showPinnedPanel, setShowPinnedPanel] = useState(false);
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [savedMessageIds, setSavedMessageIds] = useState(new Set());
+  const [threadPanel, setThreadPanel] = useState(null);  // { channelId, threadId, parent, messages }
+
   // Auto-updater state (Tauri only)
   const [updateAvailable, setUpdateAvailable] = useState(null); // { version, notes, install }
 
@@ -660,6 +669,7 @@ export default function App() {
         s.emit('friend:list');
         s.emit('dm:unread-counts');
         s.emit('dm:message-requests');
+        s.emit('bookmarks:get-ids');
       }
 
       // Handle pending invite from URL (e.g. /invite/abc123)
@@ -832,6 +842,72 @@ export default function App() {
           m.id === messageId ? { ...m, commandData } : m
         )
       })));
+
+    // Pin/unpin, search, bookmarks, and thread handlers
+    s.on('message:pinned', ({ channelId, messageId, pinnedBy, pinnedAt }) => {
+      setMessages(prev => ({
+        ...prev,
+        [channelId]: (prev[channelId] || []).map(m =>
+          m.id === messageId ? { ...m, pinned: true, pinnedBy, pinnedAt } : m
+        )
+      }));
+    });
+
+    s.on('message:unpinned', ({ channelId, messageId }) => {
+      setMessages(prev => ({
+        ...prev,
+        [channelId]: (prev[channelId] || []).map(m =>
+          m.id === messageId ? { ...m, pinned: false, pinnedBy: null, pinnedAt: null } : m
+        )
+      }));
+      setPinnedMessages(prev => ({
+        ...prev,
+        [channelId]: (prev[channelId] || []).filter(m => m.id !== messageId)
+      }));
+    });
+
+    s.on('messages:pinned', ({ channelId, messages }) => {
+      setPinnedMessages(prev => ({ ...prev, [channelId]: messages }));
+    });
+
+    s.on('messages:search-results', ({ results, query }) => {
+      setSearchResults(results);
+    });
+
+    s.on('message:saved', ({ messageId }) => {
+      setSavedMessageIds(prev => new Set([...prev, messageId]));
+    });
+
+    s.on('message:unsaved', ({ messageId }) => {
+      setSavedMessageIds(prev => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
+    });
+
+    s.on('bookmarks:ids', ({ ids }) => {
+      setSavedMessageIds(new Set(ids));
+    });
+
+    s.on('thread:messages', (data) => {
+      setThreadPanel(data);
+    });
+
+    s.on('thread:new-reply', ({ channelId, threadId, message, replyCount, lastReplyAt }) => {
+      // Update thread panel if viewing this thread
+      setThreadPanel(prev => {
+        if (!prev || prev.threadId !== threadId) return prev;
+        return { ...prev, messages: [...prev.messages, message] };
+      });
+      // Update parent message thread info
+      setMessages(prev => ({
+        ...prev,
+        [channelId]: (prev[channelId] || []).map(m =>
+          m.id === threadId ? { ...m, threadReplyCount: replyCount, threadLastReplyAt: lastReplyAt } : m
+        )
+      }));
+    });
 
     // Reminder notification
     s.on('reminder', ({ message, channelId }) => {
@@ -2218,6 +2294,21 @@ export default function App() {
             onCompleteJob={completeJob}
             onFailJob={failJob}
             showConfirm={showConfirm}
+            showPinnedPanel={showPinnedPanel}
+            onTogglePinnedPanel={() => { setShowPinnedPanel(p => !p); if (!showPinnedPanel && activeChannel) socketRef.current?.emit('messages:get-pinned', { channelId: activeChannel.id }); }}
+            pinnedMessages={pinnedMessages[activeChannel?.id] || []}
+            showSearchPanel={showSearchPanel}
+            onToggleSearchPanel={() => setShowSearchPanel(p => !p)}
+            searchResults={searchResults}
+            onSearch={(query) => { setSearchQuery(query); if (query.trim() && activeServerId) socketRef.current?.emit('messages:search', { serverId: activeServerId, query }); else setSearchResults(null); }}
+            searchQuery={searchQuery}
+            savedMessageIds={savedMessageIds}
+            onSaveMessage={(messageId, channelId) => socketRef.current?.emit('message:save', { messageId, channelId })}
+            onUnsaveMessage={(messageId) => socketRef.current?.emit('message:unsave', { messageId })}
+            threadPanel={threadPanel}
+            onOpenThread={(channelId, threadId) => { socketRef.current?.emit('thread:get', { channelId, threadId }); }}
+            onCloseThread={() => setThreadPanel(null)}
+            onThreadReply={(channelId, threadId, content) => socketRef.current?.emit('thread:reply', { channelId, threadId, content })}
           />
         )}
       </div>
