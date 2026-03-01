@@ -323,7 +323,7 @@ function SettingsSidebar({ tabs, tab, setTab }) {
   );
 }
 
-export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onDeleteAccount, onChangeServer, developerMode, onSetDeveloperMode, onNavigateToMessage }) {
+export default function SettingsModal({ initialTab, currentUser, server, servers, socket, onlineUsers = [], onClose, friends = [], updateAudioProcessing, onLogout, onDeleteAccount, onChangeServer, developerMode, onSetDeveloperMode, onNavigateToMessage, showConfirm }) {
   const [tab, setTabRaw] = useState(initialTab || localStorage.getItem('nexus_settings_last_tab') || 'profile');
   const setTab = (t) => { setTabRaw(t); localStorage.setItem('nexus_settings_last_tab', t); };
   const [profileSaved, setProfileSaved] = useState(false);
@@ -767,9 +767,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     });
   };
 
-  const handleAdminDeleteServer = (serverId, serverName) => {
+  const handleAdminDeleteServer = async (serverId, serverName) => {
     if (!socket) return;
-    if (!window.confirm(`Delete server "${serverName}"? This cannot be undone.`)) return;
+    const confirmed = await showConfirm({
+      title: 'Delete Server',
+      message: `Delete server "${serverName}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     emitWithTimeout(socket, 'admin:delete-server', { serverId }, (r) => {
       if (r?.error) { showActionError(r.error); return; }
       setAdminServers(prev => prev.filter(s => s.id !== serverId));
@@ -777,9 +782,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     });
   };
 
-  const handleAdminDeleteUser = (userId, username) => {
+  const handleAdminDeleteUser = async (userId, username) => {
     if (!socket) return;
-    if (!window.confirm(`Delete user "${username}"? Their servers will be transferred or deleted. This cannot be undone.`)) return;
+    const confirmed = await showConfirm({
+      title: 'Delete User',
+      message: `Delete user "${username}"? Their servers will be transferred or deleted. This cannot be undone.`,
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     emitWithTimeout(socket, 'admin:delete-user', { userId }, (r) => {
       if (r?.error) { showActionError(r.error); return; }
       setAdminUsers(prev => prev.filter(u => u.id !== userId));
@@ -1419,8 +1429,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     return overrides[chPermTarget]?.[key] ?? null;
   };
 
-  const deleteChannel = (id) => {
-    if (!socket||!server||!window.confirm('Delete channel?')) return;
+  const deleteChannel = async (id) => {
+    if (!socket||!server) return;
+    const confirmed = await showConfirm({
+      title: 'Delete Channel',
+      message: 'Are you sure you want to delete this channel? This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     socket.emit('channel:delete', {serverId:server.id, channelId:id});
   };
 
@@ -1475,9 +1491,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     setTimeout(() => setRoleSaved(false), 2000);
   };
 
-  const deleteRole = (roleId) => {
+  const deleteRole = async (roleId) => {
     if (!socket||!server) return;
-    if (!window.confirm('Are you sure you want to delete this role? Members with this role will lose its permissions.')) return;
+    const confirmed = await showConfirm({
+      title: 'Delete Role',
+      message: 'Are you sure you want to delete this role? Members with this role will lose its permissions.',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     socket.emit('role:delete', {serverId:server.id, roleId});
   };
 
@@ -2549,8 +2570,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                         <button
                           className="settings-btn cancel"
                           style={{ marginTop: 0, padding: '6px 12px', fontSize: 12 }}
-                          onClick={() => {
-                            if (socket && window.confirm(`Remove ${friendData.username} from your friends?`)) {
+                          onClick={async () => {
+                            if (!socket) return;
+                            const confirmed = await showConfirm({
+                              title: 'Remove Friend',
+                              message: `Remove ${friendData.username} from your friends?`,
+                              confirmLabel: 'Remove',
+                            });
+                            if (confirmed) {
                               socket.emit('friend:remove', { friendId: friend.id });
                             }
                           }}

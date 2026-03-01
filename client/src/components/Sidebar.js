@@ -44,7 +44,7 @@ function truncateText(text, maxLength) {
   return text.substring(0, maxLength) + '...';
 }
 
-function FriendsList({ friends, onlineUsers, onCreateDM, dmSearch, onFriendAction }) {
+function FriendsList({ friends, onlineUsers, onCreateDM, dmSearch, onFriendAction, showConfirm }) {
   const [collapsed, setCollapsed] = useState(false);
   const [friendCtxMenu, setFriendCtxMenu] = useState(null);
   const friendLongPressRef = useRef(null);
@@ -140,16 +140,26 @@ function FriendsList({ friends, onlineUsers, onCreateDM, dmSearch, onFriendActio
           <button className="dm-ctx-item" onClick={() => { onCreateDM(friendCtxMenu.friend.id); setFriendCtxMenu(null); }}>
             Send Message
           </button>
-          <button className="dm-ctx-item dm-ctx-danger" onClick={() => {
-            if (window.confirm(`Remove ${friendCtxMenu.friend.username} as a friend?`)) {
+          <button className="dm-ctx-item dm-ctx-danger" onClick={async () => {
+            const confirmed = await showConfirm({
+              title: 'Remove Friend',
+              message: `Remove ${friendCtxMenu.friend.username} as a friend?`,
+              confirmLabel: 'Remove',
+            });
+            if (confirmed) {
               onFriendAction?.('remove', null, friendCtxMenu.friend.id);
             }
             setFriendCtxMenu(null);
           }}>
             Remove Friend
           </button>
-          <button className="dm-ctx-item dm-ctx-danger" onClick={() => {
-            if (window.confirm(`Block ${friendCtxMenu.friend.username}?`)) {
+          <button className="dm-ctx-item dm-ctx-danger" onClick={async () => {
+            const confirmed = await showConfirm({
+              title: 'Block User',
+              message: `Block ${friendCtxMenu.friend.username}?`,
+              confirmLabel: 'Block',
+            });
+            if (confirmed) {
               onFriendAction?.('block', null, friendCtxMenu.friend.id);
             }
             setFriendCtxMenu(null);
@@ -182,7 +192,8 @@ const Sidebar = React.memo(function Sidebar({
   onNavigateToVoice, dmCallActive,
   onChannelContextMenu,
   mutedCategories = {}, onCategoryContextMenu,
-  activityCount = 0, onToggleActivity
+  activityCount = 0, onToggleActivity,
+  showConfirm
 }) {
   const [collapsed, setCollapsedRaw] = useState(() => {
     try {
@@ -491,6 +502,7 @@ const Sidebar = React.memo(function Sidebar({
             onCreateDM={onCreateDM}
             dmSearch={dmSearch}
             onFriendAction={onFriendAction}
+            showConfirm={showConfirm}
           />
         )}
 

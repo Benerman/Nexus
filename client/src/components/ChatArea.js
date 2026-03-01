@@ -300,7 +300,7 @@ const ChatArea = React.memo(function ChatArea({
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
   developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete, onRefreshData,
-  onTrackJob, onCompleteJob, onFailJob
+  onTrackJob, onCompleteJob, onFailJob, showConfirm
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -798,12 +798,17 @@ const ChatArea = React.memo(function ChatArea({
     socket.emit('message:react',{channelId:channel.id, messageId, emoji});
   };
 
-  const handleDeleteMessage = useCallback((message) => {
+  const handleDeleteMessage = useCallback(async (message) => {
     if (!socket || !channel) return;
-    if (window.confirm('Are you sure you want to delete this message?')) {
+    const confirmed = await showConfirm({
+      title: 'Delete Message',
+      message: 'Are you sure you want to delete this message? This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (confirmed) {
       socket.emit('message:delete', { channelId: channel.id, messageId: message.id });
     }
-  }, [socket, channel]);
+  }, [socket, channel, showConfirm]);
 
   const handleEditMessage = useCallback((message) => {
     setEditingMessage(message);

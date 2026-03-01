@@ -15,6 +15,7 @@ import ChannelContextMenu from './components/ChannelContextMenu';
 import CategoryContextMenu from './components/CategoryContextMenu';
 import UserProfileModal from './components/UserProfileModal';
 import ReportModal from './components/ReportModal';
+import ConfirmModal from './components/ConfirmModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActivityPanel from './components/ActivityPanel';
 import WelcomeTour from './components/WelcomeTour';
@@ -80,6 +81,7 @@ export default function App() {
   const [dmUnreadCounts, setDmUnreadCounts] = useState({}); // channelId -> unread count
   const [profileUser, setProfileUser] = useState(null); // user to show in profile modal
   const [reportTarget, setReportTarget] = useState(null); // { userId, username, messageId?, messagePreview? }
+  const [confirmModal, setConfirmModal] = useState(null);
   const [channelLastRead, setChannelLastRead] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nexus_channel_last_read') || '{}'); } catch { return {}; }
   });
@@ -1584,13 +1586,19 @@ export default function App() {
     webrtc.currentVoiceChannel
   ]);
 
+  const showConfirm = useCallback(({ title, message, confirmLabel, cancelLabel, danger = true }) => {
+    return new Promise((resolve) => {
+      setConfirmModal({ title, message, confirmLabel, cancelLabel, danger, resolve });
+    });
+  }, []);
+
   // DM handlers
   const handleUserClick = useCallback((user, event) => {
     if (user.id === currentUser?.id) return; // Don't show menu for own user
     setContextMenu({ user, position: { x: event.clientX, y: event.clientY } });
   }, [currentUser]);
 
-  const handleContextMenuAction = useCallback((action, user) => {
+  const handleContextMenuAction = useCallback(async (action, user) => {
     setContextMenu(null);
 
     if (action === 'send-dm' && socketRef.current) {
@@ -1604,11 +1612,21 @@ export default function App() {
     } else if (action === 'view-profile') {
       setProfileUser(user);
     } else if (action === 'kick' && socketRef.current) {
-      if (window.confirm(`Are you sure you want to kick ${user.username} from the server? They can rejoin with an invite link.`)) {
+      const confirmed = await showConfirm({
+        title: 'Kick Member',
+        message: `Are you sure you want to kick ${user.username} from the server? They can rejoin with an invite link.`,
+        confirmLabel: 'Kick',
+      });
+      if (confirmed) {
         socketRef.current.emit('server:kick-user', { serverId: activeServerId, userId: user.id });
       }
     } else if (action === 'ban' && socketRef.current) {
-      if (window.confirm(`Are you sure you want to ban ${user.username} from the server? They will not be able to rejoin.`)) {
+      const confirmed = await showConfirm({
+        title: 'Ban Member',
+        message: `Are you sure you want to ban ${user.username} from the server? They will not be able to rejoin.`,
+        confirmLabel: 'Ban',
+      });
+      if (confirmed) {
         socketRef.current.emit('server:ban-user', { serverId: activeServerId, userId: user.id });
       }
     } else if (action === 'timeout' && socketRef.current) {
@@ -1621,7 +1639,7 @@ export default function App() {
         });
       }
     }
-  }, [activeServerId]);
+  }, [activeServerId, showConfirm]);
 
   const handleReportMessage = useCallback((message) => {
     if (!message?.author) return;
@@ -1748,8 +1766,13 @@ export default function App() {
   }, [activeChannel]);
 
   // Delete a DM conversation for the current user only (hides it and clears messages from their view)
-  const handleDeleteDM = useCallback((channelId) => {
-    if (!window.confirm('Delete this conversation? Messages will be cleared from your view, but not for other participants.')) return;
+  const handleDeleteDM = useCallback(async (channelId) => {
+    const confirmed = await showConfirm({
+      title: 'Delete Conversation',
+      message: 'Delete this conversation? Messages will be cleared from your view, but not for other participants.',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
     if (socketRef.current) socketRef.current.emit('dm:delete', { channelId });
     // Same local cleanup as archive
     setPinnedDMs(prev => {
@@ -1766,7 +1789,7 @@ export default function App() {
     });
     setMessages(prev => { const next = { ...prev }; delete next[channelId]; return next; });
     if (activeChannel?.id === channelId) setActiveChannel(null);
-  }, [activeChannel]);
+  }, [activeChannel, showConfirm]);
 
   const handleFriendAction = useCallback((action, requestId, userId) => {
     if (!socketRef.current) return;
@@ -2043,6 +2066,7 @@ export default function App() {
         onCategoryContextMenu={handleCategoryContextMenu}
         activityCount={activeJobCount}
         onToggleActivity={() => setActivityOpen(o => !o)}
+        showConfirm={showConfirm}
       />
       {/* Mobile sub-nav bar */}
       <div className="mobile-nav-bar">
@@ -2190,6 +2214,7 @@ export default function App() {
             onTrackJob={trackJob}
             onCompleteJob={completeJob}
             onFailJob={failJob}
+            showConfirm={showConfirm}
           />
         )}
       </div>
@@ -2237,7 +2262,8 @@ export default function App() {
           onChangeServer={handleChangeServer}
           developerMode={developerMode}
           onSetDeveloperMode={(val) => { setDeveloperMode(val); localStorage.setItem('nexus_developer_mode', val ? 'true' : 'false'); }}
-          onNavigateToMessage={handleNavigateToMessage} />
+          onNavigateToMessage={handleNavigateToMessage}
+          showConfirm={showConfirm} />
       )}
       {showTour && (
         <WelcomeTour
@@ -2284,6 +2310,17 @@ export default function App() {
           target={reportTarget}
           onSubmit={handleSubmitReport}
           onClose={() => setReportTarget(null)}
+        />
+      )}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={confirmModal.cancelLabel}
+          danger={confirmModal.danger}
+          onConfirm={() => { confirmModal.resolve(true); setConfirmModal(null); }}
+          onCancel={() => { confirmModal.resolve(false); setConfirmModal(null); }}
         />
       )}
       {serverContextMenu && (

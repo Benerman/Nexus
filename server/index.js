@@ -5078,47 +5078,53 @@ const PORT = process.env.PORT || 3001;
 
 // Helper: convert DB messages to runtime format
 async function convertDbMessages(dbMessages, channelId) {
-  return Promise.all(dbMessages.map(async (dbMsg) => {
-    let author = Object.values(state.users).find(u => u.id === dbMsg.author_id);
-    if (!author) {
-      if (dbMsg.is_webhook) {
-        author = {
-          id: `webhook:${dbMsg.id}`,
-          username: dbMsg.webhook_username || 'Webhook',
-          avatar: dbMsg.webhook_avatar || '🤖',
-          color: '#60A5FA',
-          isWebhook: true
-        };
-      } else {
-        const account = await db.getAccountById(dbMsg.author_id);
-        if (account) {
+  const results = await Promise.all(dbMessages.map(async (dbMsg) => {
+    try {
+      let author = Object.values(state.users).find(u => u.id === dbMsg.author_id);
+      if (!author) {
+        if (dbMsg.is_webhook) {
           author = {
-            id: account.id,
-            username: account.username,
-            avatar: account.avatar,
-            customAvatar: account.custom_avatar,
-            color: account.color
+            id: `webhook:${dbMsg.id}`,
+            username: dbMsg.webhook_username || 'Webhook',
+            avatar: dbMsg.webhook_avatar || '🤖',
+            color: '#60A5FA',
+            isWebhook: true
           };
+        } else {
+          const account = await db.getAccountById(dbMsg.author_id);
+          if (account) {
+            author = {
+              id: account.id,
+              username: account.username,
+              avatar: account.avatar,
+              customAvatar: account.custom_avatar,
+              color: account.color
+            };
+          }
         }
       }
+      return {
+        id: dbMsg.id,
+        channelId,
+        content: dbMsg.content,
+        attachments: typeof dbMsg.attachments === 'string' ? JSON.parse(dbMsg.attachments || '[]') : (dbMsg.attachments || []),
+        author: author || { id: dbMsg.author_id, username: 'Deleted User', avatar: '👻', color: '#80848E' },
+        timestamp: new Date(dbMsg.created_at).getTime(),
+        reactions: typeof dbMsg.reactions === 'string' ? JSON.parse(dbMsg.reactions || '{}') : (dbMsg.reactions || {}),
+        replyTo: dbMsg.reply_to || null,
+        isWebhook: dbMsg.is_webhook || false,
+        webhookUsername: dbMsg.webhook_username || null,
+        webhookAvatar: dbMsg.webhook_avatar || null,
+        mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
+        commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
+        embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
+      };
+    } catch (err) {
+      console.error(`[Messages] Error converting message ${dbMsg.id} (webhook=${dbMsg.is_webhook}):`, err.message);
+      return null;
     }
-    return {
-      id: dbMsg.id,
-      channelId,
-      content: dbMsg.content,
-      attachments: typeof dbMsg.attachments === 'string' ? JSON.parse(dbMsg.attachments || '[]') : (dbMsg.attachments || []),
-      author: author || { id: dbMsg.author_id, username: 'Deleted User', avatar: '👻', color: '#80848E' },
-      timestamp: new Date(dbMsg.created_at).getTime(),
-      reactions: typeof dbMsg.reactions === 'string' ? JSON.parse(dbMsg.reactions || '{}') : (dbMsg.reactions || {}),
-      replyTo: dbMsg.reply_to || null,
-      isWebhook: dbMsg.is_webhook || false,
-      webhookUsername: dbMsg.webhook_username || null,
-      webhookAvatar: dbMsg.webhook_avatar || null,
-      mentions: typeof dbMsg.mentions === 'string' ? JSON.parse(dbMsg.mentions || '{}') : (dbMsg.mentions || {}),
-      commandData: typeof dbMsg.command_data === 'string' ? JSON.parse(dbMsg.command_data || 'null') : (dbMsg.command_data || null),
-      embeds: typeof dbMsg.embeds === 'string' ? JSON.parse(dbMsg.embeds || '[]') : (dbMsg.embeds || [])
-    };
   }));
+  return results.filter(m => m !== null);
 }
 
 // Initialize database and start server
