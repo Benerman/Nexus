@@ -658,6 +658,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   const cleanupAudioProcessing = useCallback(() => {
     if (audioProcessingRef.current) {
       if (audioProcessingRef.current.intervalId) clearInterval(audioProcessingRef.current.intervalId);
+      try { audioProcessingRef.current.rnnoiseNode?.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.workletNode?.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.source.disconnect(); } catch (_) {}
       try { audioProcessingRef.current.highpass.disconnect(); } catch (_) {}
@@ -734,17 +735,57 @@ export function useWebRTC(socket, currentUser, activeServerId) {
           }
         };
 
-        // Connect: source → highpass → analyser → workletNode → compressor → destination
-        source.connect(highpass);
-        highpass.connect(analyser);
-        analyser.connect(workletNode);
-        workletNode.connect(compressor);
-        compressor.connect(destination);
-
         usingWorklet = true;
         console.log('[Audio] Using AudioWorklet processor');
       } catch (workletErr) {
         console.warn('[Audio] AudioWorklet unavailable, falling back to setInterval:', workletErr.message);
+      }
+
+      // Try loading RNNoise ML noise cancellation (only when worklet path succeeded)
+      let rnnoiseNode = null;
+      if (usingWorklet) {
+        try {
+          // Fetch and compile RNNoise WASM on main thread
+          const wasmResponse = await fetch('/rnnoise.wasm');
+          const wasmBinary = await wasmResponse.arrayBuffer();
+          const wasmModule = await WebAssembly.compile(wasmBinary);
+
+          // Load RNNoise worklet processor
+          await ctx.audioWorklet.addModule('/rnnoise-processor.js');
+          rnnoiseNode = new AudioWorkletNode(ctx, 'rnnoise-processor', {
+            processorOptions: { wasmModule }
+          });
+
+          // Send initial settings
+          rnnoiseNode.port.postMessage({
+            type: 'settings',
+            noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false'
+          });
+
+          console.log('[Audio] RNNoise noise cancellation loaded');
+        } catch (rnnoiseErr) {
+          console.warn('[Audio] RNNoise unavailable, skipping ML noise cancellation:', rnnoiseErr.message);
+          rnnoiseNode = null;
+        }
+      }
+
+      if (usingWorklet) {
+        if (rnnoiseNode) {
+          // Full chain: source → highpass → analyser → rnnoiseNode → workletNode → compressor → destination
+          source.connect(highpass);
+          highpass.connect(analyser);
+          analyser.connect(rnnoiseNode);
+          rnnoiseNode.connect(workletNode);
+          workletNode.connect(compressor);
+          compressor.connect(destination);
+        } else {
+          // Without RNNoise: source → highpass → analyser → workletNode → compressor → destination
+          source.connect(highpass);
+          highpass.connect(analyser);
+          analyser.connect(workletNode);
+          workletNode.connect(compressor);
+          compressor.connect(destination);
+        }
       }
 
       if (!usingWorklet) {
@@ -822,7 +863,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         };
       } else {
         audioProcessingRef.current = {
-          ctx, source, highpass, analyser, workletNode, compressor, destination, usingWorklet: true
+          ctx, source, highpass, analyser, workletNode, rnnoiseNode, compressor, destination, usingWorklet: true
         };
       }
 
@@ -857,6 +898,14 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         inputVolume: parseInt(localStorage.getItem('nexus_audio_input_volume') || '100') / 100,
       });
     }
+    // Forward noise cancellation setting to RNNoise worklet
+    if (audioProcessingRef.current.rnnoiseNode) {
+      audioProcessingRef.current.rnnoiseNode.port.postMessage({
+        type: 'settings',
+        noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false',
+      });
+    }
+
     // Fallback path reads from localStorage in its setInterval loop — no action needed
 
     return true;
