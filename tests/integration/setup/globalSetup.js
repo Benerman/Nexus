@@ -47,6 +47,36 @@ async function applySchemaPatches(databaseUrl) {
       ALTER TABLE dm_channels ADD COLUMN IF NOT EXISTS initiated_by UUID REFERENCES accounts(id) ON DELETE SET NULL;
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS embeds JSONB DEFAULT '[]'::jsonb;
       ALTER TABLE messages ALTER COLUMN webhook_avatar TYPE TEXT;
+
+      -- Phase 2: Pinning, search, threads, bookmarks, audit log
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT FALSE;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned_by UUID REFERENCES accounts(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_messages_pinned ON messages(channel_id) WHERE pinned = TRUE;
+      CREATE INDEX IF NOT EXISTS idx_messages_fts ON messages USING gin(to_tsvector('english', content));
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_id UUID REFERENCES messages(id) ON DELETE CASCADE;
+      CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id) WHERE thread_id IS NOT NULL;
+      CREATE TABLE IF NOT EXISTS saved_messages (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        channel_id VARCHAR(64) NOT NULL,
+        server_id VARCHAR(64),
+        saved_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT unique_saved UNIQUE(user_id, message_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_saved_messages_user ON saved_messages(user_id, saved_at DESC);
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        server_id VARCHAR(64) NOT NULL,
+        action VARCHAR(50) NOT NULL,
+        actor_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+        target_id VARCHAR(255),
+        changes JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_server ON audit_logs(server_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(server_id, action);
     `);
     await pool.end();
     console.log('Schema patches applied successfully');
