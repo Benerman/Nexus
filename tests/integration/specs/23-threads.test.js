@@ -53,6 +53,8 @@ describe('Message Threads', () => {
 
   test('thread:reply sends a reply and broadcasts thread:new-reply', async () => {
     const replyPromise = waitForEvent(admin.socket, 'thread:new-reply', 5000);
+    // Drain the broadcast on member so stale events don't leak into the next test
+    const memberDrain = waitForEvent(member.socket, 'thread:new-reply', 5000).catch(() => {});
     admin.socket.emit('thread:reply', {
       channelId,
       threadId: parentMessageId,
@@ -69,10 +71,13 @@ describe('Message Threads', () => {
     expect(data.replyCount).toBe(1);
     expect(data.lastReplyAt).toBeDefined();
     expect(typeof data.lastReplyAt).toBe('number');
+    await memberDrain;
   });
 
   test('Member receives thread:new-reply broadcast', async () => {
     const memberReplyPromise = waitForEvent(member.socket, 'thread:new-reply', 5000);
+    // Drain the broadcast on admin so stale events don't leak into the next test
+    const adminDrain = waitForEvent(admin.socket, 'thread:new-reply', 5000).catch(() => {});
     admin.socket.emit('thread:reply', {
       channelId,
       threadId: parentMessageId,
@@ -83,10 +88,13 @@ describe('Message Threads', () => {
     expect(data.threadId).toBe(parentMessageId);
     expect(data.message.content).toBe('Second thread reply from admin');
     expect(data.replyCount).toBe(2);
+    await adminDrain;
   });
 
   test('Member can reply to a thread', async () => {
     const replyPromise = waitForEvent(admin.socket, 'thread:new-reply', 5000);
+    // Drain the broadcast on member so stale events don't leak into later tests
+    const memberDrain = waitForEvent(member.socket, 'thread:new-reply', 5000).catch(() => {});
     member.socket.emit('thread:reply', {
       channelId,
       threadId: parentMessageId,
@@ -97,6 +105,7 @@ describe('Message Threads', () => {
     expect(data.message.content).toBe('Member reply to thread');
     expect(data.message.author.id).toBe(member.account.id);
     expect(data.replyCount).toBe(3);
+    await memberDrain;
   });
 
   test('thread:get returns parent and all replies', async () => {

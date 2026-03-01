@@ -54,6 +54,8 @@ describe('Message Pinning', () => {
 
     // Pin it
     const pinPromise = waitForEvent(admin.socket, 'message:pinned', 5000);
+    // Drain the broadcast on member so stale events don't leak into the next test
+    const memberDrain = waitForEvent(member.socket, 'message:pinned', 5000).catch(() => {});
     admin.socket.emit('message:pin', { channelId, messageId: msg.id });
     const pinData = await pinPromise;
 
@@ -62,6 +64,7 @@ describe('Message Pinning', () => {
     expect(pinData.pinnedBy).toBe(admin.account.id);
     expect(pinData.pinnedAt).toBeDefined();
     expect(typeof pinData.pinnedAt).toBe('number');
+    await memberDrain;
   });
 
   test('Member receives pin broadcast', async () => {
@@ -71,11 +74,14 @@ describe('Message Pinning', () => {
     const msg = await msgPromise;
 
     const memberPinPromise = waitForEvent(member.socket, 'message:pinned', 5000);
+    // Drain the broadcast on admin so stale events don't leak
+    const adminDrain = waitForEvent(admin.socket, 'message:pinned', 5000).catch(() => {});
     admin.socket.emit('message:pin', { channelId, messageId: msg.id });
     const pinData = await memberPinPromise;
 
     expect(pinData.messageId).toBe(msg.id);
     expect(pinData.channelId).toBe(channelId);
+    await adminDrain;
   });
 
   test('messages:get-pinned returns all pinned messages', async () => {
