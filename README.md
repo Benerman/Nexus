@@ -2,9 +2,11 @@
 
 A self-hosted, real-time communication platform built with React, Node.js, Socket.IO, and WebRTC. Supports servers, channels, voice chat, direct messaging, custom emoji, soundboard, and more.
 
-![Version](https://img.shields.io/badge/version-1.0.1-blue)
+[![Download](https://img.shields.io/badge/download-v1.0.5-blue)](https://github.com/Benerman/Nexus/releases/latest)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+> **[Download the latest release](https://github.com/Benerman/Nexus/releases/latest)** — available for Windows, macOS, Linux, Android, and iOS.
 
 ---
 
