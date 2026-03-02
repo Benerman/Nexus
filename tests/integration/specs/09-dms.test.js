@@ -86,22 +86,37 @@ describe('Direct Messages', () => {
     // Either error event or DM creation is blocked
     // Unblock for cleanup
     user3.socket.emit('unblock:user', { userId: user1.account.id });
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 500));
   });
 
   test('dm:list returns user\'s DM channels', async () => {
-    // Retry up to 3 times — CI can be slow after the block/unblock test
+    expect(user1.socket.connected).toBe(true);
+
+    // Small delay to let any pending DB operations from previous tests settle
+    await new Promise(r => setTimeout(r, 500));
+
+    // Helper to attempt dm:list once, returning data or throwing
+    const attemptDmList = () => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        user1.socket.off('dm:list', onList);
+        user1.socket.off('error', onError);
+        reject(new Error('Timed out waiting for dm:list (10s)'));
+      }, 10000);
+      const onList = (d) => { clearTimeout(timer); user1.socket.off('error', onError); resolve(d); };
+      const onError = (err) => { clearTimeout(timer); user1.socket.off('dm:list', onList); reject(new Error(`dm:list handler error: ${JSON.stringify(err)}`)); };
+      user1.socket.once('dm:list', onList);
+      user1.socket.once('error', onError);
+      user1.socket.emit('dm:list');
+    });
+
+    // Retry once after a delay if the first attempt fails (transient CI issue)
     let data;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const listPromise = waitForEvent(user1.socket, 'dm:list', 10000);
-        user1.socket.emit('dm:list');
-        data = await listPromise;
-        break;
-      } catch (err) {
-        if (attempt === 2) throw err;
-        await new Promise(r => setTimeout(r, 1000));
-      }
+    try {
+      data = await attemptDmList();
+    } catch (firstErr) {
+      console.log(`dm:list first attempt failed: ${firstErr.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 1000));
+      data = await attemptDmList();
     }
 
     expect(data.dms).toBeDefined();
@@ -110,7 +125,7 @@ describe('Direct Messages', () => {
       const found = data.dms.find(dm => dm.id === dmChannelId);
       expect(found).toBeDefined();
     }
-  });
+  }, 30000);
 
   test('dm:mark-read updates read state', async () => {
     if (!dmChannelId) return;

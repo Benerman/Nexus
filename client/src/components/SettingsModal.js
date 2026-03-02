@@ -516,6 +516,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [autoGainEnabled, setAutoGainEnabled] = useState(() => localStorage.getItem('nexus_auto_gain_enabled') === 'true');
   const [autoGainTarget, setAutoGainTarget] = useState(() => parseFloat(localStorage.getItem('nexus_auto_gain_target')) || -20);
   const [noiseCancellationEnabled, setNoiseCancellationEnabled] = useState(() => localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false');
+  const [noiseCancellationAggressiveness, setNoiseCancellationAggressiveness] = useState(() => localStorage.getItem('nexus_noise_cancellation_aggressiveness') || 'medium');
 
   // Mic test meter
   const [micTesting, setMicTesting] = useState(false);
@@ -606,6 +607,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       auto_gain_enabled: localStorage.getItem('nexus_auto_gain_enabled') || 'false',
       auto_gain_target: localStorage.getItem('nexus_auto_gain_target') || '-20',
       noise_cancellation_enabled: localStorage.getItem('nexus_noise_cancellation_enabled') || 'true',
+      noise_cancellation_aggressiveness: localStorage.getItem('nexus_noise_cancellation_aggressiveness') || 'medium',
     };
     socket.emit('user:settings-update', { settings });
   };
@@ -2182,6 +2184,39 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                         <span className="toggle-slider" />
                       </label>
                     </div>
+                    {noiseCancellationEnabled && (
+                      <div style={{marginTop: 8}}>
+                        <label className="settings-label">Suppression Level</label>
+                        <div style={{display:'flex',gap:4,marginTop:4}}>
+                          {['low','medium','high'].map(level => (
+                            <button
+                              key={level}
+                              onClick={() => {
+                                setNoiseCancellationAggressiveness(level);
+                                localStorage.setItem('nexus_noise_cancellation_aggressiveness', level);
+                                syncSettingsToServer();
+                                updateAudioProcessing?.();
+                              }}
+                              style={{
+                                flex:1,
+                                padding:'6px 12px',
+                                borderRadius:4,
+                                border: noiseCancellationAggressiveness === level ? '1px solid var(--accent)' : '1px solid var(--border)',
+                                background: noiseCancellationAggressiveness === level ? 'var(--accent)' : 'var(--bg-secondary)',
+                                color: noiseCancellationAggressiveness === level ? '#fff' : 'var(--text-normal)',
+                                cursor:'pointer',
+                                fontSize:13,
+                                fontWeight: noiseCancellationAggressiveness === level ? 600 : 400,
+                                textTransform:'capitalize',
+                              }}
+                            >
+                              {level}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="settings-hint" style={{marginTop:4}}>Low preserves voice quality, High removes more noise</p>
+                      </div>
+                    )}
 
                     <h3 style={{marginTop: 24}}>Noise Suppression</h3>
                     <p className="settings-hint">Browser-level noise reduction and echo cancellation. Changes take effect next time you join a voice channel.</p>

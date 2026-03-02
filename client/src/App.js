@@ -637,7 +637,6 @@ export default function App() {
       }
 
       setServers(applySavedServerOrder(servers));
-      setActiveServerId(server.id);
       setServerData(() => {
         const next = {};
         servers.forEach(srv => { next[srv.id] = srv; });
@@ -646,15 +645,31 @@ export default function App() {
       setOnlineUsers(onlineUsers);
       setVoiceChannelState(voiceChannels);
 
-      // If we have an active channel (reconnect), stay on it; otherwise pick the first text channel
+      // If we have an active channel (reconnect), stay on it; otherwise restore last server/channel
       const currentCh = activeChannelRef.current;
       if (currentCh?.id) {
         // Re-join current channel to refresh its messages
+        setActiveServerId(server.id);
         s.emit('channel:join', { channelId: currentCh.id });
-      } else if (server.channels.text.length > 0) {
-        setActiveChannel(server.channels.text[0]);
-        setActiveChannelType('text');
-        s.emit('channel:join', { channelId: server.channels.text[0].id });
+      } else {
+        // Try to restore last visited server from localStorage
+        const lastServerId = localStorage.getItem('nexus_last_server');
+        const lastServer = lastServerId && servers.find(srv => srv.id === lastServerId);
+        const targetServer = lastServer || server;
+        setActiveServerId(targetServer.id);
+
+        // Try to restore last channel within that server
+        const savedChannels = JSON.parse(localStorage.getItem('nexus_last_channel') || '{}');
+        const lastChId = savedChannels[targetServer.id];
+        let targetChannel = null;
+        if (lastChId) targetChannel = targetServer.channels.text.find(c => c.id === lastChId);
+        if (!targetChannel && targetServer.channels.text.length > 0) targetChannel = targetServer.channels.text[0];
+
+        if (targetChannel) {
+          setActiveChannel(targetChannel);
+          setActiveChannelType('text');
+          s.emit('channel:join', { channelId: targetChannel.id });
+        }
       }
 
       // Start periodic heartbeat for real-time state sync
@@ -1472,6 +1487,7 @@ export default function App() {
 
   const handleSelectServer = useCallback((serverId) => {
     setActiveServerId(serverId);
+    localStorage.setItem('nexus_last_server', serverId);
 
     const srv = serverData[serverId];
     if (srv?.channels.text.length > 0) {
@@ -1509,6 +1525,7 @@ export default function App() {
     // Remember last text channel per server
     const sid = channel.serverId || activeServerId;
     if (sid && type === 'text') {
+      localStorage.setItem('nexus_last_server', sid);
       setLastChannelPerServer(prev => {
         const next = { ...prev, [sid]: channel.id };
         localStorage.setItem('nexus_last_channel', JSON.stringify(next));

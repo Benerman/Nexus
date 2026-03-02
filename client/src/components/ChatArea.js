@@ -1608,12 +1608,30 @@ const ChatArea = React.memo(function ChatArea({
         <div style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e' }}>
             <h3 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '16px' }}>Search Messages</h3>
-            <input type="text" placeholder="Search..." value={searchQuery} onChange={e => onSearch(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#1e1f22', border: '1px solid #3a3a3e', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
+            <input type="text" placeholder="Search... try from: in: has: before:" value={searchQuery} onChange={e => onSearch(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#1e1f22', border: '1px solid #3a3a3e', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
             <button onClick={onToggleSearchPanel} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
             {!searchResults ? (
-              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>Enter a search term to find messages</div>
+              <div style={{ padding: '20px 16px' }}>
+                <div style={{ color: '#b5bac1', fontSize: '13px', marginBottom: '12px' }}>Search filters</div>
+                <div style={{ background: '#1e1f22', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                  {[
+                    ['from:', 'username', 'Messages from a user'],
+                    ['in:', 'channel', 'Messages in a channel'],
+                    ['has:', 'link / image / attachment', 'Messages with content type'],
+                    ['before:', 'YYYY-MM-DD', 'Messages before a date'],
+                    ['after:', 'YYYY-MM-DD', 'Messages after a date'],
+                    ['is:', 'pinned', 'Pinned messages'],
+                  ].map(([op, val, desc]) => (
+                    <div key={op} style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                      <code style={{ color: '#b5bac1', background: '#2b2d31', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px' }}>{op}{val}</code>
+                      <span style={{ color: '#72767d', fontSize: '12px' }}>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ color: '#72767d', fontSize: '12px', marginTop: '10px' }}>Combine filters: <span style={{ color: '#b5bac1' }}>hello from:alice in:general</span></div>
+              </div>
             ) : searchResults.length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No results found</div>
             ) : searchResults.map(msg => (

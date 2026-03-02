@@ -174,13 +174,13 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 - [x] **Separate leveler + limiter stages** — Replace single AGC with two stages: (1) slow leveler (500ms attack, 2s release, high ratio) that brings all levels to target, (2) fast limiter (5ms attack, 200ms release, 4:1 ratio) that catches transients. Current single-speed approach can't handle both gradual drift and sudden changes well.
 - [x] **Compute gain in dB domain** — Current AGC uses linear multiplication (`1 + diff * 0.03`) which makes the time constant dependent on signal level. Switch to `desired_gain = 10^((target - baseline) / 20)` with exponential smoothing in dB domain for level-independent behavior. (Worklet already does this correctly; fallback path does not.)
 - [x] **Limit max gain based on noise floor** — Track noise floor estimate and cap AGC gain so it never boosts more than `target - noise_floor - 6dB_margin`. Prevents noise amplification even without gate interaction.
-- [ ] **Tune DynamicsCompressor** — Current compressor threshold is -6dB with 4:1 ratio. Consider -12dB threshold with soft knee of 10dB for more transparent limiting. Current settings can audibly squash loud speech.
+- [x] **Tune DynamicsCompressor** — Current compressor threshold is -6dB with 4:1 ratio. Consider -12dB threshold with soft knee of 10dB for more transparent limiting. Current settings can audibly squash loud speech.
 
 ### Background Noise Cancellation
 
 - [x] **Integrate RNNoise via WASM** — RNNoise (Xiph.org) is the industry standard open-source ML noise suppression. Runs in ~1ms per 10ms frame, MIT licensed. Compile to WASM and run as a second AudioWorklet processor in the chain before the gate/AGC worklet. Processes 22 frequency bands with a GRU neural network to separate speech from noise.
 - [x] **Add noise suppression toggle to Audio Settings** — New setting `nexus_noise_cancellation_enabled` (default: true). Separate from the existing browser-level `noiseSuppression` constraint. Label: "AI Noise Cancellation" with hint "Uses machine learning to remove background noise (keyboard, fans, etc.)"
-- [ ] **Noise suppression aggressiveness levels** — Offer Low/Medium/High like Zoom. Controls the RNNoise output gain floor (how aggressively it attenuates non-speech bands). Low = more natural but some noise leaks; High = cleaner but can affect voice quality.
+- [x] **Noise suppression aggressiveness levels** — Offer Low/Medium/High like Zoom. Controls the RNNoise output gain floor (how aggressively it attenuates non-speech bands). Low = more natural but some noise leaks; High = cleaner but can affect voice quality.
 
 ### Pipeline Architecture
 

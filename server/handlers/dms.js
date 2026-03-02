@@ -295,7 +295,7 @@ module.exports = function(io, socket) {
       console.log(`[DM] ${user.username} requested DM list (${dmList.length} conversations)`);
     } catch (error) {
       console.error('[DM] Error fetching DM list:', error);
-      socket.emit('error', { message: 'Failed to fetch DM list' });
+      socket.emit('error', { message: `Failed to fetch DM list: ${error.message}` });
     }
   });
 

@@ -761,7 +761,8 @@ export function useWebRTC(socket, currentUser, activeServerId) {
           // Send initial settings
           rnnoiseNode.port.postMessage({
             type: 'settings',
-            noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false'
+            noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false',
+            aggressiveness: localStorage.getItem('nexus_noise_cancellation_aggressiveness') || 'medium'
           });
 
           console.log('[Audio] RNNoise noise cancellation loaded');
@@ -906,6 +907,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       audioProcessingRef.current.rnnoiseNode.port.postMessage({
         type: 'settings',
         noiseCancellation: localStorage.getItem('nexus_noise_cancellation_enabled') !== 'false',
+        aggressiveness: localStorage.getItem('nexus_noise_cancellation_aggressiveness') || 'medium',
       });
     }
 

@@ -455,6 +455,58 @@ async function createPersonalServer(userId, dmChannels) {
   };
 }
 
+// ─── Search Filter Parsing ───────────────────────────────────────────────────
+
+/**
+ * Parse Gmail-style search operators from a query string.
+ * Supported: from:user, in:channel, before:YYYY-MM-DD, after:YYYY-MM-DD,
+ *            has:attachment|image|link, is:pinned
+ * Returns { text, filters } where text is the remaining query and filters
+ * contains extracted key-value pairs.
+ */
+function parseSearchFilters(query) {
+  if (!query || typeof query !== 'string') return { text: '', filters: {} };
+
+  const filters = {};
+  const operatorRegex = /\b(from|in|before|after|has|is):(\S+)/gi;
+
+  const text = query.replace(operatorRegex, (match, key, value) => {
+    const k = key.toLowerCase();
+    const v = value.toLowerCase();
+
+    switch (k) {
+      case 'from':
+        filters.from = v;
+        break;
+      case 'in':
+        filters.in = v;
+        break;
+      case 'before': {
+        const ts = Date.parse(value);
+        if (!isNaN(ts)) filters.before = ts;
+        break;
+      }
+      case 'after': {
+        const ts = Date.parse(value);
+        if (!isNaN(ts)) filters.after = ts;
+        break;
+      }
+      case 'has':
+        if (['attachment', 'image', 'link'].includes(v)) {
+          if (!filters.has) filters.has = [];
+          filters.has.push(v);
+        }
+        break;
+      case 'is':
+        if (v === 'pinned') filters.isPinned = true;
+        break;
+    }
+    return '';
+  }).replace(/\s+/g, ' ').trim();
+
+  return { text, filters };
+}
+
 // ─── Slash Commands ──────────────────────────────────────────────────────────
 const EIGHT_BALL_RESPONSES = [
   'It is certain.', 'It is decidedly so.', 'Without a doubt.', 'Yes definitely.',
@@ -621,4 +673,5 @@ module.exports = {
   createPersonalServer,
   handleSlashCommand,
   getRandomRoast,
+  parseSearchFilters,
 };
