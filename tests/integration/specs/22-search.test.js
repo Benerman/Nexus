@@ -151,4 +151,104 @@ describe('Message Search', () => {
     expect(data.results.length).toBeGreaterThanOrEqual(1);
     expect(data.results.some(r => r.content.includes('weather'))).toBe(true);
   });
+
+  // ─── Search filter operator tests ──────────────────────────────────────────
+
+  test('from:username filter returns only that user\'s messages', async () => {
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: `${uniqueWord} from:${member.account.username}` });
+    const data = await resultPromise;
+
+    expect(data.results.length).toBe(1);
+    expect(data.results[0].author.id).toBe(member.account.id);
+  });
+
+  test('in:channel filter restricts to named channel', async () => {
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: `${uniqueWord} in:general` });
+    const data = await resultPromise;
+
+    expect(data.results.length).toBeGreaterThanOrEqual(1);
+    for (const result of data.results) {
+      expect(result.channelId).toBe(channelId);
+    }
+  });
+
+  test('from: nonexistent user returns empty results', async () => {
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: 'from:totallynonexistentuser99' });
+    const data = await resultPromise;
+
+    expect(data.results).toEqual([]);
+  });
+
+  test('in: nonexistent channel returns empty results', async () => {
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: 'in:nonexistentchannel99' });
+    const data = await resultPromise;
+
+    expect(data.results).toEqual([]);
+  });
+
+  test('filter-only search (no free text) returns results', async () => {
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: `from:${admin.account.username}` });
+    const data = await resultPromise;
+
+    expect(data.results.length).toBeGreaterThanOrEqual(1);
+    for (const result of data.results) {
+      expect(result.author.username.toLowerCase()).toBe(admin.account.username.toLowerCase());
+    }
+  });
+
+  test('has:link filter works for messages with URLs', async () => {
+    // Send a message with a URL
+    const linkMsg = waitForEvent(admin.socket, 'message:new', 5000);
+    admin.socket.emit('message:send', { channelId, content: `Check this out ${uniqueWord} https://example.com` });
+    await linkMsg;
+    await new Promise(r => setTimeout(r, 500));
+
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: `${uniqueWord} has:link` });
+    const data = await resultPromise;
+
+    expect(data.results.length).toBeGreaterThanOrEqual(1);
+    expect(data.results.some(r => r.content.includes('https://example.com'))).toBe(true);
+  });
+
+  test('is:pinned filter returns pinned messages', async () => {
+    // Pin one of the messages first
+    const searchPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: uniqueWord });
+    const searchData = await searchPromise;
+    const msgToPin = searchData.results[0];
+
+    if (msgToPin) {
+      // Pin the message
+      const pinPromise = waitForEvent(admin.socket, 'message:pinned', 5000).catch(() => null);
+      admin.socket.emit('message:pin', { channelId: msgToPin.channelId, messageId: msgToPin.id });
+      await pinPromise;
+      await new Promise(r => setTimeout(r, 500));
+
+      const pinnedPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+      admin.socket.emit('messages:search', { serverId, query: 'is:pinned' });
+      const pinnedData = await pinnedPromise;
+
+      expect(pinnedData.results.length).toBeGreaterThanOrEqual(1);
+      expect(pinnedData.results.some(r => r.id === msgToPin.id)).toBe(true);
+    }
+  });
+
+  test('combined text + filter search works', async () => {
+    const resultPromise = waitForEvent(admin.socket, 'messages:search-results', 5000);
+    admin.socket.emit('messages:search', { serverId, query: `${uniqueWord} from:${admin.account.username} in:general` });
+    const data = await resultPromise;
+
+    expect(data.results.length).toBeGreaterThanOrEqual(1);
+    for (const result of data.results) {
+      expect(result.content).toContain(uniqueWord);
+      expect(result.author.username.toLowerCase()).toBe(admin.account.username.toLowerCase());
+      expect(result.channelId).toBe(channelId);
+    }
+  });
 });

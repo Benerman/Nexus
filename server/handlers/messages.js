@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
-const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast } = require('../helpers');
+const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast, parseSearchFilters } = require('../helpers');
 
 const messageLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 
@@ -624,19 +624,58 @@ module.exports = function(io, socket) {
   socket.on('messages:search', async ({ serverId, query: searchQuery, channelId, authorId, before, after }) => {
     const user = state.users[socket.id];
     if (!user) return;
-    if (!searchQuery?.trim()) return;
 
     const srv = state.servers[serverId];
     if (!srv) return socket.emit('error', { message: 'Server not found' });
     if (!srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
 
+    // Parse Gmail-style search filters from query
+    const { text, filters } = parseSearchFilters(searchQuery);
+
+    // If no text and no filters, ignore (backward compat: empty query with no filters)
+    if (!text && Object.keys(filters).length === 0) return;
+
+    // Resolve from:username → authorId
+    let resolvedAuthorId = authorId;
+    if (filters.from) {
+      const member = Object.values(srv.members).find(m => m.username?.toLowerCase() === filters.from);
+      if (member) {
+        resolvedAuthorId = member.id || Object.keys(srv.members).find(id => srv.members[id] === member);
+      } else {
+        // Fallback: look up by username in DB
+        const account = await db.getAccountByUsername(filters.from);
+        if (account && srv.members[account.id]) {
+          resolvedAuthorId = account.id;
+        } else {
+          // User not found in server — return empty results
+          return socket.emit('messages:search-results', { results: [], query: searchQuery });
+        }
+      }
+    }
+
+    // Resolve in:channel-name → channelId
+    let resolvedChannelId = channelId;
+    if (filters.in) {
+      const allChannels = [...(srv.channels.text || []), ...(srv.channels.voice || [])];
+      const matched = allChannels.find(c => c.name.toLowerCase() === filters.in);
+      if (matched) {
+        resolvedChannelId = matched.id;
+      } else {
+        return socket.emit('messages:search-results', { results: [], query: searchQuery });
+      }
+    }
+
     try {
       const dbResults = await db.searchMessages(serverId, {
-        query: searchQuery.trim(),
-        channelId,
-        authorId,
-        before,
-        after,
+        query: text || undefined,
+        channelId: resolvedChannelId,
+        authorId: resolvedAuthorId,
+        before: filters.before || before,
+        after: filters.after || after,
+        hasAttachment: filters.has?.includes('attachment'),
+        hasImage: filters.has?.includes('image'),
+        hasLink: filters.has?.includes('link'),
+        isPinned: filters.isPinned,
         limit: 25
       });
 
@@ -653,7 +692,8 @@ module.exports = function(io, socket) {
           color: row.author_color || '#80848E'
         },
         timestamp: new Date(row.created_at).getTime(),
-        reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {})
+        reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {}),
+        pinned: row.pinned || false
       }));
 
       socket.emit('messages:search-results', { results, query: searchQuery });

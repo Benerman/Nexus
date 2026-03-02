@@ -1614,7 +1614,7 @@ async function getPinnedCount(channelId) {
 // ============================================================================
 
 async function searchMessages(serverId, options = {}) {
-  const { query: searchQuery, channelId, authorId, before, after, limit = 25 } = options;
+  const { query: searchQuery, channelId, authorId, before, after, hasAttachment, hasImage, hasLink, isPinned, limit = 25 } = options;
   const params = [];
   const conditions = [];
   let paramIdx = 1;
@@ -1646,6 +1646,22 @@ async function searchMessages(serverId, options = {}) {
   if (after) {
     conditions.push(`m.created_at > to_timestamp($${paramIdx++} / 1000.0)`);
     params.push(after);
+  }
+
+  if (hasAttachment) {
+    conditions.push(`m.attachments != '[]'::jsonb`);
+  }
+
+  if (hasImage) {
+    conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(m.attachments) AS att WHERE att->>'type' LIKE 'image/%')`);
+  }
+
+  if (hasLink) {
+    conditions.push(`m.content ~ 'https?://[^\\s]+'`);
+  }
+
+  if (isPinned) {
+    conditions.push(`m.pinned = TRUE`);
   }
 
   params.push(limit);

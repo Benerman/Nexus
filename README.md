@@ -43,6 +43,21 @@ See [docs/deployment/DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md)
 - Infinite scroll with message history pagination
 - Message grouping by author with date separators
 
+### Search Operators
+
+Use Gmail-style filters in the search panel to narrow results:
+
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `from:` | `from:alice` | Messages from a specific user |
+| `in:` | `in:general` | Messages in a specific channel |
+| `has:` | `has:link`, `has:image`, `has:attachment` | Messages containing links, images, or any attachment |
+| `before:` | `before:2025-06-01` | Messages before a date |
+| `after:` | `after:2025-01-01` | Messages after a date |
+| `is:` | `is:pinned` | Pinned messages |
+
+Combine operators with free text: `hello world from:alice in:general has:link`
+
 ### Slash Commands
 | Command | Description |
 |---------|-------------|
