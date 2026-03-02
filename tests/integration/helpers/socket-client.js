@@ -6,15 +6,17 @@ const { io } = require('socket.io-client');
  */
 function waitForEvent(socket, event, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
+    const handler = (data) => {
+      clearTimeout(timer);
+      resolve(data);
+    };
+
     const timer = setTimeout(() => {
-      socket.off(event);
+      socket.off(event, handler);
       reject(new Error(`Timed out waiting for event: ${event}`));
     }, timeoutMs);
 
-    socket.once(event, (data) => {
-      clearTimeout(timer);
-      resolve(data);
-    });
+    socket.once(event, handler);
   });
 }
 

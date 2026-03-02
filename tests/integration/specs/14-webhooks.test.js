@@ -62,7 +62,7 @@ describe('Webhooks', () => {
   test('POST /api/webhooks/:id/:token with content → message:new broadcast in channel', async () => {
     if (!webhookId || !webhookToken) return;
 
-    const msgPromise = waitForEvent(admin.socket, 'message:new', 5000);
+    const msgPromise = waitForEvent(admin.socket, 'message:new', 15000);
     const res = await api.sendWebhook(webhookId, webhookToken, {
       content: 'Hello from webhook!',
       username: 'WebhookBot',
@@ -79,7 +79,9 @@ describe('Webhooks', () => {
   test('Webhook message has isWebhook: true and custom username', async () => {
     if (!webhookId || !webhookToken) return;
 
-    const msgPromise = waitForEvent(admin.socket, 'message:new', 5000);
+    // Use longer timeout — api.sendWebhook retries on 429 rate limits,
+    // and the socket event only arrives after a successful attempt
+    const msgPromise = waitForEvent(admin.socket, 'message:new', 15000);
     await api.sendWebhook(webhookId, webhookToken, {
       content: 'Webhook identity check',
       username: 'CustomBot',
