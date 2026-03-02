@@ -15,6 +15,8 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
 
     this._initialized = false;
     this._enabled = true;
+    this._aggressiveness = 'medium';
+    this._mixRatios = { low: 0.70, medium: 0.95, high: 1.0 };
 
     // RNNoise operates on 480-sample frames (10ms at 48kHz)
     this._RNNOISE_FRAME = 480;
@@ -77,6 +79,9 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
       if (e.data.type === 'settings') {
         if (e.data.noiseCancellation !== undefined) {
           this._enabled = e.data.noiseCancellation;
+        }
+        if (e.data.aggressiveness !== undefined) {
+          this._aggressiveness = e.data.aggressiveness;
         }
       }
     };
@@ -144,8 +149,24 @@ class RNNoiseProcessor extends AudioWorkletProcessor {
       }
       this._inputBuffered -= this._RNNOISE_FRAME;
 
+      // Save original frame for aggressiveness blending
+      const mix = this._mixRatios[this._aggressiveness] || 0.95;
+      let original;
+      if (mix < 1.0) {
+        original = new Float32Array(frame);
+      }
+
       // Run RNNoise denoising
       const vadProb = this._processRNNoiseFrame(frame);
+
+      // Blend denoised with original based on aggressiveness level
+      if (mix < 1.0) {
+        const wet = mix;
+        const dry = 1.0 - mix;
+        for (let i = 0; i < this._RNNOISE_FRAME; i++) {
+          frame[i] = frame[i] * wet + original[i] * dry;
+        }
+      }
 
       // Report VAD probability
       this.port.postMessage({ type: 'vad', probability: vadProb });
