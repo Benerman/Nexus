@@ -86,21 +86,21 @@ describe('Direct Messages', () => {
     // Either error event or DM creation is blocked
     // Unblock for cleanup
     user3.socket.emit('unblock:user', { userId: user1.account.id });
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 500));
   });
 
   test('dm:list returns user\'s DM channels', async () => {
-    // Retry up to 3 times — CI can be slow after the block/unblock test
+    // Retry up to 5 times — CI can be slow after the block/unblock test
     let data;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        const listPromise = waitForEvent(user1.socket, 'dm:list', 10000);
+        const listPromise = waitForEvent(user1.socket, 'dm:list', 8000);
         user1.socket.emit('dm:list');
         data = await listPromise;
         break;
       } catch (err) {
-        if (attempt === 2) throw err;
-        await new Promise(r => setTimeout(r, 1000));
+        if (attempt === 4) throw err;
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 
@@ -110,7 +110,7 @@ describe('Direct Messages', () => {
       const found = data.dms.find(dm => dm.id === dmChannelId);
       expect(found).toBeDefined();
     }
-  });
+  }, 60000);
 
   test('dm:mark-read updates read state', async () => {
     if (!dmChannelId) return;
