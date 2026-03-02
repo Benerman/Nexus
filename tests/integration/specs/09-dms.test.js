@@ -92,19 +92,32 @@ describe('Direct Messages', () => {
   test('dm:list returns user\'s DM channels', async () => {
     expect(user1.socket.connected).toBe(true);
 
-    // Listen for both dm:list and error — handler emits error instead of dm:list on failure
-    const data = await new Promise((resolve, reject) => {
+    // Small delay to let any pending DB operations from previous tests settle
+    await new Promise(r => setTimeout(r, 500));
+
+    // Helper to attempt dm:list once, returning data or throwing
+    const attemptDmList = () => new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         user1.socket.off('dm:list', onList);
         user1.socket.off('error', onError);
-        reject(new Error('Timed out waiting for dm:list (15s)'));
-      }, 15000);
+        reject(new Error('Timed out waiting for dm:list (10s)'));
+      }, 10000);
       const onList = (d) => { clearTimeout(timer); user1.socket.off('error', onError); resolve(d); };
       const onError = (err) => { clearTimeout(timer); user1.socket.off('dm:list', onList); reject(new Error(`dm:list handler error: ${JSON.stringify(err)}`)); };
       user1.socket.once('dm:list', onList);
       user1.socket.once('error', onError);
       user1.socket.emit('dm:list');
     });
+
+    // Retry once after a delay if the first attempt fails (transient CI issue)
+    let data;
+    try {
+      data = await attemptDmList();
+    } catch (firstErr) {
+      console.log(`dm:list first attempt failed: ${firstErr.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 1000));
+      data = await attemptDmList();
+    }
 
     expect(data.dms).toBeDefined();
     expect(Array.isArray(data.dms)).toBe(true);

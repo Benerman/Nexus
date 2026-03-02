@@ -455,7 +455,7 @@ async function getDMChannelsWithDetails(userId) {
      LEFT JOIN accounts a2 ON dc.participant_2 = a2.id
      LEFT JOIN LATERAL (
        SELECT id, content, created_at, author_id
-       FROM messages WHERE channel_id = dc.id
+       FROM messages WHERE channel_id = dc.id::text
        ORDER BY created_at DESC LIMIT 1
      ) lm ON true
      WHERE dc.participant_1 = $1 OR dc.participant_2 = $1 OR dp.user_id = $1
