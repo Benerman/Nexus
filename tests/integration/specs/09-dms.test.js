@@ -90,19 +90,21 @@ describe('Direct Messages', () => {
   });
 
   test('dm:list returns user\'s DM channels', async () => {
-    // Retry up to 5 times — CI can be slow after the block/unblock test
-    let data;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        const listPromise = waitForEvent(user1.socket, 'dm:list', 8000);
-        user1.socket.emit('dm:list');
-        data = await listPromise;
-        break;
-      } catch (err) {
-        if (attempt === 4) throw err;
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
+    expect(user1.socket.connected).toBe(true);
+
+    // Listen for both dm:list and error — handler emits error instead of dm:list on failure
+    const data = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        user1.socket.off('dm:list', onList);
+        user1.socket.off('error', onError);
+        reject(new Error('Timed out waiting for dm:list (15s)'));
+      }, 15000);
+      const onList = (d) => { clearTimeout(timer); user1.socket.off('error', onError); resolve(d); };
+      const onError = (err) => { clearTimeout(timer); user1.socket.off('dm:list', onList); reject(new Error(`dm:list handler error: ${JSON.stringify(err)}`)); };
+      user1.socket.once('dm:list', onList);
+      user1.socket.once('error', onError);
+      user1.socket.emit('dm:list');
+    });
 
     expect(data.dms).toBeDefined();
     expect(Array.isArray(data.dms)).toBe(true);
@@ -110,7 +112,7 @@ describe('Direct Messages', () => {
       const found = data.dms.find(dm => dm.id === dmChannelId);
       expect(found).toBeDefined();
     }
-  }, 60000);
+  }, 30000);
 
   test('dm:mark-read updates read state', async () => {
     if (!dmChannelId) return;
