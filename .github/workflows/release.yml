@@ -69,12 +69,6 @@ jobs:
           - platform: [self-hosted, Linux]
             args: ""
             rust_targets: ""
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
-            rust_targets: "aarch64-apple-darwin"
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
-            rust_targets: "x86_64-apple-darwin"
           - platform: windows-latest
             args: ""
             rust_targets: ""
@@ -124,6 +118,70 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  build-tauri-macos:
+    needs: prepare
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri -> target
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build with Tauri (Apple Silicon)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: false
+          REACT_APP_SERVER_URL: ${{ env.SERVER_URL }}
+          GENERATE_SOURCEMAP: false
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: client
+          tauriScript: npx tauri
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: "Nexus v${{ needs.prepare.outputs.version }}"
+          releaseDraft: false
+          prerelease: false
+          args: --target aarch64-apple-darwin
+
+      - name: Build with Tauri (Intel)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: false
+          REACT_APP_SERVER_URL: ${{ env.SERVER_URL }}
+          GENERATE_SOURCEMAP: false
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: client
+          tauriScript: npx tauri
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: "Nexus v${{ needs.prepare.outputs.version }}"
+          releaseDraft: false
+          prerelease: false
+          args: --target x86_64-apple-darwin
 
 
   build-ios:
