@@ -1440,7 +1440,7 @@ async function initializeDatabase() {
   // Run incremental migrations
   const fs = require('fs');
   const path = require('path');
-  const migrations = ['002_dm_read_states.sql', '003_group_dms.sql', '004_mentions.sql', '005_command_data.sql', '006_custom_emojis.sql', '007_dm_unique_constraint.sql', '008_webhook_token.sql', '009_server_ice_config.sql'];
+  const migrations = ['002_dm_read_states.sql', '003_group_dms.sql', '004_mentions.sql', '005_command_data.sql', '006_custom_emojis.sql', '007_dm_unique_constraint.sql', '008_webhook_token.sql', '009_server_ice_config.sql', '010_dm_preserve_on_delete.sql', '011_message_requests.sql', '012_webhook_embeds.sql', '013_pins_search_threads_bookmarks_audit.sql'];
   for (const migration of migrations) {
     try {
       const migFile = path.join(__dirname, 'migrations', migration);

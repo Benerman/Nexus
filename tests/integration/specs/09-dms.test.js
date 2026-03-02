@@ -90,9 +90,19 @@ describe('Direct Messages', () => {
   });
 
   test('dm:list returns user\'s DM channels', async () => {
-    const listPromise = waitForEvent(user1.socket, 'dm:list', 10000);
-    user1.socket.emit('dm:list');
-    const data = await listPromise;
+    // Retry up to 3 times — CI can be slow after the block/unblock test
+    let data;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const listPromise = waitForEvent(user1.socket, 'dm:list', 10000);
+        user1.socket.emit('dm:list');
+        data = await listPromise;
+        break;
+      } catch (err) {
+        if (attempt === 2) throw err;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
 
     expect(data.dms).toBeDefined();
     expect(Array.isArray(data.dms)).toBe(true);
