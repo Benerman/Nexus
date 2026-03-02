@@ -860,6 +860,20 @@ const ChatArea = React.memo(function ChatArea({
     setEditingMessage(null); // Clear edit if replying
   }, []);
 
+  const handlePinMessage = useCallback((msg) => {
+    socket.emit(msg.pinned ? 'message:unpin' : 'message:pin',
+      { channelId: channel.id, messageId: msg.id });
+  }, [socket, channel?.id]);
+
+  const handleBookmarkMessage = useCallback((msg) => {
+    if (savedMessageIds?.has(msg.id)) onUnsaveMessage(msg.id);
+    else onSaveMessage(msg.id, channel.id);
+  }, [savedMessageIds, onSaveMessage, onUnsaveMessage, channel?.id]);
+
+  const handleOpenThreadFromContext = useCallback((msg) => {
+    if (onOpenThread) onOpenThread(channel.id, msg.id);
+  }, [onOpenThread, channel?.id]);
+
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
   }, []);
@@ -1001,6 +1015,7 @@ const ChatArea = React.memo(function ChatArea({
           currentUser={currentUser}
           isAdmin={server?.members?.[currentUser?.id]?.roles?.includes('admin')}
           isServerOwner={server?.owner === currentUser?.id}
+          canManageMessages={server?.owner === currentUser?.id || (server?.members?.[currentUser?.id]?.roles || []).some(rId => server?.roles?.[rId]?.permissions?.manageMessages || server?.roles?.[rId]?.permissions?.admin)}
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
           onDelete={handleDeleteMessage}
@@ -1008,6 +1023,11 @@ const ChatArea = React.memo(function ChatArea({
           onReply={handleReplyToMessage}
           onCopyUrl={handleCopyMessageUrl}
           onReport={onReportMessage}
+          onPin={handlePinMessage}
+          onBookmark={handleBookmarkMessage}
+          onThread={handleOpenThreadFromContext}
+          savedMessageIds={savedMessageIds}
+          isDM={channel?.isDM}
           developerMode={developerMode}
         />
       )}
