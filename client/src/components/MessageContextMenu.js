@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import './MessageContextMenu.css';
 
-const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, position, onClose, onDelete, onEdit, onReply, onCopyUrl, onReport, developerMode }) => {
+const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, canManageMessages, position, onClose, onDelete, onEdit, onReply, onCopyUrl, onReport, onPin, onBookmark, onThread, savedMessageIds, isDM, developerMode }) => {
   const menuRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [adjustedPosition, setAdjustedPosition] = useState(position);
@@ -58,6 +58,31 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, posi
             Reply to Message
           </button>
         )}
+
+        {onThread && !message.threadId && !isDM && (
+          <button className="context-menu-item" onClick={() => { onThread(message); onClose(); }}>
+            <span className="context-menu-icon">🧵</span>
+            {message.threadReplyCount > 0 ? 'Open Thread' : 'Start Thread'}
+          </button>
+        )}
+
+        {onThread && !message.threadId && !isDM && <div className="context-menu-divider" />}
+
+        {canManageMessages && !isDM && onPin && (
+          <button className="context-menu-item" onClick={() => { onPin(message); onClose(); }}>
+            <span className="context-menu-icon">📌</span>
+            {message.pinned ? 'Unpin Message' : 'Pin Message'}
+          </button>
+        )}
+
+        {onBookmark && (
+          <button className="context-menu-item" onClick={() => { onBookmark(message); onClose(); }}>
+            <span className="context-menu-icon">🔖</span>
+            {savedMessageIds?.has(message.id) ? 'Remove Bookmark' : 'Bookmark'}
+          </button>
+        )}
+
+        {(onBookmark || (canManageMessages && !isDM && onPin)) && <div className="context-menu-divider" />}
 
         {isAuthor && onEdit && !message.isWebhook && (
           <button className="context-menu-item" onClick={() => { onEdit(message); onClose(); }}>
