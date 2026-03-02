@@ -203,7 +203,7 @@ const ServerList = React.memo(function ServerList({
           title={srv.name}
           draggable
           onClick={() => onSelectServer(srv.id)}
-          onContextMenu={(e) => onServerContextMenu && onServerContextMenu(srv, e)}
+          onContextMenu={(e) => { e.preventDefault(); onServerContextMenu && onServerContextMenu(srv, e); }}
           onTouchStart={(e) => {
             longPressServerRef.current = srv;
             longPress.onTouchStart(e);

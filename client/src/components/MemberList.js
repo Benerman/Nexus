@@ -74,7 +74,7 @@ const MemberList = React.memo(function MemberList({ onlineUsers, currentUser, se
           if (longPress.firedRef.current) { e.stopPropagation(); return; }
           onUserClick && onUserClick(user, e);
         }}
-        onContextMenu={(e) => onUserRightClick && onUserRightClick(user, e)}
+        onContextMenu={(e) => { e.preventDefault(); onUserRightClick && onUserRightClick(user, e); }}
         onTouchStart={(e) => {
           longPressUserRef.current = user;
           longPress.onTouchStart(e);

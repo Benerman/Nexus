@@ -230,7 +230,6 @@ const VoiceArea = React.memo(function VoiceArea({
   onToggleScreenAudioMute,
   onSetUserVolume,
   onToggleUserMute,
-  onRegisterAudioElement,
   onLeave,
   onReconnect,
   currentUser,
@@ -762,17 +761,6 @@ const VoiceArea = React.memo(function VoiceArea({
         </div>
       </div>
 
-      {/* Hidden audio players for remote streams */}
-      {Object.entries(remoteStreams).map(([socketId, stream]) => (
-        <AudioPlayer
-          key={socketId}
-          stream={stream}
-          muted={isDeafened}
-          socketId={socketId}
-          onRegister={onRegisterAudioElement}
-        />
-      ))}
-
       {/* Controls */}
       <div className="voice-controls">
         <button
@@ -957,4 +945,5 @@ const VoiceArea = React.memo(function VoiceArea({
   );
 });
 
+export { AudioPlayer };
 export default VoiceArea;

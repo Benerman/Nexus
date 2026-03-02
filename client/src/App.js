@@ -4,7 +4,7 @@ import { useWebRTC } from './hooks/useWebRTC';
 import ServerList from './components/ServerList';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
-import VoiceArea from './components/VoiceArea';
+import VoiceArea, { AudioPlayer } from './components/VoiceArea';
 import LoginScreen from './components/LoginScreen';
 import ServerSetupScreen from './components/ServerSetupScreen';
 import MemberList from './components/MemberList';
@@ -1485,6 +1485,13 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [activeChannel?.id]);
 
+  // ─── Disable native right-click context menu (desktop/Tauri) ──────────────────
+  useEffect(() => {
+    const handler = (e) => e.preventDefault();
+    document.addEventListener('contextmenu', handler);
+    return () => document.removeEventListener('contextmenu', handler);
+  }, []);
+
   const handleSelectServer = useCallback((serverId) => {
     setActiveServerId(serverId);
     localStorage.setItem('nexus_last_server', serverId);
@@ -2226,7 +2233,6 @@ export default function App() {
               onToggleScreenAudioMute={webrtc.toggleScreenAudioMute}
               onSetUserVolume={webrtc.setUserVolume}
               onToggleUserMute={webrtc.toggleUserMute}
-              onRegisterAudioElement={webrtc.registerAudioElement}
               onLeave={handleLeaveDMCall} onReconnect={webrtc.reconnectVoice}
               currentUser={currentUser} onlineUsers={onlineUsers}
               memberSidebarVisible={false}
@@ -2263,7 +2269,6 @@ export default function App() {
             onToggleScreenAudioMute={webrtc.toggleScreenAudioMute}
             onSetUserVolume={webrtc.setUserVolume}
             onToggleUserMute={webrtc.toggleUserMute}
-            onRegisterAudioElement={webrtc.registerAudioElement}
             onLeave={handleLeaveVoice} onReconnect={webrtc.reconnectVoice}
             currentUser={currentUser} onlineUsers={onlineUsers}
             memberSidebarVisible={memberSidebarVisible}
@@ -2470,6 +2475,18 @@ export default function App() {
           onUnmuteCategory={handleUnmuteCategory}
         />
       )}
+
+      {/* Persistent audio players for voice/DM call streams — lives outside VoiceArea
+          so audio continues when navigating to other channels */}
+      {Object.entries(webrtc.remoteStreams).map(([socketId, stream]) => (
+        <AudioPlayer
+          key={socketId}
+          stream={stream}
+          muted={webrtc.isDeafened}
+          socketId={socketId}
+          onRegister={webrtc.registerAudioElement}
+        />
+      ))}
     </div>
   );
 }

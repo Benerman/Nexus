@@ -105,7 +105,7 @@ function FriendsList({ friends, onlineUsers, onCreateDM, dmSearch, onFriendActio
           key={f.id}
           className="dm-friend-item"
           onClick={() => onCreateDM(f.id)}
-          onContextMenu={(e) => openFriendCtx(f, e)}
+          onContextMenu={(e) => { e.preventDefault(); openFriendCtx(f, e); }}
           onTouchStart={(e) => {
             const touch = e.touches[0];
             friendLongPressRef.current = setTimeout(() => {
