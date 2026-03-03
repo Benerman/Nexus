@@ -1370,6 +1370,12 @@
   white-space: nowrap;
 }
 
+/* ── Mobile panel slide-in animation ─────────── */
+@keyframes mobilePanelSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
 /* ── Mobile ───────────────────────────────────── */
 @media (max-width: 768px) {
   /* Chat header: hide channel info (shown in mobile nav bar), keep only for thread view */
@@ -1411,10 +1417,18 @@
     display: none;
   }
 
-  /* Side panels: only go full-width when screen share is active */
-  .chat-area--screen-share .chat-side-panel {
+  /* Side panels: full-screen slide-in drawer on mobile */
+  .chat-side-panel {
+    position: fixed !important;
+    top: 96px !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     width: 100% !important;
+    height: auto !important;
     border-left: none !important;
+    z-index: 100 !important;
+    animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Message actions: show on tap via .mobile-actions-visible */
@@ -1610,5 +1624,18 @@
 @media (max-height: 500px) and (orientation: landscape) {
   .chat-header {
     display: none;
+  }
+  /* Side panels: full-screen in landscape too, with shorter top offset */
+  .chat-side-panel {
+    position: fixed !important;
+    top: 88px !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    border-left: none !important;
+    z-index: 100 !important;
+    animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

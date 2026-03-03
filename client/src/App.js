@@ -1924,8 +1924,12 @@ export default function App() {
     // Horizontal swipe must be at least 2x the vertical movement
     if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > deltaY * 2) {
       if (deltaX > 0) {
-        // Swipe right — open left sidebar or close right panel
-        if (mobileMemberListOpen) {
+        // Swipe right — close right panels first, then open left sidebar
+        if (showPinnedPanel || showSearchPanel || showThreadsListPanel) {
+          setShowPinnedPanel(false);
+          setShowSearchPanel(false);
+          setShowThreadsListPanel(false);
+        } else if (mobileMemberListOpen) {
           setMobileMemberListOpen(false);
         } else {
           setMobileSidebarOpen(true);
@@ -1940,11 +1944,15 @@ export default function App() {
         }
       }
     }
-  }, [mobileSidebarOpen, mobileMemberListOpen]);
+  }, [mobileSidebarOpen, mobileMemberListOpen, showPinnedPanel, showSearchPanel, showThreadsListPanel]);
 
   const closeMobilePanels = useCallback(() => {
     setMobileSidebarOpen(false);
     setMobileMemberListOpen(false);
+    // Also close side panels (pinned, search, threads) on mobile overlay tap
+    setShowPinnedPanel(false);
+    setShowSearchPanel(false);
+    setShowThreadsListPanel(false);
   }, []);
 
   const handleStartScreenShare = useCallback(() => {
@@ -2085,7 +2093,7 @@ export default function App() {
       )}
 
       {/* Mobile overlay backdrop */}
-      {(mobileSidebarOpen || mobileMemberListOpen) && (
+      {(mobileSidebarOpen || mobileMemberListOpen || showPinnedPanel || showSearchPanel || showThreadsListPanel) && (
         <div className="mobile-overlay" onClick={closeMobilePanels} />
       )}
 

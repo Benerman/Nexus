@@ -371,6 +371,9 @@
     .main-content {
       padding-bottom: env(safe-area-inset-bottom) !important;
     }
+    .chat-side-panel {
+      padding-bottom: env(safe-area-inset-bottom) !important;
+    }
   }
 }
 
