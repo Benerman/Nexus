@@ -1924,8 +1924,12 @@ export default function App() {
     // Horizontal swipe must be at least 2x the vertical movement
     if (Math.abs(deltaX) > threshold && Math.abs(deltaX) > deltaY * 2) {
       if (deltaX > 0) {
-        // Swipe right — open left sidebar or close right panel
-        if (mobileMemberListOpen) {
+        // Swipe right — close right panels first, then open left sidebar
+        if (showPinnedPanel || showSearchPanel || showThreadsListPanel) {
+          setShowPinnedPanel(false);
+          setShowSearchPanel(false);
+          setShowThreadsListPanel(false);
+        } else if (mobileMemberListOpen) {
           setMobileMemberListOpen(false);
         } else {
           setMobileSidebarOpen(true);
@@ -1940,11 +1944,15 @@ export default function App() {
         }
       }
     }
-  }, [mobileSidebarOpen, mobileMemberListOpen]);
+  }, [mobileSidebarOpen, mobileMemberListOpen, showPinnedPanel, showSearchPanel, showThreadsListPanel]);
 
   const closeMobilePanels = useCallback(() => {
     setMobileSidebarOpen(false);
     setMobileMemberListOpen(false);
+    // Also close side panels (pinned, search, threads) on mobile overlay tap
+    setShowPinnedPanel(false);
+    setShowSearchPanel(false);
+    setShowThreadsListPanel(false);
   }, []);
 
   const handleStartScreenShare = useCallback(() => {
@@ -2085,7 +2093,7 @@ export default function App() {
       )}
 
       {/* Mobile overlay backdrop */}
-      {(mobileSidebarOpen || mobileMemberListOpen) && (
+      {(mobileSidebarOpen || mobileMemberListOpen || showPinnedPanel || showSearchPanel || showThreadsListPanel) && (
         <div className="mobile-overlay" onClick={closeMobilePanels} />
       )}
 
@@ -2154,12 +2162,29 @@ export default function App() {
           <span className="mobile-nav-arrow">{mobileSidebarOpen ? '‹' : '›'}</span>
           <span className="mobile-nav-channel">{activeChannel?.isDM ? activeChannel?.name : `# ${activeChannel?.name || 'general'}`}</span>
         </button>
-        {!activeServer?.isPersonal && (
-          <button className="mobile-nav-right" onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }}>
-            <span className="mobile-nav-online">{onlineUsers.filter(u => activeServer?.members?.[u.id]).length} online</span>
-            <span className="mobile-nav-arrow">{mobileMemberListOpen ? '›' : '‹'}</span>
+        <div className="mobile-nav-actions">
+          {activeChannel?.isDM && (
+            <button className="mobile-nav-action-btn" onClick={() => !dmCallActive && handleStartDMCall(activeChannel.id)} title="Start Voice Call">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+            </button>
+          )}
+          <button className={`mobile-nav-action-btn${showPinnedPanel ? ' active' : ''}`} onClick={() => { setShowPinnedPanel(p => !p); if (!showPinnedPanel && activeChannel) socketRef.current?.emit('messages:get-pinned', { channelId: activeChannel.id }); }} title="Pinned Messages">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
           </button>
-        )}
+          {!activeChannel?.isDM && (
+            <button className={`mobile-nav-action-btn${showThreadsListPanel ? ' active' : ''}`} onClick={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }} title="Threads">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            </button>
+          )}
+          <button className={`mobile-nav-action-btn${showSearchPanel ? ' active' : ''}`} onClick={() => setShowSearchPanel(p => !p)} title="Search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          </button>
+          {!activeServer?.isPersonal && (
+            <button className={`mobile-nav-action-btn${mobileMemberListOpen ? ' active' : ''}`} onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }} title="Members">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            </button>
+          )}
+        </div>
       </div>
       <div className="main-content">
         {/* Media error banner */}
@@ -2309,6 +2334,7 @@ export default function App() {
             showThreadsListPanel={showThreadsListPanel}
             onToggleThreadsListPanel={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }}
             channelThreads={channelThreads[activeChannel?.id] || []}
+            screenShareActive={webrtc.isSharingScreen || Object.keys(webrtc.remoteScreenStreams).length > 0}
           />
         )}
       </div>

@@ -1370,11 +1370,24 @@
   white-space: nowrap;
 }
 
+/* ── Mobile panel slide-in animation ─────────── */
+@keyframes mobilePanelSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
 /* ── Mobile ───────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Chat header hidden on mobile — mobile nav bar shows channel info */
+  /* Chat header: hide channel info (shown in mobile nav bar), keep only for thread view */
   .chat-header {
     display: none;
+  }
+  /* Show chat header when in thread view (thread panel back button) */
+  .chat-area--thread-view .chat-header {
+    display: flex;
+    height: 44px;
+    padding: 0 8px;
+    gap: 4px;
   }
   .chat-header-name {
     flex-shrink: 1;
@@ -1382,6 +1395,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 14px;
   }
   .chat-header-actions {
     flex-shrink: 0;
@@ -1401,6 +1415,20 @@
   .chat-header-desc,
   .chat-header-topic {
     display: none;
+  }
+
+  /* Side panels: full-screen slide-in drawer on mobile */
+  .chat-side-panel {
+    position: fixed !important;
+    top: 96px !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    border-left: none !important;
+    z-index: 100 !important;
+    animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Message actions: show on tap via .mobile-actions-visible */
@@ -1508,6 +1536,12 @@
   /* Pending attachments */
   .pending-attachment { width: 60px; height: 60px; }
   .remove-attachment { width: 24px; height: 24px; font-size: 14px; }
+
+  /* Panel close buttons - larger touch targets on mobile */
+  .chat-side-panel button {
+    min-width: 32px;
+    min-height: 32px;
+  }
 }
 
 /* ─── Message Request Banner ──────────────────────────────────────────────── */
@@ -1590,5 +1624,18 @@
 @media (max-height: 500px) and (orientation: landscape) {
   .chat-header {
     display: none;
+  }
+  /* Side panels: full-screen in landscape too, with shorter top offset */
+  .chat-side-panel {
+    position: fixed !important;
+    top: 88px !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    border-left: none !important;
+    z-index: 100 !important;
+    animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
