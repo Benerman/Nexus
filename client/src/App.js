@@ -148,6 +148,8 @@ export default function App() {
   const [showSearchPanel, setShowSearchPanel] = useState(false);
   const [savedMessageIds, setSavedMessageIds] = useState(new Set());
   const [threadPanel, setThreadPanel] = useState(null);  // { channelId, threadId, parent, messages }
+  const [showThreadsListPanel, setShowThreadsListPanel] = useState(false);
+  const [channelThreads, setChannelThreads] = useState({});  // channelId -> [threads]
 
   // Auto-updater state (Tauri only)
   const [updateAvailable, setUpdateAvailable] = useState(null); // { version, notes, install }
@@ -928,6 +930,18 @@ export default function App() {
           m.id === threadId ? { ...m, threadReplyCount: replyCount, threadLastReplyAt: lastReplyAt } : m
         )
       }));
+      // Update threads list panel if open
+      setChannelThreads(prev => {
+        const list = prev[channelId];
+        if (!list) return prev;
+        return { ...prev, [channelId]: list.map(t =>
+          t.id === threadId ? { ...t, replyCount, lastReplyAt: new Date(lastReplyAt).getTime() } : t
+        ).sort((a, b) => b.lastReplyAt - a.lastReplyAt) };
+      });
+    });
+
+    s.on('thread:list-results', ({ channelId, threads }) => {
+      setChannelThreads(prev => ({ ...prev, [channelId]: threads }));
     });
 
     // Reminder notification
@@ -2348,6 +2362,9 @@ export default function App() {
             onOpenThread={(channelId, threadId) => { socketRef.current?.emit('thread:get', { channelId, threadId }); }}
             onCloseThread={() => setThreadPanel(null)}
             onThreadReply={(channelId, threadId, content) => socketRef.current?.emit('thread:reply', { channelId, threadId, content })}
+            showThreadsListPanel={showThreadsListPanel}
+            onToggleThreadsListPanel={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }}
+            channelThreads={channelThreads[activeChannel?.id] || []}
           />
         )}
       </div>

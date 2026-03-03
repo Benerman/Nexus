@@ -817,6 +817,35 @@ module.exports = function(io, socket) {
     }
   });
 
+  // ─── Thread Browser ─────────────────────────────────────────────────────────
+  socket.on('thread:list', async ({ channelId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+
+    try {
+      const dbThreads = await db.getChannelThreads(channelId);
+      const threads = dbThreads.map(row => ({
+        id: row.id,
+        channelId: row.channel_id,
+        content: row.content,
+        attachments: typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : (row.attachments || []),
+        author: {
+          id: row.author_id,
+          username: row.author_username || 'Deleted User',
+          avatar: row.author_avatar || '\u{1F47B}',
+          customAvatar: row.author_custom_avatar,
+          color: row.author_color || '#80848E'
+        },
+        timestamp: new Date(row.created_at).getTime(),
+        replyCount: row.reply_count,
+        lastReplyAt: new Date(row.last_reply_at).getTime()
+      }));
+      socket.emit('thread:list-results', { channelId, threads });
+    } catch (err) {
+      console.error('[Thread] Error fetching thread list:', err.message);
+    }
+  });
+
   // ─── Bookmarks / Saved Messages ─────────────────────────────────────────────
   socket.on('message:save', async ({ messageId, channelId }) => {
     const user = state.users[socket.id];

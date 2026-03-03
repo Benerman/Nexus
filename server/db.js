@@ -1712,6 +1712,22 @@ async function saveThreadMessage({ id, channelId, authorId, content, attachments
   return result.rows[0];
 }
 
+async function getChannelThreads(channelId) {
+  const result = await query(
+    `SELECT m.id, m.channel_id, m.content, m.created_at, m.attachments,
+            a.id as author_id, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color,
+            COUNT(r.id)::int as reply_count, MAX(r.created_at) as last_reply_at
+     FROM messages m
+     LEFT JOIN accounts a ON m.author_id = a.id
+     JOIN messages r ON r.thread_id = m.id
+     WHERE m.channel_id = $1 AND m.thread_id IS NULL
+     GROUP BY m.id, a.id
+     ORDER BY MAX(r.created_at) DESC`,
+    [channelId]
+  );
+  return result.rows;
+}
+
 // ============================================================================
 // BOOKMARK / SAVED MESSAGE FUNCTIONS
 // ============================================================================
@@ -1962,6 +1978,7 @@ module.exports = {
   getThreadMessages,
   getThreadInfo,
   saveThreadMessage,
+  getChannelThreads,
 
   // Bookmark functions
   saveBookmark,
