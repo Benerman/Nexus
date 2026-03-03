@@ -19,3 +19,6 @@ export { default as FriendsIcon } from './FriendsIcon';
 export { default as BellIcon } from './BellIcon';
 export { default as SoundboardIcon } from './SoundboardIcon';
 export { default as EmojiIcon } from './EmojiIcon';
+export { default as ThreadIcon } from './ThreadIcon';
+export { default as PinIcon } from './PinIcon';
+export { default as BookmarkIcon } from './BookmarkIcon';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './ChatArea.css';
-import { AttachmentIcon, SettingsIcon, LinkIcon, UserIcon, PhoneIcon } from './icons';
+import { AttachmentIcon, SettingsIcon, LinkIcon, UserIcon, PhoneIcon, ThreadIcon, PinIcon, BookmarkIcon } from './icons';
 import MessageContextMenu from './MessageContextMenu';
 import InviteEmbed, { containsInviteLink, splitMessageContent } from './InviteEmbed';
 import URLEmbed, { extractURLs } from './URLEmbed';
@@ -1104,7 +1104,7 @@ const ChatArea = React.memo(function ChatArea({
             )}
             {onToggleThreadsListPanel && !channel.isDM && (
               <button className="header-icon-btn" onClick={onToggleThreadsListPanel} title="Threads" style={{ background: showThreadsListPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showThreadsListPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M4.79 18.62c.1.15.25.25.42.3l5.66 1.43c.19.05.4.01.56-.1l6.58-4.78c.18-.13.29-.33.31-.55l.79-7.94c.02-.22-.06-.44-.22-.59L13.01 1.4a.752.752 0 0 0-.57-.18L4.5 2.01c-.22.02-.42.14-.54.32L1.14 6.71c-.12.19-.15.42-.08.63l2.12 7.13c.06.18.18.34.34.44l1.27.71zm1.47-1.8l-1.1-.61-1.89-6.37 2.54-3.89 7.11-.7 5.37 4.49-.7 7.1-5.88 4.27-5.03-1.27-.42-3.02zm.63-3.02l2.2 1.22 2.42-.62.45-2.4-1.55-1.89-2.42.62-.45 2.4-.65.67zm5.14-.09l-.45 2.4 1.55 1.89 2.42-.62.45-2.4-1.55-1.89-2.42.62zM22.9 5.22l-1.73 7.58-.79.57-.36-1.12 1.4-6.14-5.06-3.4-.94.68-.72-.99L16.36.5c.17-.12.38-.16.58-.12l5.49 1.26c.21.05.39.18.49.37.1.19.11.41.04.61l-.06.18v.01l-.01.02z"/></svg>
+                <ThreadIcon size={16} />
               </button>
             )}
             {onToggleSearchPanel && (
@@ -1349,7 +1349,7 @@ const ChatArea = React.memo(function ChatArea({
                       <span className="message-author" style={{color:msg.author.color}}>{msg.author.username}</span>
                       {msg.isWebhook && <span className="webhook-badge">BOT</span>}
                       <span className="message-time">{formatTime(msg.timestamp)}</span>
-                      {msg.pinned && <span style={{ color: '#ed4245', marginLeft: '4px', fontSize: '12px' }} title="Pinned">📌</span>}
+                      {msg.pinned && <span style={{ color: '#ed4245', marginLeft: '4px', display: 'inline-flex', verticalAlign: 'middle' }} title="Pinned"><PinIcon size={12} /></span>}
                       {msg.editedAt && <span className="edited-badge">(edited)</span>}
                     </div>
                   )}
@@ -1498,9 +1498,9 @@ const ChatArea = React.memo(function ChatArea({
                     <button className="reply-action-btn"
                       onClick={e=>{e.stopPropagation();handleReplyToMessage(msg);}}
                       title="Reply">↩</button>
-                    <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (msg.pinned) { socket.emit('message:unpin', { channelId: channel.id, messageId: msg.id }); } else { socket.emit('message:pin', { channelId: channel.id, messageId: msg.id }); } }} title={msg.pinned ? "Unpin" : "Pin"} style={{ color: msg.pinned ? '#ed4245' : undefined }}>📌</button>
-                    {onSaveMessage && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (savedMessageIds?.has(msg.id)) { onUnsaveMessage(msg.id); } else { onSaveMessage(msg.id, channel.id); } }} title={savedMessageIds?.has(msg.id) ? "Remove Bookmark" : "Bookmark"} style={{ color: savedMessageIds?.has(msg.id) ? '#f0b132' : undefined }}>🔖</button>}
-                    {onOpenThread && !msg.threadId && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); onOpenThread(channel.id, msg.id); }} title="Start Thread">💬</button>}
+                    <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (msg.pinned) { socket.emit('message:unpin', { channelId: channel.id, messageId: msg.id }); } else { socket.emit('message:pin', { channelId: channel.id, messageId: msg.id }); } }} title={msg.pinned ? "Unpin" : "Pin"} style={{ color: msg.pinned ? '#ed4245' : undefined }}><PinIcon size={16} /></button>
+                    {onSaveMessage && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (savedMessageIds?.has(msg.id)) { onUnsaveMessage(msg.id); } else { onSaveMessage(msg.id, channel.id); } }} title={savedMessageIds?.has(msg.id) ? "Remove Bookmark" : "Bookmark"} style={{ color: savedMessageIds?.has(msg.id) ? '#f0b132' : undefined }}><BookmarkIcon size={16} /></button>}
+                    {onOpenThread && !msg.threadId && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); onOpenThread(channel.id, msg.id); }} title="Start Thread"><ThreadIcon size={16} /></button>}
                     <button className="reaction-btn"
                       onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
                     <button className="message-options-btn"
