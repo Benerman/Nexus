@@ -136,6 +136,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
+      - nexus-dev-internal
       - traefik-public
     labels:
       - "traefik.enable=true"
