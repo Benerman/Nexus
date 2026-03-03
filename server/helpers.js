@@ -319,8 +319,13 @@ function leaveVoice(socket, io) {
       if (chData.isDMCall) {
         io.emit('voice:channel:update', { channelId: chId, channel: { ...chData, users: chData.users.map(s=>state.users[s]).filter(Boolean) } });
         if (chData.users.length === 0) {
-          io.emit('dm:call-ended', { channelId: chId });
-          delete state.voiceChannels[chId];
+          if (chData.endTimer) clearTimeout(chData.endTimer);
+          chData.endTimer = setTimeout(() => {
+            if (state.voiceChannels[chId] && state.voiceChannels[chId].users.length === 0) {
+              io.emit('dm:call-ended', { channelId: chId });
+              delete state.voiceChannels[chId];
+            }
+          }, 30000);
         }
       } else {
         for (const srv of Object.values(state.servers)) {
