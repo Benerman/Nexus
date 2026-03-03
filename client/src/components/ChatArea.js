@@ -1035,76 +1035,99 @@ const ChatArea = React.memo(function ChatArea({
 
       {/* Header */}
       <div className="chat-header">
-        <div className="chat-header-icon">
-          {channel.isDM ? (
-            <span style={{ fontSize: 16 }}>@</span>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M10.5,10H7.5L9,3H7L5.5,10H2.5l-.5,2h3L4,16H1l-.5,2H3.5L2,24H4L5.5,18h3L7,24H9L10.5,18H13.5l.5-2H11L12,10h3l.5-2H12.5L14,3H12Z"/>
-            </svg>
-          )}
-        </div>
-        <span className="chat-header-name">{channel.isDM ? (channel.participant?.username || channel.name) : channel.name}</span>
-        {!channel.isDM && channel.description && <><div className="chat-header-divider"/><span className="chat-header-desc">{channel.description}</span></>}
-        {!channel.isDM && channel.topic && <span className="chat-header-topic" title={channel.topic}>│ {channel.topic}</span>}
-        <div className="chat-header-actions">
-          {channel.isDM && onStartDMCall && (
-            <button
-              className={`header-action-btn ${dmCallActive === channel.id ? 'active-call' : ''}`}
-              onClick={() => !dmCallActive && onStartDMCall(channel.id)}
-              title={dmCallActive === channel.id ? 'In call' : 'Start Voice Call'}
-              disabled={!!dmCallActive}
-            >
-              <PhoneIcon size={18} color={dmCallActive === channel.id ? 'var(--text-positive)' : 'var(--text-muted)'} />
+        {threadPanel ? (
+          <>
+            <button onClick={onCloseThread} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', marginRight: '4px', borderRadius: '4px' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
-          )}
-          {channel.isDM && (
-            <button className="header-action-btn" onClick={() => setShowAddMember(prev => !prev)} title="Add people">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+            <div className="chat-header-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M10.5,10H7.5L9,3H7L5.5,10H2.5l-.5,2h3L4,16H1l-.5,2H3.5L2,24H4L5.5,18h3L7,24H9L10.5,18H13.5l.5-2H11L12,10h3l.5-2H12.5L14,3H12Z"/>
               </svg>
-            </button>
-          )}
-          {onOpenSettings && !channel.isDM && (
-            <button className="header-action-btn" onClick={()=>onOpenSettings('channels')} title="Channel settings">
-              <SettingsIcon size={18} color="var(--text-muted)" />
-            </button>
-          )}
-          {onOpenSettings && !channel.isDM && (
-            <button className="header-action-btn" onClick={()=>onOpenSettings('webhooks')} title="Webhooks">
-              <LinkIcon size={18} color="var(--text-muted)" />
-            </button>
-          )}
-          {onTogglePinnedPanel && (
-            <button className="header-icon-btn" onClick={onTogglePinnedPanel} title="Pinned Messages" style={{ background: showPinnedPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showPinnedPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
-            </button>
-          )}
-          {onToggleThreadsListPanel && !channel.isDM && (
-            <button className="header-icon-btn" onClick={onToggleThreadsListPanel} title="Threads" style={{ background: showThreadsListPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showThreadsListPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M4.79 18.62c.1.15.25.25.42.3l5.66 1.43c.19.05.4.01.56-.1l6.58-4.78c.18-.13.29-.33.31-.55l.79-7.94c.02-.22-.06-.44-.22-.59L13.01 1.4a.752.752 0 0 0-.57-.18L4.5 2.01c-.22.02-.42.14-.54.32L1.14 6.71c-.12.19-.15.42-.08.63l2.12 7.13c.06.18.18.34.34.44l1.27.71zm1.47-1.8l-1.1-.61-1.89-6.37 2.54-3.89 7.11-.7 5.37 4.49-.7 7.1-5.88 4.27-5.03-1.27-.42-3.02zm.63-3.02l2.2 1.22 2.42-.62.45-2.4-1.55-1.89-2.42.62-.45 2.4-.65.67zm5.14-.09l-.45 2.4 1.55 1.89 2.42-.62.45-2.4-1.55-1.89-2.42.62zM22.9 5.22l-1.73 7.58-.79.57-.36-1.12 1.4-6.14-5.06-3.4-.94.68-.72-.99L16.36.5c.17-.12.38-.16.58-.12l5.49 1.26c.21.05.39.18.49.37.1.19.11.41.04.61l-.06.18v.01l-.01.02z"/></svg>
-            </button>
-          )}
-          {onToggleSearchPanel && (
-            <button className="header-icon-btn" onClick={onToggleSearchPanel} title="Search" style={{ background: showSearchPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showSearchPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-            </button>
-          )}
-          {!channel.isDM && (
-            <button className="header-action-btn" onClick={onToggleMemberSidebar}
-              title={memberSidebarVisible ? 'Hide member list' : 'Show member list'}>
-              <UserIcon size={18} color="var(--text-muted)" />
-            </button>
-          )}
-          {onRefreshData && (
-            <button className="header-action-btn refresh-btn" onClick={onRefreshData} title="Refresh data">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
-            </button>
-          )}
-        </div>
+            </div>
+            <span className="chat-header-name" style={{ opacity: 0.7 }}>{channel.name}</span>
+            <div className="chat-header-divider"/>
+            <span style={{ color: '#fff', fontWeight: 600, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7 }}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              Thread
+            </span>
+          </>
+        ) : (
+          <>
+            <div className="chat-header-icon">
+              {channel.isDM ? (
+                <span style={{ fontSize: 16 }}>@</span>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10.5,10H7.5L9,3H7L5.5,10H2.5l-.5,2h3L4,16H1l-.5,2H3.5L2,24H4L5.5,18h3L7,24H9L10.5,18H13.5l.5-2H11L12,10h3l.5-2H12.5L14,3H12Z"/>
+                </svg>
+              )}
+            </div>
+            <span className="chat-header-name">{channel.isDM ? (channel.participant?.username || channel.name) : channel.name}</span>
+            {!channel.isDM && channel.description && <><div className="chat-header-divider"/><span className="chat-header-desc">{channel.description}</span></>}
+            {!channel.isDM && channel.topic && <span className="chat-header-topic" title={channel.topic}>│ {channel.topic}</span>}
+          </>
+        )}
+        {!threadPanel && (
+          <div className="chat-header-actions">
+            {channel.isDM && onStartDMCall && (
+              <button
+                className={`header-action-btn ${dmCallActive === channel.id ? 'active-call' : ''}`}
+                onClick={() => !dmCallActive && onStartDMCall(channel.id)}
+                title={dmCallActive === channel.id ? 'In call' : 'Start Voice Call'}
+                disabled={!!dmCallActive}
+              >
+                <PhoneIcon size={18} color={dmCallActive === channel.id ? 'var(--text-positive)' : 'var(--text-muted)'} />
+              </button>
+            )}
+            {channel.isDM && (
+              <button className="header-action-btn" onClick={() => setShowAddMember(prev => !prev)} title="Add people">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+                </svg>
+              </button>
+            )}
+            {onOpenSettings && !channel.isDM && (
+              <button className="header-action-btn" onClick={()=>onOpenSettings('channels')} title="Channel settings">
+                <SettingsIcon size={18} color="var(--text-muted)" />
+              </button>
+            )}
+            {onOpenSettings && !channel.isDM && (
+              <button className="header-action-btn" onClick={()=>onOpenSettings('webhooks')} title="Webhooks">
+                <LinkIcon size={18} color="var(--text-muted)" />
+              </button>
+            )}
+            {onTogglePinnedPanel && (
+              <button className="header-icon-btn" onClick={onTogglePinnedPanel} title="Pinned Messages" style={{ background: showPinnedPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showPinnedPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
+              </button>
+            )}
+            {onToggleThreadsListPanel && !channel.isDM && (
+              <button className="header-icon-btn" onClick={onToggleThreadsListPanel} title="Threads" style={{ background: showThreadsListPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showThreadsListPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M4.79 18.62c.1.15.25.25.42.3l5.66 1.43c.19.05.4.01.56-.1l6.58-4.78c.18-.13.29-.33.31-.55l.79-7.94c.02-.22-.06-.44-.22-.59L13.01 1.4a.752.752 0 0 0-.57-.18L4.5 2.01c-.22.02-.42.14-.54.32L1.14 6.71c-.12.19-.15.42-.08.63l2.12 7.13c.06.18.18.34.34.44l1.27.71zm1.47-1.8l-1.1-.61-1.89-6.37 2.54-3.89 7.11-.7 5.37 4.49-.7 7.1-5.88 4.27-5.03-1.27-.42-3.02zm.63-3.02l2.2 1.22 2.42-.62.45-2.4-1.55-1.89-2.42.62-.45 2.4-.65.67zm5.14-.09l-.45 2.4 1.55 1.89 2.42-.62.45-2.4-1.55-1.89-2.42.62zM22.9 5.22l-1.73 7.58-.79.57-.36-1.12 1.4-6.14-5.06-3.4-.94.68-.72-.99L16.36.5c.17-.12.38-.16.58-.12l5.49 1.26c.21.05.39.18.49.37.1.19.11.41.04.61l-.06.18v.01l-.01.02z"/></svg>
+              </button>
+            )}
+            {onToggleSearchPanel && (
+              <button className="header-icon-btn" onClick={onToggleSearchPanel} title="Search" style={{ background: showSearchPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showSearchPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              </button>
+            )}
+            {!channel.isDM && (
+              <button className="header-action-btn" onClick={onToggleMemberSidebar}
+                title={memberSidebarVisible ? 'Hide member list' : 'Show member list'}>
+                <UserIcon size={18} color="var(--text-muted)" />
+              </button>
+            )}
+            {onRefreshData && (
+              <button className="header-action-btn refresh-btn" onClick={onRefreshData} title="Refresh data">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Add Member Dropdown for DMs */}
@@ -1158,6 +1181,103 @@ const ChatArea = React.memo(function ChatArea({
         </div>
       )}
 
+      {threadPanel ? (
+        /* ─── FULL-SCREEN THREAD VIEW ─── */
+        <>
+          {/* Origin message */}
+          {threadPanel.parent && (
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #3a3a3e', background: 'rgba(0, 168, 252, 0.04)', borderLeft: '3px solid #00a8fc' }}>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="message-avatar" style={{ background: threadPanel.parent.author?.customAvatar ? 'transparent' : (threadPanel.parent.author?.color || '#3B82F6'), width: '40px', height: '40px', minWidth: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
+                  {threadPanel.parent.author?.customAvatar
+                    ? <img src={threadPanel.parent.author.customAvatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    : (threadPanel.parent.author?.avatar || '👤')}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ color: threadPanel.parent.author?.color || '#fff', fontWeight: 600, fontSize: '15px' }}>{threadPanel.parent.author?.username}</span>
+                    <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(threadPanel.parent.timestamp).toLocaleString()}</span>
+                  </div>
+                  <div style={{ color: '#dcddde', fontSize: '15px', wordBreak: 'break-word', lineHeight: '1.375' }}>{threadPanel.parent.content}</div>
+                  {(threadPanel.parent.attachments || []).map((att, ai) => (
+                    <MessageAttachment key={ai} attachment={att} onLightbox={setLightbox} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Thread replies count divider */}
+          <div style={{ padding: '8px 20px', borderBottom: '1px solid #3a3a3e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#b5bac1', fontSize: '13px', fontWeight: 600 }}>{(threadPanel.messages || []).length} {(threadPanel.messages || []).length === 1 ? 'reply' : 'replies'}</span>
+            <div style={{ flex: 1, height: '1px', background: '#3a3a3e' }} />
+          </div>
+
+          {/* Thread messages */}
+          <div className="messages-container" style={{ flex: 1, overflowY: 'auto' }}>
+            {(threadPanel.messages || []).length === 0 && (
+              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No replies yet. Start the conversation!</div>
+            )}
+            {(threadPanel.messages || []).map((msg, i) => {
+              const prevMsg = i > 0 ? threadPanel.messages[i - 1] : null;
+              const isGrouped = prevMsg && prevMsg.author?.id === msg.author?.id && (msg.timestamp - prevMsg.timestamp) < 300000;
+              const showDate = i === 0 || formatDate(msg.timestamp) !== formatDate(threadPanel.messages[i - 1].timestamp);
+              return (
+                <React.Fragment key={msg.id}>
+                  {showDate && <div className="message-date-divider"><span>{formatDate(msg.timestamp)}</span></div>}
+                  <div className={`message ${isGrouped ? 'grouped' : ''} ${msg.author?.id === currentUser?.id ? 'own' : ''}`}>
+                    {!isGrouped && (
+                      <div className="message-avatar" style={{ background: msg.author?.customAvatar ? 'transparent' : (msg.author?.color || '#3B82F6') }}>
+                        {msg.author?.customAvatar
+                          ? <img src={msg.author.customAvatar} alt="" className="avatar-custom-img" />
+                          : (msg.author?.avatar || '👤')}
+                      </div>
+                    )}
+                    {isGrouped && <div className="message-avatar-spacer" />}
+                    <div className="message-content-wrap">
+                      {!isGrouped && (
+                        <div className="message-header">
+                          <span className="message-author" style={{ color: msg.author?.color }}>{msg.author?.username}</span>
+                          <span className="message-time">{formatTime(msg.timestamp)}</span>
+                        </div>
+                      )}
+                      {msg.content && <div className="message-text"><MentionText content={msg.content} mentions={msg.mentions} channelLinks={msg.channelLinks} currentUser={currentUser} server={server} socket={socket} /></div>}
+                      {(msg.attachments || []).map((att, ai) => (
+                        <MessageAttachment key={ai} attachment={att} onLightbox={setLightbox} />
+                      ))}
+                      {Object.keys(msg.reactions || {}).length > 0 && (
+                        <div className="message-reactions">
+                          {Object.entries(msg.reactions).map(([emoji, users]) => (
+                            <button key={emoji}
+                              className={`reaction ${users.includes(currentUser?.id) ? 'reacted' : ''}`}
+                              onClick={e => { e.stopPropagation(); socket?.emit('message:react', { messageId: msg.id, emoji }); }}>
+                              <ReactionEmoji emoji={emoji} socket={socket} /> <span>{users.length}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </React.Fragment>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Thread input */}
+          <div style={{ padding: '0 16px 16px' }}>
+            <div className="chat-input-box">
+              <textarea className="chat-input" placeholder="Reply to thread..." value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && threadInput.trim() && onThreadReply) { e.preventDefault(); onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} rows={1} maxLength={2000} />
+              <div className="chat-input-actions">
+                <button className="send-btn" onClick={() => { if (threadInput.trim() && onThreadReply) { onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} disabled={!threadInput.trim()} title="Send">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+      <>
       {/* Messages */}
       <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
         {loadingOlder && (
@@ -1358,9 +1478,18 @@ const ChatArea = React.memo(function ChatArea({
                     </div>
                   )}
                   {msg.threadReplyCount > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', marginTop: '4px', cursor: 'pointer', color: '#00a8fc', fontSize: '13px' }} onClick={() => onOpenThread && onOpenThread(channel.id, msg.id)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                      <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
+                    <div style={{ padding: '4px 0', marginTop: '4px', cursor: 'pointer' }} onClick={() => onOpenThread && onOpenThread(channel.id, msg.id)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00a8fc', fontSize: '13px' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
+                        <span style={{ color: '#72767d', fontSize: '12px' }}>Last reply {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>
+                      </div>
+                      {msg.threadLastReplyContent && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginLeft: '20px', fontSize: '12px', color: '#8e9297' }}>
+                          <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>{msg.threadLastReplyContent.substring(0, 80)}{msg.threadLastReplyContent.length > 80 ? '...' : ''}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1587,6 +1716,8 @@ const ChatArea = React.memo(function ChatArea({
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {showPinnedPanel && (
         <div style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1620,14 +1751,26 @@ const ChatArea = React.memo(function ChatArea({
             {(channelThreads || []).length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No threads in this channel</div>
             ) : (channelThreads || []).map(thread => (
-              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { onOpenThread(channel.id, thread.id); onToggleThreadsListPanel(); }}>
+              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => { onOpenThread(channel.id, thread.id); onToggleThreadsListPanel(); }} onMouseEnter={e => e.currentTarget.style.background = '#232428'} onMouseLeave={e => e.currentTarget.style.background = '#1e1f22'}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <span style={{ color: thread.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{thread.author?.username}</span>
                   <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(thread.timestamp).toLocaleDateString()}</span>
                 </div>
-                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word', marginBottom: '6px' }}>{thread.content?.substring(0, 150)}{thread.content?.length > 150 ? '...' : ''}</div>
+                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word', marginBottom: '8px' }}>{thread.content?.substring(0, 150)}{thread.content?.length > 150 ? '...' : ''}</div>
+                {thread.lastReply && (
+                  <div style={{ padding: '6px 8px', background: '#2b2d31', borderRadius: '4px', borderLeft: '2px solid #3a3a3e', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                      <span style={{ color: thread.lastReply.author?.color || '#b5bac1', fontWeight: 500 }}>{thread.lastReply.author?.username}</span>
+                      <span style={{ color: '#8e9297' }}>—</span>
+                      <span style={{ color: '#8e9297', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{thread.lastReply.content?.substring(0, 80)}{thread.lastReply.content?.length > 80 ? '...' : ''}</span>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#72767d' }}>
-                  <span>{thread.replyCount} {thread.replyCount === 1 ? 'reply' : 'replies'}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    {thread.replyCount} {thread.replyCount === 1 ? 'reply' : 'replies'}
+                  </span>
                   <span>Last reply {new Date(thread.lastReplyAt).toLocaleDateString()}</span>
                 </div>
               </div>
@@ -1679,37 +1822,6 @@ const ChatArea = React.memo(function ChatArea({
         </div>
       )}
 
-      {threadPanel && (
-        <div style={{ position: 'absolute', top: 0, right: 0, width: '400px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Thread</h3>
-            <button onClick={onCloseThread} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
-          </div>
-          {threadPanel.parent && (
-            <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', background: '#1e1f22' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ color: threadPanel.parent.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{threadPanel.parent.author?.username}</span>
-                <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(threadPanel.parent.timestamp).toLocaleString()}</span>
-              </div>
-              <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{threadPanel.parent.content}</div>
-            </div>
-          )}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-            {(threadPanel.messages || []).map(msg => (
-              <div key={msg.id} style={{ padding: '8px 12px', marginBottom: '4px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                  <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '13px' }}>{msg.author?.username}</span>
-                  <span style={{ color: '#72767d', fontSize: '11px' }}>{new Date(msg.timestamp).toLocaleTimeString()}</span>
-                </div>
-                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{msg.content}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ padding: '12px', borderTop: '1px solid #3a3a3e' }}>
-            <input type="text" placeholder="Reply to thread..." value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && threadInput.trim() && onThreadReply) { onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} style={{ width: '100%', padding: '10px 12px', background: '#383a40', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-        </div>
-      )}
     </div>
   );
 });

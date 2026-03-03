@@ -1716,12 +1716,21 @@ async function getChannelThreads(channelId) {
   const result = await query(
     `SELECT m.id, m.channel_id, m.content, m.created_at, m.attachments,
             a.id as author_id, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color,
-            COUNT(r.id)::int as reply_count, MAX(r.created_at) as last_reply_at
+            COUNT(r.id)::int as reply_count, MAX(r.created_at) as last_reply_at,
+            lr.content as last_reply_content, la.username as last_reply_author_username, la.color as last_reply_author_color
      FROM messages m
      LEFT JOIN accounts a ON m.author_id = a.id
      JOIN messages r ON r.thread_id = m.id
+     LEFT JOIN LATERAL (
+       SELECT lr_msg.content, lr_msg.author_id
+       FROM messages lr_msg
+       WHERE lr_msg.thread_id = m.id
+       ORDER BY lr_msg.created_at DESC
+       LIMIT 1
+     ) lr ON true
+     LEFT JOIN accounts la ON lr.author_id = la.id
      WHERE m.channel_id = $1 AND m.thread_id IS NULL
-     GROUP BY m.id, a.id
+     GROUP BY m.id, a.id, lr.content, la.username, la.color
      ORDER BY MAX(r.created_at) DESC`,
     [channelId]
   );
