@@ -305,6 +305,7 @@ const ChatArea = React.memo(function ChatArea({
   showSearchPanel, onToggleSearchPanel, searchResults, onSearch, searchQuery,
   savedMessageIds, onSaveMessage, onUnsaveMessage,
   threadPanel, onOpenThread, onCloseThread, onThreadReply,
+  showThreadsListPanel, onToggleThreadsListPanel, channelThreads,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -1079,6 +1080,11 @@ const ChatArea = React.memo(function ChatArea({
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
             </button>
           )}
+          {onToggleThreadsListPanel && !channel.isDM && (
+            <button className="header-icon-btn" onClick={onToggleThreadsListPanel} title="Threads" style={{ background: showThreadsListPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showThreadsListPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M4.79 18.62c.1.15.25.25.42.3l5.66 1.43c.19.05.4.01.56-.1l6.58-4.78c.18-.13.29-.33.31-.55l.79-7.94c.02-.22-.06-.44-.22-.59L13.01 1.4a.752.752 0 0 0-.57-.18L4.5 2.01c-.22.02-.42.14-.54.32L1.14 6.71c-.12.19-.15.42-.08.63l2.12 7.13c.06.18.18.34.34.44l1.27.71zm1.47-1.8l-1.1-.61-1.89-6.37 2.54-3.89 7.11-.7 5.37 4.49-.7 7.1-5.88 4.27-5.03-1.27-.42-3.02zm.63-3.02l2.2 1.22 2.42-.62.45-2.4-1.55-1.89-2.42.62-.45 2.4-.65.67zm5.14-.09l-.45 2.4 1.55 1.89 2.42-.62.45-2.4-1.55-1.89-2.42.62zM22.9 5.22l-1.73 7.58-.79.57-.36-1.12 1.4-6.14-5.06-3.4-.94.68-.72-.99L16.36.5c.17-.12.38-.16.58-.12l5.49 1.26c.21.05.39.18.49.37.1.19.11.41.04.61l-.06.18v.01l-.01.02z"/></svg>
+            </button>
+          )}
           {onToggleSearchPanel && (
             <button className="header-icon-btn" onClick={onToggleSearchPanel} title="Search" style={{ background: showSearchPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showSearchPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -1598,6 +1604,32 @@ const ChatArea = React.memo(function ChatArea({
                   <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(msg.timestamp).toLocaleDateString()}</span>
                 </div>
                 <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{msg.content?.substring(0, 200)}{msg.content?.length > 200 ? '...' : ''}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showThreadsListPanel && (
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Threads</h3>
+            <button onClick={onToggleThreadsListPanel} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+            {(channelThreads || []).length === 0 ? (
+              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No threads in this channel</div>
+            ) : (channelThreads || []).map(thread => (
+              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { onOpenThread(channel.id, thread.id); onToggleThreadsListPanel(); }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ color: thread.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{thread.author?.username}</span>
+                  <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(thread.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word', marginBottom: '6px' }}>{thread.content?.substring(0, 150)}{thread.content?.length > 150 ? '...' : ''}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#72767d' }}>
+                  <span>{thread.replyCount} {thread.replyCount === 1 ? 'reply' : 'replies'}</span>
+                  <span>Last reply {new Date(thread.lastReplyAt).toLocaleDateString()}</span>
+                </div>
               </div>
             ))}
           </div>
