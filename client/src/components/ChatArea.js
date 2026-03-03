@@ -1488,7 +1488,7 @@ const ChatArea = React.memo(function ChatArea({
                       {msg.threadLastReplyContent && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginLeft: '20px', fontSize: '12px', color: '#8e9297' }}>
                           <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>{msg.threadLastReplyContent.substring(0, 80)}{msg.threadLastReplyContent.length > 80 ? '...' : ''}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'min(300px, 50vw)' }}>{msg.threadLastReplyContent.substring(0, 80)}{msg.threadLastReplyContent.length > 80 ? '...' : ''}</span>
                         </div>
                       )}
                     </div>
