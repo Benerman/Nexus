@@ -13,7 +13,7 @@ services:
       - "127.0.0.1:5433:5432"
     restart: unless-stopped
     networks:
-      - nexus-dev-network
+      - nexus-dev-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h localhost -U postgres -d nexus_dev_db"]
       interval: 5s
@@ -37,7 +37,7 @@ services:
       - "127.0.0.1:6380:6379"
     restart: unless-stopped
     networks:
-      - nexus-dev-network
+      - nexus-dev-internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -60,9 +60,9 @@ services:
       - PORT=3001
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nexus_dev_db
       - REDIS_URL=redis://redis:6379
-      - CLIENT_URL=${CLIENT_URL:-http://localhost:3002}
+      - CLIENT_URL=${CLIENT_URL:-https://${DEV_DOMAIN:-localhost:3002}}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env.dev}
       - SESSION_EXPIRY=604800000
       - REFRESH_EXPIRY=2592000000
       - MAX_MESSAGE_LENGTH=2000
@@ -85,7 +85,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - nexus-dev-network
+      - nexus-dev-internal
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+
+      # API + WebSocket router
+      - "traefik.http.routers.nexus-dev-api.rule=Host(`${DEV_DOMAIN:-dev.nexus.example.com}`) && PathPrefix(`/socket.io`, `/api`)"
+      - "traefik.http.routers.nexus-dev-api.entrypoints=websecure"
+      - "traefik.http.routers.nexus-dev-api.tls=true"
+      - "traefik.http.routers.nexus-dev-api.tls.certresolver=letsencrypt"
+
+      # Service port
+      - "traefik.http.services.nexus-dev-api.loadbalancer.server.port=3001"
+
+      # WebSocket headers
+      - "traefik.http.routers.nexus-dev-api.middlewares=nexus-dev-headers"
+      - "traefik.http.middlewares.nexus-dev-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+      # Sticky sessions for Socket.IO
+      - "traefik.http.services.nexus-dev-api.loadbalancer.sticky.cookie=true"
+      - "traefik.http.services.nexus-dev-api.loadbalancer.sticky.cookie.name=nexus_dev_lb"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
       interval: 10s
@@ -103,17 +124,39 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile.dev
+      args:
+        - REACT_APP_SERVER_URL=https://${DEV_DOMAIN:-dev.nexus.example.com}
     container_name: nexus-dev-client
     ports:
       - "3002:80"
     environment:
-      - REACT_APP_SERVER_URL=http://localhost:3003
+      - REACT_APP_SERVER_URL=https://${DEV_DOMAIN:-dev.nexus.example.com}
     depends_on:
       server:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - nexus-dev-network
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+
+      # Client router — catches all non-API requests for the dev domain
+      - "traefik.http.routers.nexus-dev-client.rule=Host(`${DEV_DOMAIN:-dev.nexus.example.com}`)"
+      - "traefik.http.routers.nexus-dev-client.entrypoints=websecure"
+      - "traefik.http.routers.nexus-dev-client.tls=true"
+      - "traefik.http.routers.nexus-dev-client.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nexus-dev-client.priority=1"
+
+      # Service port
+      - "traefik.http.services.nexus-dev-client.loadbalancer.server.port=80"
+
+      # Security headers
+      - "traefik.http.routers.nexus-dev-client.middlewares=nexus-dev-security"
+      - "traefik.http.middlewares.nexus-dev-security.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.nexus-dev-security.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.nexus-dev-security.headers.stsPreload=true"
+      - "traefik.http.middlewares.nexus-dev-security.headers.forceSTSHeader=true"
     deploy:
       resources:
         limits:
@@ -121,7 +164,12 @@ services:
           cpus: '0.5'
 
 networks:
-  nexus-dev-network:
+  # External network shared with Traefik (same as production)
+  traefik-public:
+    external: true
+
+  # Internal network for dev database/redis (isolated from production)
+  nexus-dev-internal:
     driver: bridge
 
 volumes:
