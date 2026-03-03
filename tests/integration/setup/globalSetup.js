@@ -77,6 +77,19 @@ async function applySchemaPatches(databaseUrl) {
       );
       CREATE INDEX IF NOT EXISTS idx_audit_logs_server ON audit_logs(server_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(server_id, action);
+
+      -- Thread names
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_name VARCHAR(100);
+
+      -- Recovery codes
+      CREATE TABLE IF NOT EXISTS recovery_codes (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        code_hash VARCHAR(255) NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_recovery_codes_account ON recovery_codes(account_id);
     `);
     await pool.end();
     console.log('Schema patches applied successfully');
