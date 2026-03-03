@@ -1323,9 +1323,17 @@ const ChatArea = React.memo(function ChatArea({
                 onTouchMove={messageLongPress.onTouchMove}
                 onTouchEnd={(e) => {
                   messageLongPress.onTouchEnd(e);
-                  // Single tap toggles mobile actions (only on touch devices)
+                  // Single tap toggles mobile actions (only on touch devices).
+                  // Skip if the tap landed on an interactive element (button, link,
+                  // action bar) — those should handle their own click events.
                   if (!e.defaultPrevented && 'ontouchstart' in window) {
-                    handleMobileTap(msg.id);
+                    const target = e.target;
+                    const isInteractive = target.closest('.message-actions') ||
+                      target.closest('a') || target.closest('button') ||
+                      target.closest('.reaction');
+                    if (!isInteractive) {
+                      handleMobileTap(msg.id);
+                    }
                   }
                 }}
               >
