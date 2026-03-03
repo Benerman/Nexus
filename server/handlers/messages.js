@@ -838,7 +838,14 @@ module.exports = function(io, socket) {
         },
         timestamp: new Date(row.created_at).getTime(),
         replyCount: row.reply_count,
-        lastReplyAt: new Date(row.last_reply_at).getTime()
+        lastReplyAt: new Date(row.last_reply_at).getTime(),
+        lastReply: row.last_reply_content ? {
+          content: row.last_reply_content,
+          author: {
+            username: row.last_reply_author_username || 'Deleted User',
+            color: row.last_reply_author_color || '#80848E'
+          }
+        } : null
       }));
       socket.emit('thread:list-results', { channelId, threads });
     } catch (err) {

@@ -929,9 +929,16 @@ export default function App() {
         const list = prev[channelId];
         if (!list) return prev;
         return { ...prev, [channelId]: list.map(t =>
-          t.id === threadId ? { ...t, replyCount, lastReplyAt: new Date(lastReplyAt).getTime() } : t
+          t.id === threadId ? { ...t, replyCount, lastReplyAt: new Date(lastReplyAt).getTime(), lastReply: { content: message.content, author: { username: message.author?.username || 'Unknown', color: message.author?.color || '#80848E' } } } : t
         ).sort((a, b) => b.lastReplyAt - a.lastReplyAt) };
       });
+      // Update parent message with latest reply info for inline thread indicator
+      setMessages(prev => ({
+        ...prev,
+        [channelId]: (prev[channelId] || []).map(m =>
+          m.id === threadId ? { ...m, threadLastReplyContent: message.content, threadLastReplyAuthor: message.author?.username || 'Unknown', threadLastReplyAuthorColor: message.author?.color || '#80848E' } : m
+        )
+      }));
     });
 
     s.on('thread:list-results', ({ channelId, threads }) => {
