@@ -306,6 +306,7 @@ const ChatArea = React.memo(function ChatArea({
   savedMessageIds, onSaveMessage, onUnsaveMessage,
   threadPanel, onOpenThread, onCloseThread, onThreadReply,
   showThreadsListPanel, onToggleThreadsListPanel, channelThreads,
+  screenShareActive,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -997,7 +998,7 @@ const ChatArea = React.memo(function ChatArea({
   const grouped = groupMessages(messages);
 
   return (
-    <div className={`chat-area ${dragOver ? 'drag-over' : ''}${threadPanel ? ' chat-area--thread-view' : ''}`}
+    <div className={`chat-area ${dragOver ? 'drag-over' : ''}${threadPanel ? ' chat-area--thread-view' : ''}${screenShareActive ? ' chat-area--screen-share' : ''}`}
       onDragOver={e=>{e.preventDefault();setDragOver(true);}}
       onDragLeave={()=>setDragOver(false)}
       onDrop={handleDrop}

@@ -1411,8 +1411,8 @@
     display: none;
   }
 
-  /* Side panels (pinned, threads, search): full-width overlay on mobile */
-  .chat-side-panel {
+  /* Side panels: only go full-width when screen share is active */
+  .chat-area--screen-share .chat-side-panel {
     width: 100% !important;
     border-left: none !important;
   }
@@ -1523,11 +1523,10 @@
   .pending-attachment { width: 60px; height: 60px; }
   .remove-attachment { width: 24px; height: 24px; font-size: 14px; }
 
-  /* Thread & panel close buttons - larger touch targets */
-  .chat-side-panel button[title="✕"],
-  .chat-side-panel button:last-child {
-    min-width: 36px;
-    min-height: 36px;
+  /* Panel close buttons - larger touch targets on mobile */
+  .chat-side-panel button {
+    min-width: 32px;
+    min-height: 32px;
   }
 }
 

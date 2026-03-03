@@ -2326,6 +2326,7 @@ export default function App() {
             showThreadsListPanel={showThreadsListPanel}
             onToggleThreadsListPanel={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }}
             channelThreads={channelThreads[activeChannel?.id] || []}
+            screenShareActive={webrtc.isSharingScreen || Object.keys(webrtc.remoteScreenStreams).length > 0}
           />
         )}
       </div>
