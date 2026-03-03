@@ -12,6 +12,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.dev.example
 server/.env
 server/.env.*
 !server/.env.example

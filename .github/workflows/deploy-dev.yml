@@ -1,0 +1,178 @@
+name: Deploy Dev Environment
+
+on:
+  push:
+    branches: [dev, develop, staging]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        default: ''
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy-dev:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+          clean: true
+
+      - name: Symlink dev .env file
+        run: |
+          ENV_SOURCE="/opt/nexus-dev/.env"
+          if [ ! -f "$ENV_SOURCE" ]; then
+            echo "ERROR: No dev .env file found at $ENV_SOURCE"
+            echo "Create it with dev secrets before deploying."
+            echo ""
+            echo "Example:"
+            echo "  sudo mkdir -p /opt/nexus-dev"
+            echo "  sudo cp .env.dev.example /opt/nexus-dev/.env"
+            echo "  sudo nano /opt/nexus-dev/.env  # fill in real values"
+            exit 1
+          fi
+          ln -sf "$ENV_SOURCE" .env.dev
+          echo "Linked .env.dev → $ENV_SOURCE"
+
+      - name: Verify Docker is available
+        id: docker-check
+        run: |
+          docker --version
+          if docker compose version > /dev/null 2>&1; then
+            echo "compose_cmd=docker compose" >> "$GITHUB_OUTPUT"
+            docker compose version
+          elif docker-compose --version > /dev/null 2>&1; then
+            echo "compose_cmd=docker-compose" >> "$GITHUB_OUTPUT"
+            docker-compose --version
+          else
+            echo "ERROR: Neither 'docker compose' nor 'docker-compose' found."
+            exit 1
+          fi
+
+      - name: Verify production is running
+        run: |
+          # Sanity check: make sure we're not about to interfere with production
+          if docker ps --format '{{.Names}}' | grep -q '^nexus-server$'; then
+            echo "Production containers are running — good, we won't touch them."
+          else
+            echo "WARNING: Production containers are NOT running."
+            echo "This dev deployment will not affect production either way."
+          fi
+
+      - name: Stop existing dev containers
+        run: |
+          ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml down --remove-orphans || true
+
+      - name: Build and start dev containers
+        run: |
+          ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml up --build --force-recreate -d
+
+      - name: Sync dev database password
+        run: |
+          source .env.dev 2>/dev/null || true
+          PW="${POSTGRES_PASSWORD:-postgres}"
+
+          if docker exec nexus-dev-postgres psql -U postgres -c "SELECT 1" > /dev/null 2>&1; then
+            docker exec nexus-dev-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
+            echo "Dev database password synced."
+          else
+            echo "Normal auth failed — attempting via local trust override..."
+            docker exec nexus-dev-postgres bash -c "
+              cp /var/lib/postgresql/data/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf.bak
+              echo 'local all all trust' > /tmp/pg_hba_override.conf
+              cat /var/lib/postgresql/data/pg_hba.conf >> /tmp/pg_hba_override.conf
+              cp /tmp/pg_hba_override.conf /var/lib/postgresql/data/pg_hba.conf
+              pg_ctl reload -D /var/lib/postgresql/data
+            "
+            sleep 2
+            docker exec nexus-dev-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
+            docker exec nexus-dev-postgres bash -c "
+              cp /var/lib/postgresql/data/pg_hba.conf.bak /var/lib/postgresql/data/pg_hba.conf
+              pg_ctl reload -D /var/lib/postgresql/data
+            "
+            echo "Dev database password synced via trust override."
+          fi
+
+          docker restart nexus-dev-server
+
+      - name: Verify dev server is responding
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:3003/health > /dev/null 2>&1; then
+              echo "Dev server is responding on port 3003."
+              break
+            fi
+            if [ "$i" -eq 20 ]; then
+              echo "Dev server did not respond after 20 attempts. Logs:"
+              ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml logs server
+              exit 1
+            fi
+            echo "Waiting for dev server... (attempt $i/20)"
+            sleep 5
+          done
+
+      - name: Verify dev client is responding
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:3002 > /dev/null 2>&1; then
+              echo "Dev client is responding on port 3002."
+              break
+            fi
+            if [ "$i" -eq 10 ]; then
+              echo "Dev client did not respond. Logs:"
+              ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml logs client
+              exit 1
+            fi
+            echo "Waiting for dev client... (attempt $i/10)"
+            sleep 3
+          done
+
+      - name: Verify production is still healthy
+        run: |
+          if docker ps --format '{{.Names}}' | grep -q '^nexus-server$'; then
+            if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
+              echo "Production server is still healthy on port 3001."
+            else
+              echo "WARNING: Production server exists but /health failed!"
+              echo "Dev deployment should not have affected it — investigate."
+            fi
+          else
+            echo "Production is not running (was not running before dev deploy either)."
+          fi
+
+      - name: Clean up old Docker images
+        run: |
+          docker image prune -f || true
+
+      - name: Deployment summary
+        run: |
+          echo ""
+          echo "========================================="
+          echo "  Nexus DEV deployed successfully!"
+          echo "========================================="
+          echo ""
+          echo "  Commit:    ${{ github.sha }}"
+          echo "  Branch:    ${{ github.ref_name }}"
+          echo ""
+          echo "  Dev Client:    http://localhost:3002"
+          echo "  Dev Server:    http://localhost:3003"
+          echo "  Dev Postgres:  localhost:5433"
+          echo "  Dev Redis:     localhost:6380"
+          echo ""
+          echo "  Production (untouched):"
+          echo "    Client:  http://localhost:3000"
+          echo "    Server:  http://localhost:3001"
+          echo ""
+          echo "  Commands:"
+          echo "    Logs:    docker compose --env-file .env.dev -f docker-compose.dev.yml logs -f"
+          echo "    Stop:    docker compose --env-file .env.dev -f docker-compose.dev.yml down"
+          echo "    Status:  docker compose --env-file .env.dev -f docker-compose.dev.yml ps"
+          echo ""
