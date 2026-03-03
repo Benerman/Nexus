@@ -281,7 +281,14 @@ module.exports = function(io, socket) {
     }
 
     const ch = state.voiceChannels[channelId];
-    if (!ch) return;
+    if (!ch) {
+      socket.emit('voice:join-failed', { channelId });
+      return;
+    }
+    if (ch.endTimer) {
+      clearTimeout(ch.endTimer);
+      delete ch.endTimer;
+    }
     const existingPeers = [...ch.users];
     ch.users.push(socket.id);
     socket.join(`voice:${channelId}`);

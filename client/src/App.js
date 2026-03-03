@@ -159,6 +159,7 @@ export default function App() {
   const sessionRestored = useRef(false);
   const pendingInviteCode = useRef(null);
   const activeChannelRef = useRef(null);
+  const dmCallActiveRef = useRef(null);
   const channelLastReadRef = useRef(channelLastRead);
   const heartbeatRef = useRef(null);
   const [restoringSession, setRestoringSession] = useState(() => {
@@ -400,6 +401,7 @@ export default function App() {
 
   // Keep refs in sync so socket handlers can access current values
   useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
+  useEffect(() => { dmCallActiveRef.current = dmCallActive; }, [dmCallActive]);
   useEffect(() => { channelLastReadRef.current = channelLastRead; }, [channelLastRead]);
   const currentUserRef = useRef(currentUser);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
@@ -560,6 +562,10 @@ export default function App() {
           s.emit('data:refresh');
           const ch = activeChannelRef.current;
           if (ch?.id) s.emit('channel:join', { channelId: ch.id });
+          // Auto-rejoin voice channel / DM call
+          if (webrtcRef.current.currentVoiceChannel) {
+            webrtcRef.current.reconnectVoice();
+          }
         }, 500);
       }
     });
@@ -973,8 +979,19 @@ export default function App() {
       console.log('[DM Call] Call declined in', channelId);
     });
     s.on('dm:call-ended', ({ channelId }) => {
+      if (dmCallActiveRef.current === channelId) {
+        webrtcRef.current.leaveVoice();
+        setScreenSharerSocketId(null);
+      }
       setDmCallActive(prev => prev === channelId ? null : prev);
       setIncomingCall(prev => prev?.channelId === channelId ? null : prev);
+    });
+    s.on('voice:join-failed', ({ channelId }) => {
+      if (dmCallActiveRef.current === channelId) {
+        webrtcRef.current.leaveVoice();
+        setDmCallActive(null);
+        setScreenSharerSocketId(null);
+      }
     });
 
     s.on('soundboard:played', (data) => {
@@ -2212,7 +2229,7 @@ export default function App() {
         )}
         {/* DM Call Voice Panel - shows above chat */}
         {dmCallActive && webrtc.currentVoiceChannel === dmCallActive && activeChannel?.isDM && (
-          <div className="dm-call-voice-panel">
+          <div className={`dm-call-voice-panel${(webrtc.isSharingScreen || Object.keys(webrtc.remoteScreenStreams).length > 0) ? ' screen-sharing' : ''}`}>
             <VoiceArea channel={activeChannel}
               voiceChannelData={voiceChannelState[dmCallActive]}
               remoteStreams={webrtc.remoteStreams} localStream={webrtc.localStream}
