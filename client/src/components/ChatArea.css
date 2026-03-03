@@ -1508,6 +1508,14 @@
   /* Pending attachments */
   .pending-attachment { width: 60px; height: 60px; }
   .remove-attachment { width: 24px; height: 24px; font-size: 14px; }
+
+  /* Thread list / search / pinned panels full-width on mobile */
+  .mobile-thread-list-panel,
+  .mobile-search-panel,
+  .mobile-pinned-panel {
+    width: 100% !important;
+    border-left: none !important;
+  }
 }
 
 /* ─── Message Request Banner ──────────────────────────────────────────────── */

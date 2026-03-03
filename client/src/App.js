@@ -2150,15 +2150,34 @@ export default function App() {
       />
       {/* Mobile sub-nav bar */}
       <div className="mobile-nav-bar">
-        <button className="mobile-nav-left" onClick={() => { setMobileSidebarOpen(o => !o); setMobileMemberListOpen(false); }}>
-          <span className="mobile-nav-arrow">{mobileSidebarOpen ? '‹' : '›'}</span>
-          <span className="mobile-nav-channel">{activeChannel?.isDM ? activeChannel?.name : `# ${activeChannel?.name || 'general'}`}</span>
-        </button>
-        {!activeServer?.isPersonal && (
-          <button className="mobile-nav-right" onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }}>
-            <span className="mobile-nav-online">{onlineUsers.filter(u => activeServer?.members?.[u.id]).length} online</span>
-            <span className="mobile-nav-arrow">{mobileMemberListOpen ? '›' : '‹'}</span>
-          </button>
+        {threadPanel ? (
+          <>
+            <button className="mobile-nav-left" onClick={() => setThreadPanel(null)}>
+              <span className="mobile-nav-arrow">‹</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7, flexShrink: 0 }}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              <span className="mobile-nav-channel">{threadPanel?.threadName || 'Thread'}</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="mobile-nav-left" onClick={() => { setMobileSidebarOpen(o => !o); setMobileMemberListOpen(false); }}>
+              <span className="mobile-nav-arrow">{mobileSidebarOpen ? '‹' : '›'}</span>
+              <span className="mobile-nav-channel">{activeChannel?.isDM ? activeChannel?.name : `# ${activeChannel?.name || 'general'}`}</span>
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+              {!activeChannel?.isDM && activeChannel && (
+                <button className="mobile-nav-activity" onClick={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }} title="Threads" style={{ color: showThreadsListPanel ? '#ed4245' : undefined }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              )}
+              {!activeServer?.isPersonal && (
+                <button className="mobile-nav-right" onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }}>
+                  <span className="mobile-nav-online">{onlineUsers.filter(u => activeServer?.members?.[u.id]).length} online</span>
+                  <span className="mobile-nav-arrow">{mobileMemberListOpen ? '›' : '‹'}</span>
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
       <div className="main-content">

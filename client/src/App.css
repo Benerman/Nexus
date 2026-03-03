@@ -240,7 +240,7 @@
   }
   .mobile-nav-activity {
     position: relative;
-    background: none; color: var(--text-muted);
+    background: none; border: none; color: var(--text-muted);
     padding: 8px; border-radius: 4px; cursor: pointer;
     display: flex; align-items: center;
   }
