@@ -272,11 +272,23 @@ app.post('/api/auth/register', async (req, res) => {
       color
     });
 
+    // Generate recovery codes
+    const crypto = require('crypto');
+    const recoveryCodes = [];
+    const codeHashes = [];
+    for (let i = 0; i < 8; i++) {
+      const code = crypto.randomBytes(4).toString('hex');
+      recoveryCodes.push(code);
+      codeHashes.push(await hashPassword(code));
+    }
+    await db.createRecoveryCodes(account.id, codeHashes);
+
     const { token } = await db.createToken(account.id);
 
     res.json({
       token,
-      account: { id: account.id, username: account.username, avatar: account.avatar, color: account.color }
+      account: { id: account.id, username: account.username, avatar: account.avatar, color: account.color },
+      recoveryCodes
     });
   } catch (error) {
     console.error('[Auth] Registration error:', error);
@@ -331,6 +343,48 @@ app.post('/api/auth/logout', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.json({ success: true });
+  }
+});
+
+app.post('/api/auth/recover', async (req, res) => {
+  try {
+    const { username, recoveryCode, newPassword } = req.body;
+    if (!username || !recoveryCode || !newPassword) {
+      return res.status(400).json({ error: 'Username, recovery code, and new password are required' });
+    }
+
+    const passwordRegex = /^[\x20-\x7E]{8,128}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({ error: 'Password must be 8-128 characters using letters, numbers, and symbols' });
+    }
+
+    const account = await db.getAccountByUsername(username);
+    if (!account) {
+      return res.status(400).json({ error: 'Invalid username or recovery code' });
+    }
+
+    const unusedCodes = await db.getUnusedRecoveryCodes(account.id);
+    let matchedCode = null;
+    for (const code of unusedCodes) {
+      const isMatch = await verifyPassword(recoveryCode, code.code_hash);
+      if (isMatch) {
+        matchedCode = code;
+        break;
+      }
+    }
+
+    if (!matchedCode) {
+      return res.status(400).json({ error: 'Invalid username or recovery code' });
+    }
+
+    const newHash = await hashPassword(newPassword);
+    await db.updateAccountPassword(account.id, newHash, 'bcrypt');
+    await db.markRecoveryCodeUsed(matchedCode.id);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Auth] Recovery error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

@@ -127,6 +127,18 @@ See `.env.example` and `server/.env.example` for full list.
 - Cross-platform: web is primary; Capacitor (mobile), Tauri (desktop), Electron (fallback) are secondary
 - Git workflow: always work on feature branches — never commit directly to main. Create a PR to merge changes.
 
+## Version Bumping
+
+When bumping the version, update all of these locations:
+
+| File | Field |
+|------|-------|
+| `client/package.json` | `"version"` |
+| `client/src-tauri/tauri.conf.json` | `"version"` |
+| `README.md` | Download badge (`download-vX.Y.Z-blue`) and footer version |
+
+After updating, run `npm install` in `client/` to sync `package-lock.json`.
+
 ## Icon Generation
 
 All application icons are generated from a single master SVG (`client/scripts/icon-master.svg`) — a red `#ed4245` hexagon outline on a dark `#2b2d31` background, matching the in-app `HexagonIcon` component.

@@ -378,7 +378,7 @@ async function deleteMessage(messageId) {
  */
 async function getMessageById(messageId) {
   const result = await query(
-    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar
+    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color
      FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
      WHERE m.id = $1`,
     [messageId]
@@ -411,8 +411,17 @@ async function cleanupOldMessages(channelId, keepCount = 500) {
 async function getChannelMessagesWithAuthors(channelId, limit = 50) {
   const result = await query(
     `SELECT m.*, a.username AS author_username, a.avatar AS author_avatar,
-            a.custom_avatar AS author_custom_avatar, a.color AS author_color
+            a.custom_avatar AS author_custom_avatar, a.color AS author_color,
+            (SELECT COUNT(*)::int FROM messages r WHERE r.thread_id = m.id) AS thread_reply_count,
+            (SELECT MAX(r2.created_at) FROM messages r2 WHERE r2.thread_id = m.id) AS thread_last_reply_at,
+            lr.content AS thread_last_reply_content, la.username AS thread_last_reply_author, la.color AS thread_last_reply_author_color
      FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     LEFT JOIN LATERAL (
+       SELECT lr_msg.content, lr_msg.author_id
+       FROM messages lr_msg WHERE lr_msg.thread_id = m.id
+       ORDER BY lr_msg.created_at DESC LIMIT 1
+     ) lr ON true
+     LEFT JOIN accounts la ON lr.author_id = la.id
      WHERE m.channel_id = $1 ORDER BY m.created_at DESC LIMIT $2`,
     [channelId, limit]
   );
@@ -425,8 +434,17 @@ async function getChannelMessagesWithAuthors(channelId, limit = 50) {
 async function getMessagesBeforeWithAuthors(channelId, beforeTimestamp, limit = 30) {
   const result = await query(
     `SELECT m.*, a.username AS author_username, a.avatar AS author_avatar,
-            a.custom_avatar AS author_custom_avatar, a.color AS author_color
+            a.custom_avatar AS author_custom_avatar, a.color AS author_color,
+            (SELECT COUNT(*)::int FROM messages r WHERE r.thread_id = m.id) AS thread_reply_count,
+            (SELECT MAX(r2.created_at) FROM messages r2 WHERE r2.thread_id = m.id) AS thread_last_reply_at,
+            lr.content AS thread_last_reply_content, la.username AS thread_last_reply_author, la.color AS thread_last_reply_author_color
      FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     LEFT JOIN LATERAL (
+       SELECT lr_msg.content, lr_msg.author_id
+       FROM messages lr_msg WHERE lr_msg.thread_id = m.id
+       ORDER BY lr_msg.created_at DESC LIMIT 1
+     ) lr ON true
+     LEFT JOIN accounts la ON lr.author_id = la.id
      WHERE m.channel_id = $1 AND m.created_at < $2
      ORDER BY m.created_at DESC LIMIT $3`,
     [channelId, new Date(beforeTimestamp), limit]
@@ -1151,6 +1169,38 @@ async function getServerTimeouts(serverId) {
 /**
  * Get all accounts with server membership counts (excludes password data)
  */
+async function searchAccountsByUsername(searchQuery, limit = 20) {
+  const result = await query(
+    `SELECT id, username, avatar, custom_avatar, color FROM accounts
+     WHERE LOWER(username) LIKE LOWER($1) ORDER BY username LIMIT $2`,
+    [`%${searchQuery}%`, limit]
+  );
+  return result.rows;
+}
+
+async function createRecoveryCodes(accountId, codeHashes) {
+  const values = codeHashes.map((hash, i) =>
+    `($${i * 2 + 1}, $${i * 2 + 2})`
+  ).join(', ');
+  const params = codeHashes.flatMap(hash => [accountId, hash]);
+  await query(
+    `INSERT INTO recovery_codes (account_id, code_hash) VALUES ${values}`,
+    params
+  );
+}
+
+async function getUnusedRecoveryCodes(accountId) {
+  const result = await query(
+    'SELECT id, code_hash FROM recovery_codes WHERE account_id = $1 AND used = false',
+    [accountId]
+  );
+  return result.rows;
+}
+
+async function markRecoveryCodeUsed(codeId) {
+  await query('UPDATE recovery_codes SET used = true WHERE id = $1', [codeId]);
+}
+
 async function getAllAccounts() {
   const result = await query(`
     SELECT a.id, a.username, a.color, a.avatar, a.custom_avatar, a.status, a.bio, a.created_at,
@@ -1182,7 +1232,7 @@ async function getOrphanedDataStats() {
 async function cleanupEmptyDMs() {
   const result = await query(`
     DELETE FROM dm_channels
-    WHERE id NOT IN (SELECT DISTINCT dm_channel_id FROM dm_participants)
+    WHERE id NOT IN (SELECT DISTINCT channel_id FROM dm_participants)
   `);
   return result.rowCount;
 }
@@ -1592,8 +1642,17 @@ async function unpinMessage(messageId) {
 
 async function getPinnedMessages(channelId) {
   const result = await query(
-    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color
+    `SELECT m.*, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color,
+            (SELECT COUNT(*)::int FROM messages r WHERE r.thread_id = m.id) as thread_reply_count,
+            (SELECT MAX(r2.created_at) FROM messages r2 WHERE r2.thread_id = m.id) as thread_last_reply_at,
+            lr.content as thread_last_reply_content, la.username as thread_last_reply_author, la.color as thread_last_reply_author_color
      FROM messages m LEFT JOIN accounts a ON m.author_id = a.id
+     LEFT JOIN LATERAL (
+       SELECT lr_msg.content, lr_msg.author_id
+       FROM messages lr_msg WHERE lr_msg.thread_id = m.id
+       ORDER BY lr_msg.created_at DESC LIMIT 1
+     ) lr ON true
+     LEFT JOIN accounts la ON lr.author_id = la.id
      WHERE m.channel_id = $1 AND m.pinned = TRUE
      ORDER BY m.pinned_at DESC`,
     [channelId]
@@ -1702,6 +1761,14 @@ async function getThreadInfo(messageId) {
   return result.rows[0];
 }
 
+async function setThreadName(messageId, threadName) {
+  const result = await query(
+    'UPDATE messages SET thread_name = $2 WHERE id = $1 RETURNING *',
+    [messageId, threadName]
+  );
+  return result.rows[0];
+}
+
 async function saveThreadMessage({ id, channelId, authorId, content, attachments = [], threadId, mentions = null }) {
   const result = await query(
     `INSERT INTO messages (id, channel_id, author_id, content, attachments, thread_id, mentions)
@@ -1714,7 +1781,7 @@ async function saveThreadMessage({ id, channelId, authorId, content, attachments
 
 async function getChannelThreads(channelId) {
   const result = await query(
-    `SELECT m.id, m.channel_id, m.content, m.created_at, m.attachments,
+    `SELECT m.id, m.channel_id, m.content, m.created_at, m.attachments, m.thread_name,
             a.id as author_id, a.username as author_username, a.avatar as author_avatar, a.custom_avatar as author_custom_avatar, a.color as author_color,
             COUNT(r.id)::int as reply_count, MAX(r.created_at) as last_reply_at,
             lr.content as last_reply_content, la.username as last_reply_author_username, la.color as last_reply_author_color
@@ -1974,6 +2041,14 @@ module.exports = {
   getOrphanedDataStats,
   cleanupEmptyDMs,
 
+  // User search
+  searchAccountsByUsername,
+
+  // Recovery code functions
+  createRecoveryCodes,
+  getUnusedRecoveryCodes,
+  markRecoveryCodeUsed,
+
   // Pin functions
   pinMessage,
   unpinMessage,
@@ -1987,6 +2062,7 @@ module.exports = {
   getThreadMessages,
   getThreadInfo,
   saveThreadMessage,
+  setThreadName,
   getChannelThreads,
 
   // Bookmark functions

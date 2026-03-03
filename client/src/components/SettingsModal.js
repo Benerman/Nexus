@@ -608,6 +608,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       auto_gain_target: localStorage.getItem('nexus_auto_gain_target') || '-20',
       noise_cancellation_enabled: localStorage.getItem('nexus_noise_cancellation_enabled') || 'true',
       noise_cancellation_aggressiveness: localStorage.getItem('nexus_noise_cancellation_aggressiveness') || 'medium',
+      sidebar_width: localStorage.getItem('nexus_sidebar_width') || '240',
     };
     socket.emit('user:settings-update', { settings });
   };
@@ -814,6 +815,16 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       if (r?.error) { showActionError(r.error); return; }
       setAdminUsers(prev => prev.filter(u => u.id !== userId));
       loadAdminData();
+    });
+  };
+
+  const handleAdminResetPassword = async (userId, username) => {
+    if (!socket) return;
+    const newPassword = prompt(`Enter new password for "${username}" (min 8 characters):`);
+    if (!newPassword) return;
+    if (newPassword.length < 8) { showActionError('Password must be at least 8 characters'); return; }
+    emitWithTimeout(socket, 'admin:reset-password', { userId, newPassword }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
     });
   };
 
@@ -4159,7 +4170,10 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             </div>
                           </div>
                           {usr.id !== currentUser.id && (
-                            <button className="settings-btn danger-sm" onClick={()=>handleAdminDeleteUser(usr.id, usr.username)}>Delete</button>
+                            <div style={{display:'flex',gap:6}}>
+                              <button className="settings-btn primary-sm" onClick={()=>handleAdminResetPassword(usr.id, usr.username)}>Reset Password</button>
+                              <button className="settings-btn danger-sm" onClick={()=>handleAdminDeleteUser(usr.id, usr.username)}>Delete</button>
+                            </div>
                           )}
                         </div>
                       ))}
