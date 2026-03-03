@@ -1,6 +1,7 @@
 const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
 const { serializeServer } = require('../helpers');
+const { hashPassword } = require('../utils');
 
 module.exports = function(io, socket) {
 
@@ -121,6 +122,25 @@ module.exports = function(io, socket) {
     } catch (error) {
       console.error('[Admin] delete-user error:', error);
       callback?.({ error: 'Failed to delete user' });
+    }
+  });
+
+  socket.on('admin:reset-password', async ({ userId, newPassword }, callback) => {
+    const user = state.users[socket.id];
+    if (!user?.isPlatformAdmin) return callback?.({ error: 'Not authorized' });
+    if (!userId || !newPassword) return callback?.({ error: 'User ID and new password required' });
+    const passwordRegex = /^[\x20-\x7E]{8,128}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return callback?.({ error: 'Password must be 8-128 characters' });
+    }
+    try {
+      const passwordHash = await hashPassword(newPassword);
+      await db.updateAccountPassword(userId, passwordHash, 'bcrypt');
+      console.log(`[Admin] ${user.username} reset password for user ${userId}`);
+      callback?.({ success: true });
+    } catch (error) {
+      console.error('[Admin] reset-password error:', error);
+      callback?.({ error: 'Failed to reset password' });
     }
   });
 

@@ -127,6 +127,8 @@ PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "n
 PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/010_dm_preserve_on_delete.sql 2>/dev/null || true
 PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/011_message_requests.sql 2>/dev/null || true
 PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/012_webhook_embeds.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/014_thread_names.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/015_recovery_codes.sql 2>/dev/null || true
 echo "✓ Migrations complete"
 
 # Clean up expired tokens on startup

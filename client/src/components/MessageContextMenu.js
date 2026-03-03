@@ -62,7 +62,7 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, canM
         {onThread && !message.threadId && !isDM && (
           <button className="context-menu-item" onClick={() => { onThread(message); onClose(); }}>
             <span className="context-menu-icon">🧵</span>
-            {message.threadReplyCount > 0 ? 'Open Thread' : 'Start Thread'}
+            {(message.threadReplyCount > 0 || message.threadName) ? 'Open Thread' : 'Start Thread'}
           </button>
         )}
 

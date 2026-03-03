@@ -16,8 +16,8 @@ import CategoryContextMenu from './components/CategoryContextMenu';
 import UserProfileModal from './components/UserProfileModal';
 import ReportModal from './components/ReportModal';
 import ConfirmModal from './components/ConfirmModal';
+import ThreadNameModal from './components/ThreadNameModal';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
-import ActivityPanel from './components/ActivityPanel';
 import WelcomeTour from './components/WelcomeTour';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
@@ -127,6 +127,12 @@ export default function App() {
   const [incomingCall, setIncomingCall] = useState(null); // { channelId, caller, isGroup }
   const [dmCallActive, setDmCallActive] = useState(null); // channelId of active DM call
 
+  // Sidebar width (draggable resize)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = localStorage.getItem('nexus_sidebar_width');
+    return stored ? parseInt(stored, 10) : 240;
+  });
+
   // Mobile swipe state
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileMemberListOpen, setMobileMemberListOpen] = useState(false);
@@ -135,11 +141,6 @@ export default function App() {
   const touchCurrentX = useRef(0);
   const touchCurrentY = useRef(0);
 
-  // Activity panel state
-  const [activities, setActivities] = useState([]);
-  const [activityOpen, setActivityOpen] = useState(false);
-  const activityTimers = useRef({});
-
   // Pinned messages, search, bookmarks, and thread state
   const [pinnedMessages, setPinnedMessages] = useState({});  // channelId -> [messages]
   const [showPinnedPanel, setShowPinnedPanel] = useState(false);
@@ -147,7 +148,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchPanel, setShowSearchPanel] = useState(false);
   const [savedMessageIds, setSavedMessageIds] = useState(new Set());
-  const [threadPanel, setThreadPanel] = useState(null);  // { channelId, threadId, parent, messages }
+  const [threadPanel, setThreadPanel] = useState(null);  // { channelId, threadId, parent, messages, threadName }
+  const [threadNameModal, setThreadNameModal] = useState(null);  // { channelId, messageId }
   const [showThreadsListPanel, setShowThreadsListPanel] = useState(false);
   const [channelThreads, setChannelThreads] = useState({});  // channelId -> [threads]
 
@@ -265,54 +267,6 @@ export default function App() {
       return next;
     });
   }, []);
-
-  // Activity / job tracking helpers
-  const trackJob = useCallback((id, label, initialStatus = {}) => {
-    setActivities(prev => {
-      if (prev.find(j => j.id === id)) return prev;
-      return [...prev, { id, label, status: 'running', progress: 0, currentItem: '', ...initialStatus }];
-    });
-  }, []);
-
-  const updateJobProgress = useCallback((id, progress, currentItem) => {
-    setActivities(prev => prev.map(j =>
-      j.id === id ? { ...j, status: 'running', progress, currentItem: currentItem || j.currentItem } : j
-    ));
-  }, []);
-
-  const completeJob = useCallback((id, summary) => {
-    setActivities(prev => prev.map(j =>
-      j.id === id ? { ...j, status: 'completed', progress: 1, summary } : j
-    ));
-    // Auto-remove after 8 seconds
-    const timer = setTimeout(() => {
-      setActivities(prev => prev.filter(j => j.id !== id));
-      delete activityTimers.current[id];
-    }, 8000);
-    activityTimers.current[id] = timer;
-  }, []);
-
-  const failJob = useCallback((id, error) => {
-    setActivities(prev => prev.map(j =>
-      j.id === id ? { ...j, status: 'failed', error } : j
-    ));
-  }, []);
-
-  const removeJob = useCallback((id) => {
-    if (activityTimers.current[id]) {
-      clearTimeout(activityTimers.current[id]);
-      delete activityTimers.current[id];
-    }
-    setActivities(prev => prev.filter(j => j.id !== id));
-  }, []);
-
-  const clearJobs = useCallback(() => {
-    Object.values(activityTimers.current).forEach(clearTimeout);
-    activityTimers.current = {};
-    setActivities([]);
-  }, []);
-
-  const activeJobCount = useMemo(() => activities.filter(j => j.status === 'running').length, [activities]);
 
   // Message notification sound (subtle 2-note chime via Web Audio API)
   const messageSoundCtxRef = useRef(null);
@@ -615,12 +569,17 @@ export default function App() {
           auto_gain_enabled: 'nexus_auto_gain_enabled',
           auto_gain_target: 'nexus_auto_gain_target',
           server_order: 'nexus_server_order',
+          sidebar_width: 'nexus_sidebar_width',
         };
         for (const [serverKey, localKey] of Object.entries(settingsKeyMap)) {
           if (user.settings[serverKey] != null) {
             const val = serverKey === 'server_order' ? JSON.stringify(user.settings[serverKey]) : String(user.settings[serverKey]);
             localStorage.setItem(localKey, val);
           }
+        }
+        // Apply sidebar width from server settings
+        if (user.settings.sidebar_width != null) {
+          setSidebarWidth(parseInt(user.settings.sidebar_width, 10) || 240);
         }
       }
       // Restore pinned DMs from server settings
@@ -943,6 +902,15 @@ export default function App() {
 
     s.on('thread:list-results', ({ channelId, threads }) => {
       setChannelThreads(prev => ({ ...prev, [channelId]: threads }));
+    });
+
+    s.on('thread:created', ({ channelId, parentMessageId, threadName }) => {
+      setMessages(prev => ({
+        ...prev,
+        [channelId]: (prev[channelId] || []).map(m =>
+          m.id === parentMessageId ? { ...m, threadName } : m
+        )
+      }));
     });
 
     // Reminder notification
@@ -1377,40 +1345,6 @@ export default function App() {
     });
     s.on('user:timedout', ({ serverId, userId, username, duration }) => {
       showError(`${username || 'User'} was timed out`);
-    });
-
-    // Activity tracking: transfers, ingests, exports, batches
-    s.on('transfer:started', ({ transfer_id, device_name }) => {
-      trackJob(transfer_id, `Transfer from ${device_name || 'device'}`, { status: 'running', progress: 0 });
-    });
-    s.on('transfer:progress', ({ transfer_id, files_completed, files_total, file_name }) => {
-      updateJobProgress(transfer_id, files_total ? files_completed / files_total : 0, file_name);
-    });
-    s.on('transfer:complete', ({ transfer_id, summary }) => {
-      completeJob(transfer_id, summary);
-    });
-    s.on('transfer:failed', ({ transfer_id, error }) => {
-      failJob(transfer_id, error);
-    });
-    s.on('ingest:progress', ({ job_id, completed, total, file_name }) => {
-      trackJob(job_id, 'Ingesting files');
-      updateJobProgress(job_id, total ? completed / total : 0, file_name);
-    });
-    s.on('ingest:complete', ({ job_id, photos_ingested }) => {
-      completeJob(job_id, { succeeded: photos_ingested, total_items: photos_ingested });
-    });
-    s.on('export:complete', ({ job_id, photos_exported }) => {
-      completeJob(job_id, { succeeded: photos_exported, total_items: photos_exported });
-    });
-    s.on('export:failed', ({ job_id, error }) => {
-      failJob(job_id, error);
-    });
-    s.on('batch:progress', ({ job_id, completed, total, photo_id }) => {
-      trackJob(job_id, 'Batch operation');
-      updateJobProgress(job_id, total ? completed / total : 0, photo_id);
-    });
-    s.on('batch:complete', ({ job_id, summary }) => {
-      completeJob(job_id, summary);
     });
 
     // Clean up heartbeat on unmount
@@ -2188,21 +2122,20 @@ export default function App() {
         onChannelContextMenu={handleChannelContextMenu}
         mutedCategories={mutedCategories}
         onCategoryContextMenu={handleCategoryContextMenu}
-        activityCount={activeJobCount}
-        onToggleActivity={() => setActivityOpen(o => !o)}
         showConfirm={showConfirm}
+        width={sidebarWidth}
+        onResize={setSidebarWidth}
+        onResizeEnd={(newWidth) => {
+          setSidebarWidth(newWidth);
+          localStorage.setItem('nexus_sidebar_width', String(newWidth));
+          socketRef.current?.emit('user:settings-update', { settings: { sidebar_width: newWidth } });
+        }}
       />
       {/* Mobile sub-nav bar */}
       <div className="mobile-nav-bar">
         <button className="mobile-nav-left" onClick={() => { setMobileSidebarOpen(o => !o); setMobileMemberListOpen(false); }}>
           <span className="mobile-nav-arrow">{mobileSidebarOpen ? '‹' : '›'}</span>
           <span className="mobile-nav-channel">{activeChannel?.isDM ? activeChannel?.name : `# ${activeChannel?.name || 'general'}`}</span>
-        </button>
-        <button className="mobile-nav-activity" onClick={() => setActivityOpen(o => !o)} title="Activity">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-          </svg>
-          {activeJobCount > 0 && <span className="mobile-nav-activity-badge">{activeJobCount > 9 ? '9+' : activeJobCount}</span>}
         </button>
         {!activeServer?.isPersonal && (
           <button className="mobile-nav-right" onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }}>
@@ -2333,9 +2266,6 @@ export default function App() {
             scrollToMessageId={scrollToMessageId}
             onScrollToMessageComplete={() => setScrollToMessageId(null)}
             onRefreshData={handleRefreshData}
-            onTrackJob={trackJob}
-            onCompleteJob={completeJob}
-            onFailJob={failJob}
             showConfirm={showConfirm}
             showPinnedPanel={showPinnedPanel}
             onTogglePinnedPanel={() => { setShowPinnedPanel(p => !p); if (!showPinnedPanel && activeChannel) socketRef.current?.emit('messages:get-pinned', { channelId: activeChannel.id }); }}
@@ -2349,7 +2279,14 @@ export default function App() {
             onSaveMessage={(messageId, channelId) => socketRef.current?.emit('message:save', { messageId, channelId })}
             onUnsaveMessage={(messageId) => socketRef.current?.emit('message:unsave', { messageId })}
             threadPanel={threadPanel}
-            onOpenThread={(channelId, threadId) => { socketRef.current?.emit('thread:get', { channelId, threadId }); }}
+            onOpenThread={(channelId, threadId, hasExistingThread) => {
+              const msg = messages[channelId]?.find(m => m.id === threadId);
+              if (hasExistingThread || (msg && (msg.threadReplyCount > 0 || msg.threadName))) {
+                socketRef.current?.emit('thread:get', { channelId, threadId });
+              } else {
+                setThreadNameModal({ channelId, messageId: threadId });
+              }
+            }}
             onCloseThread={() => setThreadPanel(null)}
             onThreadReply={(channelId, threadId, content) => socketRef.current?.emit('thread:reply', { channelId, threadId, content })}
             showThreadsListPanel={showThreadsListPanel}
@@ -2371,14 +2308,6 @@ export default function App() {
             setContextMenu({ user, position: { x: e.clientX, y: e.clientY } });
           }}
           className={mobileMemberListOpen ? 'mobile-open' : ''}
-        />
-      )}
-      {activityOpen && (
-        <ActivityPanel
-          jobs={activities}
-          onRemove={removeJob}
-          onClear={clearJobs}
-          onClose={() => setActivityOpen(false)}
         />
       )}
       {incomingCall && (
@@ -2461,6 +2390,15 @@ export default function App() {
           danger={confirmModal.danger}
           onConfirm={() => { confirmModal.resolve(true); setConfirmModal(null); }}
           onCancel={() => { confirmModal.resolve(false); setConfirmModal(null); }}
+        />
+      )}
+      {threadNameModal && (
+        <ThreadNameModal
+          onSubmit={(name) => {
+            socketRef.current?.emit('thread:create', { channelId: threadNameModal.channelId, parentMessageId: threadNameModal.messageId, name });
+            setThreadNameModal(null);
+          }}
+          onCancel={() => setThreadNameModal(null)}
         />
       )}
       {serverContextMenu && (

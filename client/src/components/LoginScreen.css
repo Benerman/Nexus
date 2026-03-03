@@ -172,6 +172,54 @@
 }
 .login-switch button:hover { color: var(--brand-600); }
 
+.login-forgot {
+  background: none;
+  border: none;
+  color: var(--brand-500);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: right;
+  padding: 0;
+  margin-top: 4px;
+}
+.login-forgot:hover { color: var(--brand-600); text-decoration: underline; }
+
+/* Recovery codes modal */
+.recovery-codes-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.recovery-codes-card {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 32px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: var(--elevation-high);
+  animation: fadeIn 0.4s ease;
+}
+.recovery-codes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.recovery-code {
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 4px;
+  padding: 8px;
+  text-align: center;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  letter-spacing: 1px;
+  user-select: all;
+}
+
 @media (max-width: 768px) {
   .login-card {
     max-width: calc(100vw - 32px);

@@ -189,7 +189,13 @@ function convertDbMessagesToRuntime(dbMessages, channelId) {
         pinned: dbMsg.pinned || false,
         pinnedAt: dbMsg.pinned_at ? new Date(dbMsg.pinned_at).getTime() : null,
         pinnedBy: dbMsg.pinned_by || null,
-        threadId: dbMsg.thread_id || null
+        threadId: dbMsg.thread_id || null,
+        threadName: dbMsg.thread_name || null,
+        threadReplyCount: dbMsg.thread_reply_count || 0,
+        threadLastReplyAt: dbMsg.thread_last_reply_at ? new Date(dbMsg.thread_last_reply_at).getTime() : null,
+        threadLastReplyContent: dbMsg.thread_last_reply_content || null,
+        threadLastReplyAuthor: dbMsg.thread_last_reply_author || null,
+        threadLastReplyAuthorColor: dbMsg.thread_last_reply_author_color || null
       };
     } catch (err) {
       console.error(`[Messages] Error converting message ${dbMsg.id} (webhook=${dbMsg.is_webhook}):`, err.message);
@@ -259,7 +265,13 @@ async function convertDbMessages(dbMessages, channelId) {
         pinned: dbMsg.pinned || false,
         pinnedAt: dbMsg.pinned_at ? new Date(dbMsg.pinned_at).getTime() : null,
         pinnedBy: dbMsg.pinned_by || null,
-        threadId: dbMsg.thread_id || null
+        threadId: dbMsg.thread_id || null,
+        threadName: dbMsg.thread_name || null,
+        threadReplyCount: dbMsg.thread_reply_count || 0,
+        threadLastReplyAt: dbMsg.thread_last_reply_at ? new Date(dbMsg.thread_last_reply_at).getTime() : null,
+        threadLastReplyContent: dbMsg.thread_last_reply_content || null,
+        threadLastReplyAuthor: dbMsg.thread_last_reply_author || null,
+        threadLastReplyAuthorColor: dbMsg.thread_last_reply_author_color || null
       };
     } catch (err) {
       console.error(`[Messages] Error converting message ${dbMsg.id} (webhook=${dbMsg.is_webhook}):`, err.message);

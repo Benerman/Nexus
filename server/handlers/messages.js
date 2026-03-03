@@ -612,7 +612,13 @@ module.exports = function(io, socket) {
         reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {}),
         pinned: true,
         pinnedAt: row.pinned_at ? new Date(row.pinned_at).getTime() : null,
-        pinnedBy: row.pinned_by
+        pinnedBy: row.pinned_by,
+        threadName: row.thread_name || null,
+        threadReplyCount: row.thread_reply_count || 0,
+        threadLastReplyAt: row.thread_last_reply_at ? new Date(row.thread_last_reply_at).getTime() : null,
+        threadLastReplyContent: row.thread_last_reply_content || null,
+        threadLastReplyAuthor: row.thread_last_reply_author || null,
+        threadLastReplyAuthorColor: row.thread_last_reply_author_color || null
       }));
       socket.emit('messages:pinned', { channelId, messages: pinned });
     } catch (err) {
@@ -704,6 +710,82 @@ module.exports = function(io, socket) {
   });
 
   // ─── Message Threads ────────────────────────────────────────────────────────
+  socket.on('thread:create', async ({ channelId, parentMessageId, name }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    if (!name || typeof name !== 'string' || !name.trim() || name.trim().length > 100) {
+      return socket.emit('error', { message: 'Thread name is required (1-100 characters).' });
+    }
+
+    try {
+      const parentMsg = await db.getMessageById(parentMessageId);
+      if (!parentMsg) return socket.emit('error', { message: 'Message not found.' });
+      if (parentMsg.channel_id !== channelId) return socket.emit('error', { message: 'Message does not belong to this channel.' });
+      if (parentMsg.thread_id) return socket.emit('error', { message: 'Cannot create a thread on a thread reply.' });
+      if (parentMsg.thread_name) return socket.emit('error', { message: 'This message already has a thread.' });
+
+      const trimmedName = name.trim().slice(0, 100);
+      await db.setThreadName(parentMessageId, trimmedName);
+
+      // Update in-memory message if present
+      const channelMsgs = state.messages[channelId];
+      if (channelMsgs) {
+        const msg = channelMsgs.find(m => m.id === parentMessageId);
+        if (msg) msg.threadName = trimmedName;
+      }
+
+      io.to(`text:${channelId}`).emit('thread:created', { channelId, parentMessageId, threadName: trimmedName });
+
+      // Send thread messages back to creator (same as thread:get)
+      const dbMessages = await db.getThreadMessages(parentMessageId);
+      const messages = dbMessages.map(row => ({
+        id: row.id,
+        channelId: row.channel_id,
+        threadId: row.thread_id,
+        content: row.content,
+        attachments: typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : (row.attachments || []),
+        author: {
+          id: row.author_id,
+          username: row.author_username || 'Deleted User',
+          avatar: row.author_avatar || '\u{1F47B}',
+          customAvatar: row.author_custom_avatar,
+          color: row.author_color || '#80848E'
+        },
+        timestamp: new Date(row.created_at).getTime(),
+        reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions || '{}') : (row.reactions || {})
+      }));
+
+      let parent = null;
+      const freshParent = await db.getMessageById(parentMessageId);
+      if (freshParent) {
+        let author = Object.values(state.users).find(u => u.id === freshParent.author_id);
+        if (!author) {
+          author = {
+            id: freshParent.author_id,
+            username: freshParent.author_username || 'Deleted User',
+            avatar: freshParent.author_avatar || '\u{1F47B}',
+            customAvatar: freshParent.author_custom_avatar,
+            color: freshParent.author_color || '#80848E'
+          };
+        }
+        parent = {
+          id: freshParent.id,
+          channelId: freshParent.channel_id,
+          content: freshParent.content,
+          attachments: typeof freshParent.attachments === 'string' ? JSON.parse(freshParent.attachments || '[]') : (freshParent.attachments || []),
+          author,
+          timestamp: new Date(freshParent.created_at).getTime(),
+          reactions: typeof freshParent.reactions === 'string' ? JSON.parse(freshParent.reactions || '{}') : (freshParent.reactions || {})
+        };
+      }
+
+      socket.emit('thread:messages', { channelId, threadId: parentMessageId, parent, messages, threadName: trimmedName });
+    } catch (err) {
+      console.error('[Thread] Error creating thread:', err.message);
+      socket.emit('error', { message: 'Failed to create thread.' });
+    }
+  });
+
   socket.on('thread:reply', async ({ channelId, threadId, content, attachments }) => {
     const user = state.users[socket.id];
     if (!user) return;
@@ -721,6 +803,15 @@ module.exports = function(io, socket) {
       if (!perms.sendMessages && !perms.admin) {
         return socket.emit('error', { message: 'No permission to send messages' });
       }
+    }
+
+    // Verify thread has been formally created (has a name)
+    try {
+      const parentMsg = await db.getMessageById(threadId);
+      if (!parentMsg) return socket.emit('error', { message: 'Thread not found.' });
+      if (!parentMsg.thread_name) return socket.emit('error', { message: 'Thread must be created with a name first.' });
+    } catch (err) {
+      return socket.emit('error', { message: 'Failed to verify thread.' });
     }
 
     const msgId = uuidv4();
@@ -811,7 +902,7 @@ module.exports = function(io, socket) {
         };
       }
 
-      socket.emit('thread:messages', { channelId, threadId, parent, messages });
+      socket.emit('thread:messages', { channelId, threadId, parent, messages, threadName: parentMsg?.thread_name || null });
     } catch (err) {
       console.error('[Thread] Error fetching thread:', err.message);
     }
@@ -837,6 +928,7 @@ module.exports = function(io, socket) {
           color: row.author_color || '#80848E'
         },
         timestamp: new Date(row.created_at).getTime(),
+        threadName: row.thread_name || null,
         replyCount: row.reply_count,
         lastReplyAt: new Date(row.last_reply_at).getTime(),
         lastReply: row.last_reply_content ? {

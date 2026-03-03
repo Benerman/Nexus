@@ -300,7 +300,7 @@ const ChatArea = React.memo(function ChatArea({
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
   developerMode, onReportMessage, scrollToMessageId, onScrollToMessageComplete, onRefreshData,
-  onTrackJob, onCompleteJob, onFailJob, showConfirm,
+  showConfirm,
   showPinnedPanel, onTogglePinnedPanel, pinnedMessages,
   showSearchPanel, onToggleSearchPanel, searchResults, onSearch, searchQuery,
   savedMessageIds, onSaveMessage, onUnsaveMessage,
@@ -334,6 +334,8 @@ const ChatArea = React.memo(function ChatArea({
   const [commandIndex, setCommandIndex] = useState(0);
   const [pollCreatorOpen, setPollCreatorOpen] = useState(false);
   const [threadInput, setThreadInput] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
+  const toastTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const messageRefs = useRef({}); // refs for all messages
@@ -673,12 +675,6 @@ const ChatArea = React.memo(function ChatArea({
       return;
     }
 
-    // Track upload as an activity job when there are attachments
-    const jobId = pendingAttachments.length > 0 ? `upload-${Date.now()}` : null;
-    if (jobId && onTrackJob) {
-      onTrackJob(jobId, `Uploading ${pendingAttachments.length} file${pendingAttachments.length > 1 ? 's' : ''}`, { status: 'running', progress: 0.5 });
-    }
-
     const payload = {
       channelId: channel.id,
       content: input,
@@ -687,15 +683,7 @@ const ChatArea = React.memo(function ChatArea({
     if (replyingTo) {
       payload.replyTo = replyingTo.id;
     }
-    socket.emit('message:send', payload, (ack) => {
-      if (jobId) {
-        if (ack?.error) {
-          onFailJob?.(jobId, ack.error);
-        } else {
-          onCompleteJob?.(jobId, { succeeded: pendingAttachments.length });
-        }
-      }
-    });
+    socket.emit('message:send', payload);
     setInput('');
     setPendingAttachments([]);
     setReplyingTo(null);
@@ -709,7 +697,7 @@ const ChatArea = React.memo(function ChatArea({
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-  }, [input, pendingAttachments, socket, channel, replyingTo, onTrackJob, onCompleteJob, onFailJob]);
+  }, [input, pendingAttachments, socket, channel, replyingTo]);
 
   const handleGifSelect = useCallback((gif) => {
     if (!socket || !channel) return;
@@ -872,7 +860,8 @@ const ChatArea = React.memo(function ChatArea({
   }, [savedMessageIds, onSaveMessage, onUnsaveMessage, channel?.id]);
 
   const handleOpenThreadFromContext = useCallback((msg) => {
-    if (onOpenThread) onOpenThread(channel.id, msg.id);
+    const hasExisting = !!(msg.threadReplyCount > 0 || msg.threadName);
+    if (onOpenThread) onOpenThread(channel.id, msg.id, hasExisting);
   }, [onOpenThread, channel?.id]);
 
   const handleCancelReply = useCallback(() => {
@@ -910,15 +899,21 @@ const ChatArea = React.memo(function ChatArea({
     }
   }, [scrollToMessageId, onScrollToMessageComplete]);
 
+  const showToast = useCallback((msg) => {
+    clearTimeout(toastTimerRef.current);
+    setToastMessage(msg);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 2500);
+  }, []);
+
   const handleCopyMessageUrl = useCallback((message) => {
     const url = `${window.location.origin}/channels/${server?.id || 'nexus-main'}/${channel.id}/${message.id}`;
     navigator.clipboard.writeText(url).then(() => {
-      alert('Message URL copied to clipboard!');
+      showToast('Message URL copied to clipboard');
     }).catch(err => {
       console.error('Failed to copy URL:', err);
-      alert('Failed to copy URL');
+      showToast('Failed to copy URL');
     });
-  }, [server, channel]);
+  }, [server, channel, showToast]);
 
   const handleMessageContextMenu = useCallback((e, message) => {
     e.preventDefault();
@@ -1049,7 +1044,7 @@ const ChatArea = React.memo(function ChatArea({
             <div className="chat-header-divider"/>
             <span style={{ color: '#fff', fontWeight: 600, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7 }}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-              Thread
+              {threadPanel?.threadName || 'Thread'}
             </span>
           </>
         ) : (
@@ -1477,13 +1472,18 @@ const ChatArea = React.memo(function ChatArea({
                       ))}
                     </div>
                   )}
-                  {msg.threadReplyCount > 0 && (
-                    <div style={{ padding: '4px 0', marginTop: '4px', cursor: 'pointer' }} onClick={() => onOpenThread && onOpenThread(channel.id, msg.id)}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00a8fc', fontSize: '13px' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                        <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
-                        <span style={{ color: '#72767d', fontSize: '12px' }}>Last reply {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>
-                      </div>
+                  {(msg.threadReplyCount > 0 || msg.threadName) && (
+                    <div style={{ background: 'rgba(0, 168, 252, 0.04)', borderLeft: '3px solid #00a8fc', borderRadius: '4px', padding: '8px 12px', marginTop: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => onOpenThread && onOpenThread(channel.id, msg.id, true)} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.08)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.04)'}>
+                      {msg.threadName && (
+                        <div style={{ color: '#fff', fontWeight: 600, fontSize: '13px', marginBottom: msg.threadReplyCount > 0 ? '4px' : 0 }}>{msg.threadName}</div>
+                      )}
+                      {msg.threadReplyCount > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00a8fc', fontSize: '13px' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                          <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
+                          <span style={{ color: '#72767d', fontSize: '12px' }}>Last reply {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>
+                        </div>
+                      )}
                       {msg.threadLastReplyContent && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginLeft: '20px', fontSize: '12px', color: '#8e9297' }}>
                           <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
@@ -1500,7 +1500,7 @@ const ChatArea = React.memo(function ChatArea({
                       title="Reply">↩</button>
                     <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (msg.pinned) { socket.emit('message:unpin', { channelId: channel.id, messageId: msg.id }); } else { socket.emit('message:pin', { channelId: channel.id, messageId: msg.id }); } }} title={msg.pinned ? "Unpin" : "Pin"} style={{ color: msg.pinned ? '#ed4245' : undefined }}><PinIcon size={16} /></button>
                     {onSaveMessage && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (savedMessageIds?.has(msg.id)) { onUnsaveMessage(msg.id); } else { onSaveMessage(msg.id, channel.id); } }} title={savedMessageIds?.has(msg.id) ? "Remove Bookmark" : "Bookmark"} style={{ color: savedMessageIds?.has(msg.id) ? '#f0b132' : undefined }}><BookmarkIcon size={16} /></button>}
-                    {onOpenThread && !msg.threadId && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); onOpenThread(channel.id, msg.id); }} title="Start Thread"><ThreadIcon size={16} /></button>}
+                    {onOpenThread && !msg.threadId && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); onOpenThread(channel.id, msg.id); }} title={(msg.threadReplyCount > 0 || msg.threadName) ? "Open Thread" : "Start Thread"}><ThreadIcon size={16} /></button>}
                     <button className="reaction-btn"
                       onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
                     <button className="message-options-btn"
@@ -1729,12 +1729,48 @@ const ChatArea = React.memo(function ChatArea({
             {(pinnedMessages || []).length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No pinned messages in this channel</div>
             ) : (pinnedMessages || []).map(msg => (
-              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = document.querySelector(`[data-message-id="${msg.id}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = messageRefs.current[msg.id]; if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(msg.id); setTimeout(() => setHighlightedMessageId(null), 2000); } }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: msg.author?.customAvatar ? 'transparent' : (msg.author?.color || '#3B82F6'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0, overflow: 'hidden' }}>
+                    {msg.author?.customAvatar ? <img src={msg.author.customAvatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (msg.author?.avatar || '👤')}
+                  </div>
                   <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{msg.author?.username}</span>
                   <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(msg.timestamp).toLocaleDateString()}</span>
                 </div>
                 <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word' }}>{msg.content?.substring(0, 200)}{msg.content?.length > 200 ? '...' : ''}</div>
+                {(msg.attachments || []).length > 0 && (
+                  <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                    {msg.attachments.slice(0, 2).map((att, i) => (
+                      att.type?.startsWith('image/') || att.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+                        ? <img key={i} src={att.url} alt="" style={{ maxWidth: '100px', maxHeight: '60px', borderRadius: '4px', objectFit: 'cover' }} />
+                        : <div key={i} style={{ background: '#2b2d31', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', color: '#b5bac1' }}>📎 {att.name || 'file'}</div>
+                    ))}
+                    {msg.attachments.length > 2 && <span style={{ fontSize: '11px', color: '#72767d', alignSelf: 'center' }}>+{msg.attachments.length - 2} more</span>}
+                  </div>
+                )}
+                {(msg.threadReplyCount > 0 || msg.threadName) && (
+                  <div style={{ background: 'rgba(0, 168, 252, 0.06)', borderLeft: '2px solid #00a8fc', borderRadius: '4px', padding: '6px 10px', marginTop: '8px', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onClick={(e) => { e.stopPropagation(); onOpenThread && onOpenThread(channel.id, msg.id, true); }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.12)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.06)'}>
+                    {msg.threadName && (
+                      <div style={{ color: '#fff', fontWeight: 600, fontSize: '12px', marginBottom: msg.threadReplyCount > 0 ? '3px' : 0 }}>{msg.threadName}</div>
+                    )}
+                    {msg.threadReplyCount > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#00a8fc', fontSize: '12px' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
+                        {msg.threadLastReplyAt && <span style={{ color: '#72767d', fontSize: '11px' }}>· {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>}
+                      </div>
+                    )}
+                    {msg.threadLastReplyContent && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontSize: '11px', color: '#8e9297' }}>
+                        <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{msg.threadLastReplyContent.substring(0, 60)}{msg.threadLastReplyContent.length > 60 ? '...' : ''}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1751,7 +1787,13 @@ const ChatArea = React.memo(function ChatArea({
             {(channelThreads || []).length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No threads in this channel</div>
             ) : (channelThreads || []).map(thread => (
-              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => { onOpenThread(channel.id, thread.id); onToggleThreadsListPanel(); }} onMouseEnter={e => e.currentTarget.style.background = '#232428'} onMouseLeave={e => e.currentTarget.style.background = '#1e1f22'}>
+              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => { onOpenThread(channel.id, thread.id, true); onToggleThreadsListPanel(); }} onMouseEnter={e => e.currentTarget.style.background = '#232428'} onMouseLeave={e => e.currentTarget.style.background = '#1e1f22'}>
+                {thread.threadName && (
+                  <div style={{ color: '#fff', fontWeight: 600, fontSize: '15px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#00a8fc"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    {thread.threadName}
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <span style={{ color: thread.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{thread.author?.username}</span>
                   <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(thread.timestamp).toLocaleDateString()}</span>
@@ -1810,7 +1852,7 @@ const ChatArea = React.memo(function ChatArea({
             ) : searchResults.length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No results found</div>
             ) : searchResults.map(msg => (
-              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = document.querySelector(`[data-message-id="${msg.id}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>
+              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = messageRefs.current[msg.id]; if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(msg.id); setTimeout(() => setHighlightedMessageId(null), 2000); } }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{msg.author?.username}</span>
                   <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(msg.timestamp).toLocaleDateString()}</span>
@@ -1819,6 +1861,18 @@ const ChatArea = React.memo(function ChatArea({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div style={{
+          position: 'absolute', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
+          background: '#18191c', color: '#dcddde', padding: '8px 16px', borderRadius: '6px',
+          fontSize: '14px', fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+          zIndex: 1000, pointerEvents: 'none', animation: 'toastFadeIn 0.2s ease-out',
+          border: '1px solid rgba(255,255,255,0.08)'
+        }}>
+          {toastMessage}
         </div>
       )}
 

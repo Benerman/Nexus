@@ -174,14 +174,6 @@ function FriendsList({ friends, onlineUsers, onCreateDM, dmSearch, onFriendActio
 
 let sidebarMountCount = 0;
 
-function ActivityToggleIcon({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
-
 const Sidebar = React.memo(function Sidebar({
   channels, activeChannel, activeChannelType, onSelectChannel,
   voiceChannelState, currentVoiceChannel, onlineUsers, currentUser,
@@ -192,8 +184,8 @@ const Sidebar = React.memo(function Sidebar({
   onNavigateToVoice, dmCallActive,
   onChannelContextMenu,
   mutedCategories = {}, onCategoryContextMenu,
-  activityCount = 0, onToggleActivity,
-  showConfirm
+  showConfirm,
+  width = 240, onResize, onResizeEnd
 }) {
   const [collapsed, setCollapsedRaw] = useState(() => {
     try {
@@ -210,9 +202,63 @@ const Sidebar = React.memo(function Sidebar({
   };
   const [dmSearch, setDMSearch] = useState('');
   const [dmCtxMenu, setDmCtxMenu] = useState(null);
+  const [showNewMessage, setShowNewMessage] = useState(false);
+  const [newMsgSearch, setNewMsgSearch] = useState('');
+  const [newMsgResults, setNewMsgResults] = useState([]);
+  const [newMsgSelected, setNewMsgSelected] = useState([]);
+  const [newMsgGroupName, setNewMsgGroupName] = useState('');
   const longPressTimerRef = useRef(null);
   const sidebarRef = useRef(null);
   const instanceId = useRef(++sidebarMountCount);
+  const newMsgSearchTimer = useRef(null);
+  const resizeHandleRef = useRef(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+
+  const MIN_WIDTH = 180;
+  const MAX_WIDTH = 420;
+  const DEFAULT_WIDTH = 240;
+
+  const handleResizeStart = (e) => {
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    resizeStartX.current = clientX;
+    resizeStartWidth.current = width;
+    resizeHandleRef.current?.classList.add('active');
+
+    const onMove = (moveEvent) => {
+      const moveX = moveEvent.touches ? moveEvent.touches[0].clientX : moveEvent.clientX;
+      const delta = moveX - resizeStartX.current;
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, resizeStartWidth.current + delta));
+      onResize?.(newWidth);
+    };
+
+    const onEnd = (endEvent) => {
+      const endX = endEvent.changedTouches ? endEvent.changedTouches[0].clientX : endEvent.clientX;
+      const delta = endX - resizeStartX.current;
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, resizeStartWidth.current + delta));
+      resizeHandleRef.current?.classList.remove('active');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      onResizeEnd?.(newWidth);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onMove);
+    document.addEventListener('touchend', onEnd);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleResizeDoubleClick = () => {
+    onResize?.(DEFAULT_WIDTH);
+    onResizeEnd?.(DEFAULT_WIDTH);
+  };
 
   console.log(`[Sidebar #${instanceId.current}]  RENDER for server:`, server?.name);
 
@@ -258,6 +304,42 @@ const Sidebar = React.memo(function Sidebar({
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [dmCtxMenu]);
+
+  // Debounced user search for New Message flow
+  useEffect(() => {
+    if (!showNewMessage || !newMsgSearch.trim() || !socket) {
+      setNewMsgResults([]);
+      return;
+    }
+    clearTimeout(newMsgSearchTimer.current);
+    newMsgSearchTimer.current = setTimeout(() => {
+      socket.emit('user:search', { query: newMsgSearch.trim() }, (res) => {
+        if (res?.users) {
+          // Filter out already-selected users
+          const selectedIds = new Set(newMsgSelected.map(u => u.id));
+          setNewMsgResults(res.users.filter(u => !selectedIds.has(u.id)));
+        }
+      });
+    }, 300);
+    return () => clearTimeout(newMsgSearchTimer.current);
+  }, [newMsgSearch, showNewMessage, socket, newMsgSelected]);
+
+  const handleStartConversation = () => {
+    if (newMsgSelected.length === 0) return;
+    if (newMsgSelected.length === 1 && !newMsgGroupName.trim()) {
+      // Regular DM
+      onCreateDM(newMsgSelected[0].id);
+    } else {
+      // Group DM
+      const participantIds = newMsgSelected.map(u => u.id);
+      socket?.emit('group-dm:create', { participantIds, name: newMsgGroupName.trim() || null });
+    }
+    setShowNewMessage(false);
+    setNewMsgSearch('');
+    setNewMsgResults([]);
+    setNewMsgSelected([]);
+    setNewMsgGroupName('');
+  };
 
   const toggleCategory = (catId) => setCollapsed(p => ({ ...p, [catId]: !p[catId] }));
 
@@ -330,66 +412,113 @@ const Sidebar = React.memo(function Sidebar({
     });
 
     return (
-      <div ref={sidebarRef} className={`sidebar sidebar-dm ${className || ''}`}>
+      <div ref={sidebarRef} className={`sidebar sidebar-dm ${className || ''}`} style={{ width }}>
+        <div className="sidebar-resize-handle"
+          ref={resizeHandleRef}
+          onMouseDown={handleResizeStart}
+          onTouchStart={handleResizeStart}
+          onDoubleClick={handleResizeDoubleClick}
+        />
         <div className="sidebar-header">
           <div className={`sidebar-server-icon ${server?.customIcon ? 'has-custom-icon' : ''}`}>{serverIcon}</div>
           <span className="sidebar-server-name">{server?.name || 'Direct Messages'}</span>
-          <button className="sidebar-activity-btn" onClick={onToggleActivity} title="Activity">
-            <ActivityToggleIcon size={16} />
-            {activityCount > 0 && <span className="sidebar-activity-badge">{activityCount > 9 ? '9+' : activityCount}</span>}
-          </button>
           <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('profile')} title="Settings">
             <SettingsIcon size={16} color="currentColor" />
           </button>
-        </div>
-
-        {/* DM Search + Create Group DM */}
-        <div className="dm-search-bar">
-          <input
-            type="text"
-            className="dm-search-input"
-            placeholder="Find or start a conversation"
-            value={dmSearch}
-            onChange={e => setDMSearch(e.target.value)}
-          />
-          {dmSearch && (
-            <button
-              className="dm-search-clear"
-              onClick={() => setDMSearch('')}
-              title="Clear search"
-            >
-              ×
-            </button>
-          )}
-          <button
-            className="dm-create-group-btn"
-            onClick={() => {
-              if (socket) {
-                // Open a simple prompt for group DM creation
-                const name = prompt('Group name (optional):');
-                // Need at least 1 friend to create a group
-                if (friends && friends.length > 0) {
-                  const selected = prompt('Enter usernames to add (comma-separated):');
-                  if (selected) {
-                    const usernames = selected.split(',').map(u => u.trim().toLowerCase());
-                    const ids = friends
-                      .filter(f => usernames.includes(f.username.toLowerCase()))
-                      .map(f => f.id);
-                    if (ids.length > 0) {
-                      socket.emit('group-dm:create', { participantIds: ids, name: name || null });
-                    }
-                  }
-                }
-              }
-            }}
-            title="Create Group DM"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+          <button className="sidebar-new-dm-btn" onClick={() => setShowNewMessage(p => !p)} title="New Message">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
           </button>
         </div>
 
+        {/* New Message View */}
+        {showNewMessage ? (
+          <div className="new-message-view">
+            <div className="new-msg-header">
+              <span>New Message</span>
+              <button className="new-msg-close" onClick={() => { setShowNewMessage(false); setNewMsgSearch(''); setNewMsgResults([]); setNewMsgSelected([]); setNewMsgGroupName(''); }}>×</button>
+            </div>
+            {newMsgSelected.length > 1 || newMsgGroupName ? (
+              <div className="new-msg-field">
+                <label className="new-msg-label">Group Name (optional)</label>
+                <input
+                  type="text"
+                  className="new-msg-input"
+                  placeholder="Enter group name..."
+                  value={newMsgGroupName}
+                  onChange={e => setNewMsgGroupName(e.target.value)}
+                  maxLength={64}
+                />
+              </div>
+            ) : null}
+            <div className="new-msg-field">
+              <label className="new-msg-label">To:</label>
+              <div className="new-msg-chips-row">
+                {newMsgSelected.map(u => (
+                  <span key={u.id} className="new-msg-chip" style={{ borderColor: u.color || '#3B82F6' }}>
+                    <span style={{ color: u.color || '#fff' }}>{u.username}</span>
+                    <button className="new-msg-chip-remove" onClick={() => setNewMsgSelected(prev => prev.filter(s => s.id !== u.id))}>×</button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  className="new-msg-search-input"
+                  placeholder={newMsgSelected.length === 0 ? "Search for users..." : "Add more..."}
+                  value={newMsgSearch}
+                  onChange={e => setNewMsgSearch(e.target.value)}
+                />
+              </div>
+            </div>
+            {newMsgResults.length > 0 && (
+              <div className="new-msg-results">
+                {newMsgResults.map(u => (
+                  <div key={u.id} className="new-msg-result-item" onClick={() => {
+                    setNewMsgSelected(prev => [...prev, u]);
+                    setNewMsgSearch('');
+                    setNewMsgResults([]);
+                  }}>
+                    <div className="dm-avatar" style={{ background: u.custom_avatar ? 'transparent' : (u.color || '#3B82F6'), width: 28, height: 28, fontSize: 14 }}>
+                      {u.custom_avatar ? <img src={u.custom_avatar} alt="" className="dm-avatar-img" /> : (u.avatar || '👤')}
+                    </div>
+                    <span style={{ color: u.color || '#fff' }}>{u.username}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              className="new-msg-start-btn"
+              disabled={newMsgSelected.length === 0}
+              onClick={handleStartConversation}
+            >
+              Start Conversation
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* DM Search */}
+            <div className="dm-search-bar">
+              <input
+                type="text"
+                className="dm-search-input"
+                placeholder="Find or start a conversation"
+                value={dmSearch}
+                onChange={e => setDMSearch(e.target.value)}
+              />
+              {dmSearch && (
+                <button
+                  className="dm-search-clear"
+                  onClick={() => setDMSearch('')}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {!showNewMessage && <>
         {/* Incoming Friend Requests */}
         {pendingRequests.filter(r => r.isIncoming).length > 0 && (
           <div className="dm-friend-requests">
@@ -587,6 +716,7 @@ const Sidebar = React.memo(function Sidebar({
             })
           )}
         </div>
+        </>}
 
         <UserPanel currentUser={currentUser} voiceControls={voiceControls} onOpenSettings={onOpenSettings} onNavigateToVoice={onNavigateToVoice} />
 
@@ -629,14 +759,16 @@ const Sidebar = React.memo(function Sidebar({
 
   // Regular server layout
   return (
-    <div ref={sidebarRef} className={`sidebar ${className || ''}`}>
+    <div ref={sidebarRef} className={`sidebar ${className || ''}`} style={{ width }}>
+      <div className="sidebar-resize-handle"
+        ref={resizeHandleRef}
+        onMouseDown={handleResizeStart}
+        onTouchStart={handleResizeStart}
+        onDoubleClick={handleResizeDoubleClick}
+      />
       <div className="sidebar-header">
         <div className={`sidebar-server-icon ${server?.customIcon ? 'has-custom-icon' : ''}`}>{serverIcon}</div>
         <span className="sidebar-server-name">{server?.name || 'Nexus'}</span>
-        <button className="sidebar-activity-btn" onClick={onToggleActivity} title="Activity">
-          <ActivityToggleIcon size={16} />
-          {activityCount > 0 && <span className="sidebar-activity-badge">{activityCount > 9 ? '9+' : activityCount}</span>}
-        </button>
         <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('server-settings')} title="Server settings">
           <SettingsIcon size={16} color="currentColor" />
         </button>

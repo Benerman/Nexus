@@ -5,7 +5,8 @@
   "description": "Integration tests for Nexus server API and Socket.IO",
   "scripts": {
     "test": "jest --forceExit --detectOpenHandles",
-    "test:ci": "jest --forceExit --detectOpenHandles --ci --verbose"
+    "test:ci": "jest --forceExit --detectOpenHandles --ci --verbose",
+    "posttest": "[ -z \"$CI\" ] && node ../../server/scripts/cleanup-users.js || true"
   },
   "devDependencies": {
     "jest": "^29.7.0",

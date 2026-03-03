@@ -270,6 +270,27 @@ module.exports = function(io, socket) {
     }
   });
 
+  // ─── User search (for New Message flow) ──────────────────────────────────────
+  socket.on('user:search', async ({ query }, callback) => {
+    const user = state.users[socket.id];
+    if (!user || user.isGuest) {
+      if (typeof callback === 'function') callback({ error: 'Authentication required' });
+      return;
+    }
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      if (typeof callback === 'function') callback({ users: [] });
+      return;
+    }
+    try {
+      const results = await db.searchAccountsByUsername(query.trim(), 20);
+      const filtered = results.filter(a => a.id !== user.id);
+      if (typeof callback === 'function') callback({ users: filtered });
+    } catch (err) {
+      console.error('[User] Search error:', err.message);
+      if (typeof callback === 'function') callback({ error: 'Search failed' });
+    }
+  });
+
   socket.on('user:change-password', async ({ currentPassword, newPassword }) => {
     const user = state.users[socket.id];
     if (!user || user.isGuest) {
