@@ -2,13 +2,16 @@ name: Deploy Dev Environment
 
 on:
   push:
-    branches: [dev, develop, staging]
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+    types: [closed]
   workflow_dispatch:
     inputs:
       branch:
         description: 'Branch to deploy'
         required: false
-        default: ''
+        default: 'develop'
 
 concurrency:
   group: deploy-dev
@@ -16,6 +19,8 @@ concurrency:
 
 jobs:
   deploy-dev:
+    # Skip closed-but-not-merged PRs; always run on push and workflow_dispatch
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: [self-hosted, linux]
     timeout-minutes: 15
 
