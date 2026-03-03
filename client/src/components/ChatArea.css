@@ -1372,9 +1372,16 @@
 
 /* ── Mobile ───────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Chat header hidden on mobile — mobile nav bar shows channel info */
+  /* Chat header: hide channel info (shown in mobile nav bar), keep only for thread view */
   .chat-header {
     display: none;
+  }
+  /* Show chat header when in thread view (thread panel back button) */
+  .chat-area--thread-view .chat-header {
+    display: flex;
+    height: 44px;
+    padding: 0 8px;
+    gap: 4px;
   }
   .chat-header-name {
     flex-shrink: 1;
@@ -1382,6 +1389,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 14px;
   }
   .chat-header-actions {
     flex-shrink: 0;
@@ -1401,6 +1409,12 @@
   .chat-header-desc,
   .chat-header-topic {
     display: none;
+  }
+
+  /* Side panels (pinned, threads, search): full-width overlay on mobile */
+  .chat-side-panel {
+    width: 100% !important;
+    border-left: none !important;
   }
 
   /* Message actions: show on tap via .mobile-actions-visible */
@@ -1508,6 +1522,13 @@
   /* Pending attachments */
   .pending-attachment { width: 60px; height: 60px; }
   .remove-attachment { width: 24px; height: 24px; font-size: 14px; }
+
+  /* Thread & panel close buttons - larger touch targets */
+  .chat-side-panel button[title="✕"],
+  .chat-side-panel button:last-child {
+    min-width: 36px;
+    min-height: 36px;
+  }
 }
 
 /* ─── Message Request Banner ──────────────────────────────────────────────── */

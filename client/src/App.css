@@ -214,9 +214,11 @@
     border: none;
     color: var(--text-muted);
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 8px 8px;
     cursor: pointer;
     border-radius: 4px;
+    min-width: 0;
+    flex-shrink: 1;
   }
   .mobile-nav-left:active, .mobile-nav-right:active {
     background: var(--bg-modifier-hover);
@@ -229,7 +231,7 @@
   .mobile-nav-channel {
     font-weight: 600;
     color: var(--text-normal);
-    max-width: 160px;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -237,6 +239,34 @@
   .mobile-nav-online {
     font-size: 12px;
     color: var(--text-muted);
+  }
+  .mobile-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .mobile-nav-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 32px;
+    min-height: 32px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .mobile-nav-action-btn:active {
+    background: var(--bg-modifier-hover);
+  }
+  .mobile-nav-action-btn.active {
+    background: rgba(237, 66, 69, 0.2);
+    color: #ed4245;
   }
   .mobile-nav-activity {
     position: relative;
@@ -424,9 +454,11 @@
     border: none;
     color: var(--text-muted);
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 8px 8px;
     cursor: pointer;
     border-radius: 4px;
+    min-width: 0;
+    flex-shrink: 1;
   }
   .mobile-nav-left:active, .mobile-nav-right:active {
     background: var(--bg-modifier-hover);
@@ -439,7 +471,7 @@
   .mobile-nav-channel {
     font-weight: 600;
     color: var(--text-normal);
-    max-width: 160px;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
