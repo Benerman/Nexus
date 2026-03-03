@@ -155,8 +155,17 @@
   padding-top: 2px;
 }
 
-.message:hover {
-  background: var(--bg-modifier-hover);
+/* Only apply hover effects on devices with true hover (mouse/trackpad).
+   Touch devices trigger sticky :hover on tap, which would make hidden
+   action buttons clickable before the JS tap handler runs. */
+@media (hover: hover) {
+  .message:hover {
+    background: var(--bg-modifier-hover);
+  }
+  .message:hover .message-actions {
+    opacity: 1;
+    pointer-events: all;
+  }
 }
 
 .message.highlighted {
@@ -176,11 +185,6 @@
 @keyframes toastFadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-
-.message:hover .message-actions {
-  opacity: 1;
-  pointer-events: all;
 }
 
 .message-avatar {
@@ -369,19 +373,9 @@
   line-height: 1;
 }
 
-.reply-action-btn:hover,
-.reaction-btn:hover,
-.message-options-btn:hover {
-  background: var(--bg-modifier-hover);
-}
-
 .reply-action-btn {
   color: var(--text-muted);
   opacity: 0.8;
-}
-.reply-action-btn:hover {
-  opacity: 1;
-  color: var(--text-normal);
 }
 
 .message-options-btn {
@@ -392,9 +386,20 @@
   opacity: 0.8;
 }
 
-.message-options-btn:hover {
-  opacity: 1;
-  color: var(--text-normal);
+@media (hover: hover) {
+  .reply-action-btn:hover,
+  .reaction-btn:hover,
+  .message-options-btn:hover {
+    background: var(--bg-modifier-hover);
+  }
+  .reply-action-btn:hover {
+    opacity: 1;
+    color: var(--text-normal);
+  }
+  .message-options-btn:hover {
+    opacity: 1;
+    color: var(--text-normal);
+  }
 }
 
 .reaction-picker {
@@ -1435,6 +1440,9 @@
   .message .message-actions {
     opacity: 0;
     pointer-events: none;
+  }
+  .message.mobile-actions-visible {
+    background: var(--bg-modifier-hover);
   }
   .message.mobile-actions-visible .message-actions {
     opacity: 1;
