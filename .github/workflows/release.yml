@@ -49,7 +49,7 @@ jobs:
             | macOS (Intel) | `.dmg` |
             | Linux | `.AppImage`, `.deb` |
             | iOS | `.ipa` or unsigned `.zip` |
-            | Android | `.apk` |
+            | Android | `.aab` (Play Store) |
 
             ## What's Changed
             See the full changelog in the commit history.
@@ -340,31 +340,31 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore
 
-      - name: Build signed release APK
+      - name: Build signed release AAB
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease \
+          ./gradlew bundleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/nexus-release.keystore \
             -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
             -Pandroid.injected.signing.key.alias=nexus-key \
             -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
 
-      - name: Verify APK exists
-        id: find-apk
+      - name: Verify AAB exists
+        id: find-aab
         run: |
-          echo "=== All APK files produced ==="
-          find client/android -name "*.apk" -type f
-          APK_PATH=$(find client/android/app/build/outputs/apk -name "*.apk" -type f | head -1)
-          if [ -z "$APK_PATH" ]; then
-            echo "::error::No APK file found after build!"
+          echo "=== All AAB files produced ==="
+          find client/android -name "*.aab" -type f
+          AAB_PATH=$(find client/android/app/build/outputs/bundle -name "*.aab" -type f | head -1)
+          if [ -z "$AAB_PATH" ]; then
+            echo "::error::No AAB file found after build!"
             exit 1
           fi
-          echo "Found APK: $APK_PATH"
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found AAB: $AAB_PATH"
+          echo "aab_path=$AAB_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK to release
+      - name: Upload AAB to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          files: ${{ steps.find-apk.outputs.apk_path }}
+          files: ${{ steps.find-aab.outputs.aab_path }}
