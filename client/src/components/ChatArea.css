@@ -1436,15 +1436,11 @@
     animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Message actions: show on tap via .mobile-actions-visible */
-  .message .message-actions {
-    opacity: 0;
-    pointer-events: none;
-  }
+  /* Message actions: conditionally rendered on mobile via JS */
   .message.mobile-actions-visible {
     background: var(--bg-modifier-hover);
   }
-  .message.mobile-actions-visible .message-actions {
+  .message .message-actions {
     opacity: 1;
     pointer-events: all;
   }

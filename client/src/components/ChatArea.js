@@ -324,7 +324,6 @@ const ChatArea = React.memo(function ChatArea({
   const [highlightedMessageId, setHighlightedMessageId] = useState(null); // message to highlight
   const [mobileActionsId, setMobileActionsId] = useState(null); // message id with visible actions on mobile
   const mobileActionsTimerRef = useRef(null);
-  const mobileActionsShowTimeRef = useRef(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [addMemberSearch, setAddMemberSearch] = useState('');
@@ -988,7 +987,6 @@ const ChatArea = React.memo(function ChatArea({
     setMobileActionsId(prev => {
       const next = prev === msgId ? null : msgId;
       if (next) {
-        mobileActionsShowTimeRef.current = Date.now();
         mobileActionsTimerRef.current = setTimeout(() => setMobileActionsId(null), 4000);
       }
       return next;
@@ -1564,13 +1562,8 @@ const ChatArea = React.memo(function ChatArea({
                     </div>
                   )}
                 </div>
-                {!isEditing && (
-                  <div className="message-actions" onClickCapture={e => {
-                    if ('ontouchstart' in window && Date.now() - mobileActionsShowTimeRef.current < 400) {
-                      e.stopPropagation();
-                      e.preventDefault();
-                    }
-                  }}>
+                {!isEditing && (!('ontouchstart' in window) || mobileActionsId === msg.id) && (
+                  <div className="message-actions">
                     <button className="reply-action-btn"
                       onClick={e=>{e.stopPropagation();handleReplyToMessage(msg);}}
                       title="Reply">↩</button>
