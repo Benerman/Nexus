@@ -88,12 +88,12 @@
   gap: 8px;
   padding: 4px 8px 4px 12px;
   margin: 0 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--channels-default);
   font-size: 15px;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition: background var(--transition-speed) var(--transition-fn), color var(--transition-speed) var(--transition-fn);
   text-align: left;
   width: calc(100% - 16px);
 }
@@ -230,12 +230,12 @@
   width: 100%;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   font-size: 14px;
   color: var(--text-normal);
   font-family: var(--font-primary);
-  transition: background 0.15s;
+  transition: background var(--transition-speed) var(--transition-fn);
 }
 
 .dm-search-input::placeholder {
@@ -280,9 +280,9 @@
   gap: 12px;
   padding: 8px 12px;
   margin: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s, padding-left 0.15s;
+  transition: background var(--transition-speed) var(--transition-fn), padding-left var(--transition-speed) var(--transition-fn);
   position: relative;
 }
 
@@ -467,9 +467,9 @@
   align-items: center;
   gap: 12px;
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-speed) var(--transition-fn);
 }
 .dm-friend-item:hover {
   background: var(--bg-modifier-hover);
@@ -643,7 +643,7 @@
 /* DM context menu in sidebar */
 .dm-sidebar-ctx-menu {
   background: var(--bg-floating, #18191c);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
   min-width: 190px;
   padding: 6px;

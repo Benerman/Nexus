@@ -1,0 +1,33 @@
+# Coturn STUN/TURN server — production overlay
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.coturn.yml up -d --build
+#
+# Required env vars:
+#   TURN_SECRET  — shared secret for ephemeral TURN credentials
+#
+# Optional env vars:
+#   TURN_HOST    — public IP/hostname for STUN/TURN URLs (default: localhost)
+#
+# Ports to open in firewall:
+#   3478/udp+tcp  — STUN/TURN signaling
+#   49152-49252/udp — TURN relay media
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: nexus-coturn
+    network_mode: host
+    environment:
+      - TURN_SECRET=${TURN_SECRET:?TURN_SECRET must be set}
+    command: >
+      -n --realm=nexus --use-auth-secret
+      --static-auth-secret=$${TURN_SECRET}
+      --listening-port=3478 --min-port=49152 --max-port=49252
+      --no-cli --no-tls --no-dtls --fingerprint --lt-cred-mech
+      --log-file=stdout
+    restart: unless-stopped
+
+  server:
+    environment:
+      - STUN_URLS=stun:${TURN_HOST:-localhost}:3478
+      - TURN_URL=turn:${TURN_HOST:-localhost}:3478
+      - TURN_SECRET=${TURN_SECRET:?TURN_SECRET must be set}

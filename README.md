@@ -80,6 +80,7 @@ Combine operators with free text: `hello world from:alice in:general has:link`
 - Mute and deafen controls with state persistence
 - Custom intro/exit sounds per user
 - Soundboard with 16 built-in sounds and custom upload support
+- Self-hosted STUN/TURN support with bundled coturn option
 
 ### Direct Messaging
 - 1-on-1 and group DMs (3+ participants)
@@ -250,6 +251,9 @@ Copy `.env.example` to `.env` and configure:
 | `SESSION_EXPIRY` | `604800000` | Token TTL (7 days) |
 | `RATE_LIMIT_MESSAGES` | `10` | Messages per rate window |
 | `RATE_LIMIT_WINDOW` | `10000` | Rate window (10 seconds) |
+| `STUN_URLS` | `stun:stun.l.google.com:19302,...` | STUN server URLs (comma-separated) |
+| `TURN_URL` | _(empty)_ | TURN server URL for relay |
+| `TURN_SECRET` | _(empty)_ | Shared secret for ephemeral TURN credentials |
 
 ---
 
@@ -334,6 +338,24 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 
 ---
 
+## LAN Mode
+
+Nexus can run fully offline on a local network with no external dependencies.
+
+- **Per-server toggle** in Server Settings → Channels (owner/admin only)
+- **Disables** GIF picker, URL previews, and external STUN servers
+- **Self-hosted fonts** — no Google Fonts dependency (fonts are bundled)
+- **Voice on LAN** works out of the box on the same subnet; for cross-subnet voice, pair with self-hosted coturn
+
+For full STUN/TURN configuration options, see [docs/STUN_TURN.md](docs/STUN_TURN.md).
+
+```bash
+# Start with self-hosted STUN/TURN for offline voice across subnets
+docker-compose -f docker-compose.yml -f docker-compose.coturn.yml up -d --build
+```
+
+---
+
 ## Cross-Platform (Planned)
 
 Build pipeline configured for:
@@ -353,6 +375,7 @@ See [docs/CROSS_PLATFORM_PLAN.md](docs/CROSS_PLATFORM_PLAN.md) for details.
 - [PRODUCTION_HARDENING.md](docs/PRODUCTION_HARDENING.md) - Security hardening checklist
 - [CHANGELOG.md](docs/CHANGELOG.md) - Version history
 - [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) - Implementation notes
+- [STUN_TURN.md](docs/STUN_TURN.md) - STUN/TURN and LAN mode configuration
 
 ---
 

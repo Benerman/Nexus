@@ -34,7 +34,7 @@
 
 .global-error {
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-  background: var(--red); color: #fff; padding: 8px 24px; border-radius: 6px;
+  background: var(--red); color: #fff; padding: 8px 24px; border-radius: var(--radius-sm);
   font-size: 14px; font-weight: 600; z-index: 9999; animation: popIn 0.2s ease;
   pointer-events: none;
 }
@@ -81,8 +81,8 @@
 }
 .empty-state-actions { display: flex; gap: 12px; }
 .empty-state-btn {
-  border: none; border-radius: 6px; padding: 10px 24px;
-  font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+  border: none; border-radius: var(--radius-sm); padding: 10px 24px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: background var(--transition-speed) var(--transition-fn);
 }
 .empty-state-btn-primary {
   background: var(--brand-500, #5865f2); color: #fff;

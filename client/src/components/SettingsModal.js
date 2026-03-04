@@ -11,6 +11,21 @@ import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon,
 const AVATARS=['🐺','🦊','🐱','🐸','🦁','🐙','🦄','🐧','🦅','🐉','🦋','🐻','🦈','🐊','🦖','🦩','🦚','🦜','🐬'];
 const COLORS=['#3B82F6','#57F287','#FEE75C','#EB459E','#ED4245','#60A5FA','#3ba55c','#faa61a','#00b0f4','#e91e63','#9c27b0','#ff5722'];
 
+const THEMES = [
+  { id: 'midnight', name: 'Midnight', description: 'Default dark theme', colors: ['#1a1c1f', '#141618', '#3B82F6', '#dcddde'] },
+  { id: 'retro', name: 'Retro OS', description: 'Early 2000s desktop nostalgia', colors: ['#c0c0c0', '#d4d0c8', '#005bb8', '#000000'] },
+  { id: 'terminal', name: 'Terminal', description: 'Green-on-black hacker CRT', colors: ['#0a0a0a', '#050505', '#00ff00', '#00ff00'] },
+  { id: 'light', name: 'Clean Light', description: 'Minimalist, airy, modern', colors: ['#ffffff', '#f2f3f5', '#0071e3', '#2e3338'] },
+  { id: 'neon', name: 'Neon Green', description: 'Bold dark gaming aesthetic', colors: ['#0e0e0e', '#0a0a0a', '#10e050', '#d0d0d0'] },
+  { id: 'blue', name: 'Midnight Blue', description: 'Deep indigo, cyan accents', colors: ['#06092b', '#040720', '#0070d1', '#c8d0e0'] },
+  { id: 'cherry', name: 'Cherry Red', description: 'Warm, playful, friendly', colors: ['#1f1114', '#180c0f', '#e63c3c', '#e0c8cc'] },
+  { id: 'amber', name: 'Amber CRT', description: 'Amber phosphor IBM terminal', colors: ['#0a0800', '#050400', '#ffb000', '#ffb000'] },
+  { id: 'synthwave', name: 'Synthwave', description: 'Outrun retrowave neon', colors: ['#0f0a1a', '#0a0612', '#ff2975', '#f0e0ff'] },
+  { id: 'vaporwave', name: 'Vaporwave', description: 'A E S T H E T I C pastel', colors: ['#1a0e2e', '#140a28', '#ff71ce', '#e8d0f0'] },
+  { id: 'forest', name: 'Forest', description: 'Deep earthy greens and gold', colors: ['#111a0e', '#0a1208', '#d4a030', '#c8d0b0'] },
+  { id: 'cyberpunk', name: 'Cyberpunk', description: 'Neon yellow on dark', colors: ['#0a0a0c', '#060608', '#f0e000', '#f0e000'] },
+];
+
 // Parse color from various formats (hex, rgb, hsl) into hex
 function parseColorInput(input) {
   if (!input) return null;
@@ -55,6 +70,136 @@ function parseColorInput(input) {
   }
   return null;
 }
+
+// ── Color utilities for custom themes ──
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return { r: parseInt(h.slice(0,2),16), g: parseInt(h.slice(2,4),16), b: parseInt(h.slice(4,6),16) };
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r,g,b].map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2,'0')).join('');
+}
+
+function luminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const [rs, gs, bs] = [r,g,b].map(c => { c /= 255; return c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); });
+  return 0.2126*rs + 0.7152*gs + 0.0722*bs;
+}
+
+function adjustBrightness(hex, pct) {
+  const { r, g, b } = hexToRgb(hex);
+  const f = 1 + pct / 100;
+  return rgbToHex(r*f, g*f, b*f);
+}
+
+function hexToRgba(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function generateThemeCSS(themeId, colors) {
+  const { bgPrimary, bgSecondary, bgFloating, textPrimary, textSecondary, textLink, accent, success, warning, danger } = colors;
+  const isDark = luminance(bgPrimary) < 0.2;
+  const bgTertiary = adjustBrightness(bgPrimary, isDark ? -15 : 8);
+  const accentDark = adjustBrightness(accent, -15);
+
+  const modHover = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+  const modActive = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.14)';
+  const modSelected = hexToRgba(accent, 0.3);
+
+  const headerPrimary = isDark ? '#ffffff' : '#000000';
+  const headerSecondary = isDark ? adjustBrightness(textPrimary, -15) : adjustBrightness(textPrimary, 15);
+
+  const channelDefault = textSecondary;
+  const interactiveNormal = isDark ? adjustBrightness(textPrimary, -10) : adjustBrightness(textPrimary, 10);
+  const interactiveHover = textPrimary;
+  const interactiveActive = headerPrimary;
+  const interactiveMuted = isDark ? adjustBrightness(textSecondary, -20) : adjustBrightness(textSecondary, 20);
+
+  const scrollThumb = isDark ? adjustBrightness(bgPrimary, 30) : adjustBrightness(bgPrimary, -20);
+
+  const borderAlpha = isDark ? '255,255,255' : '0,0,0';
+  const elevLow = isDark
+    ? '0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05)'
+    : '0 1px 2px rgba(0,0,0,0.1)';
+  const elevMed = '0 4px 4px rgba(0,0,0,0.16)';
+  const elevHigh = '0 8px 16px rgba(0,0,0,0.24)';
+
+  return `[data-theme="${themeId}"] {
+  --bg-primary: ${bgPrimary};
+  --bg-secondary: ${bgSecondary};
+  --bg-tertiary: ${bgTertiary};
+  --bg-modifier-hover: ${modHover};
+  --bg-modifier-active: ${modActive};
+  --bg-modifier-selected: ${modSelected};
+  --bg-floating: ${bgFloating};
+  --text-normal: ${textPrimary};
+  --text-muted: ${textSecondary};
+  --text-link: ${textLink};
+  --text-positive: ${success};
+  --text-warning: ${warning};
+  --text-danger: ${danger};
+  --header-primary: ${headerPrimary};
+  --header-secondary: ${headerSecondary};
+  --brand-500: ${accent};
+  --brand-600: ${accentDark};
+  --brand-experiment: ${accent};
+  --brand-primary: ${accent};
+  --green: ${success};
+  --red: ${danger};
+  --yellow: ${warning};
+  --channel-default: ${channelDefault};
+  --channels-default: ${channelDefault};
+  --interactive-normal: ${interactiveNormal};
+  --interactive-hover: ${interactiveHover};
+  --interactive-active: ${interactiveActive};
+  --interactive-muted: ${interactiveMuted};
+  --scrollbar-thin-thumb: ${scrollThumb};
+  --scrollbar-thin-track: transparent;
+  --elevation-low: ${elevLow};
+  --elevation-medium: ${elevMed};
+  --elevation-high: ${elevHigh};
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --border-subtle: 1px solid rgba(${borderAlpha},0.06);
+  --border-prominent: 1px solid rgba(${borderAlpha},0.12);
+  --border-input: 1px solid rgba(${borderAlpha},0.07);
+  --transition-speed: 0.15s;
+  --transition-fn: ease;
+  --button-shadow: none;
+  --input-shadow: none;
+}`;
+}
+
+const DEFAULT_CUSTOM_COLORS = {
+  bgPrimary: '#1a1c1f', bgSecondary: '#141618', bgFloating: '#18191c',
+  textPrimary: '#dcddde', textSecondary: '#72767d', textLink: '#00b0f4',
+  accent: '#3B82F6',
+  success: '#3ba55c', warning: '#faa61a', danger: '#ed4245'
+};
+
+const COLOR_FIELDS = [
+  { group: 'Backgrounds', fields: [
+    { key: 'bgPrimary', label: 'Primary Background' },
+    { key: 'bgSecondary', label: 'Secondary Background' },
+    { key: 'bgFloating', label: 'Floating/Popup' },
+  ]},
+  { group: 'Text', fields: [
+    { key: 'textPrimary', label: 'Primary Text' },
+    { key: 'textSecondary', label: 'Muted Text' },
+    { key: 'textLink', label: 'Links' },
+  ]},
+  { group: 'Accent', fields: [
+    { key: 'accent', label: 'Accent Color' },
+  ]},
+  { group: 'Status', fields: [
+    { key: 'success', label: 'Success' },
+    { key: 'warning', label: 'Warning' },
+    { key: 'danger', label: 'Danger' },
+  ]},
+];
 
 // Channel type icons
 function HashIcon() {
@@ -449,6 +594,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [modLoading, setModLoading] = useState(false);
   const [modSearch, setModSearch] = useState('');
 
+  // AutoMod
+  const [automodRules, setAutomodRules] = useState([]);
+  const [automodLoading, setAutomodLoading] = useState(false);
+  const [automodEditing, setAutomodEditing] = useState(null);
+  const [automodForm, setAutomodForm] = useState({ name: '', ruleType: 'keyword', action: 'block', config: {}, exemptRoles: [], exemptChannels: [], timeoutDuration: 60 });
+  const [automodTestInput, setAutomodTestInput] = useState('');
+  const [automodTestResult, setAutomodTestResult] = useState(null);
+
   // Audit Log
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -483,6 +636,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [emojiForm, setEmojiForm] = useState({ name: '', file: null, preview: null });
   const [emojiSaving, setEmojiSaving] = useState(false);
   const [emojiSharing, setEmojiSharing] = useState(server?.emojiSharing || false);
+  const [lanMode, setLanMode] = useState(server?.lanMode || false);
   const emojiFileRef = useRef(null);
 
   // ICE / STUN/TURN config (owner-only)
@@ -494,6 +648,20 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [iceTurnSecret, setIceTurnSecret] = useState('');
   const [iceSaving, setIceSaving] = useState(false);
   const [iceSaved, setIceSaved] = useState(false);
+
+  // Theme
+  const [currentTheme, setCurrentTheme] = useState(() => localStorage.getItem('nexus_theme') || 'midnight');
+
+  // Custom Themes
+  const [customThemes, setCustomThemes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nexus_custom_themes') || '[]'); } catch { return []; }
+  });
+  const [editingTheme, setEditingTheme] = useState(null); // null or theme object being edited
+  const [themeEditorColors, setThemeEditorColors] = useState({ ...DEFAULT_CUSTOM_COLORS });
+  const [themeEditorName, setThemeEditorName] = useState('');
+  const [themeEditorDesc, setThemeEditorDesc] = useState('');
+  const themeBeforePreview = useRef(null);
+  const importFileRef = useRef(null);
 
   // About / Updates
   const [updateStatus, setUpdateStatus] = useState('');
@@ -529,10 +697,25 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     if (!socket) return;
     const h = ({webhook})=>setCreatedWebhook(webhook);
     socket.on('webhook:created', h);
-    const handlePasswordChanged = ({ success, error }) => {
+    const handlePasswordChanged = async ({ success, error }) => {
       clearTimeout(passwordTimeoutRef.current);
       setPasswordLoading(false);
       if (success) {
+        // Re-encrypt E2E private key with the new password
+        try {
+          const encryptedSK = localStorage.getItem('nexus_e2e_encrypted_private_key');
+          if (encryptedSK && currentPassword && newPassword) {
+            const { initSodium, decryptPrivateKey, encryptPrivateKey } = require('../utils/encryption');
+            await initSodium();
+            const sk = decryptPrivateKey(encryptedSK, currentPassword);
+            if (sk) {
+              const reEncrypted = encryptPrivateKey(sk, newPassword);
+              localStorage.setItem('nexus_e2e_encrypted_private_key', reEncrypted);
+            }
+          }
+        } catch (err) {
+          console.warn('[E2E] Failed to re-encrypt private key:', err.message);
+        }
         setPasswordSuccess(true);
         setCurrentPassword('');
         setNewPassword('');
@@ -609,8 +792,181 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       noise_cancellation_enabled: localStorage.getItem('nexus_noise_cancellation_enabled') || 'true',
       noise_cancellation_aggressiveness: localStorage.getItem('nexus_noise_cancellation_aggressiveness') || 'medium',
       sidebar_width: localStorage.getItem('nexus_sidebar_width') || '240',
+      theme: localStorage.getItem('nexus_theme') || 'midnight',
+      custom_themes: JSON.parse(localStorage.getItem('nexus_custom_themes') || '[]'),
     };
     socket.emit('user:settings-update', { settings });
+  };
+
+  const handleThemeChange = (themeId) => {
+    setCurrentTheme(themeId);
+    localStorage.setItem('nexus_theme', themeId);
+    if (themeId === 'midnight') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', themeId);
+    }
+    syncSettingsToServer();
+  };
+
+  // ── Custom theme helpers ──
+  const saveCustomThemes = (themes) => {
+    setCustomThemes(themes);
+    localStorage.setItem('nexus_custom_themes', JSON.stringify(themes));
+    if (window.__injectCustomThemeStyles) window.__injectCustomThemeStyles();
+    syncSettingsToServer();
+  };
+
+  const handleCreateTheme = () => {
+    themeBeforePreview.current = currentTheme;
+    setEditingTheme({ id: null });
+    setThemeEditorColors({ ...DEFAULT_CUSTOM_COLORS });
+    setThemeEditorName('');
+    setThemeEditorDesc('');
+    // Apply live preview
+    const previewCSS = generateThemeCSS('custom-preview', DEFAULT_CUSTOM_COLORS);
+    let el = document.getElementById('nexus-custom-preview');
+    if (!el) { el = document.createElement('style'); el.id = 'nexus-custom-preview'; document.head.appendChild(el); }
+    el.textContent = previewCSS;
+    document.documentElement.setAttribute('data-theme', 'custom-preview');
+  };
+
+  const handleEditTheme = (theme) => {
+    themeBeforePreview.current = currentTheme;
+    setEditingTheme(theme);
+    setThemeEditorColors({ ...theme.colors });
+    setThemeEditorName(theme.name);
+    setThemeEditorDesc(theme.description || '');
+    // Apply live preview
+    const previewCSS = generateThemeCSS('custom-preview', theme.colors);
+    let el = document.getElementById('nexus-custom-preview');
+    if (!el) { el = document.createElement('style'); el.id = 'nexus-custom-preview'; document.head.appendChild(el); }
+    el.textContent = previewCSS;
+    document.documentElement.setAttribute('data-theme', 'custom-preview');
+  };
+
+  const handleThemeEditorColorChange = (key, value) => {
+    const parsed = parseColorInput(value);
+    const newColors = { ...themeEditorColors, [key]: parsed || value };
+    setThemeEditorColors(newColors);
+    if (parsed) {
+      const previewCSS = generateThemeCSS('custom-preview', newColors);
+      let el = document.getElementById('nexus-custom-preview');
+      if (!el) { el = document.createElement('style'); el.id = 'nexus-custom-preview'; document.head.appendChild(el); }
+      el.textContent = previewCSS;
+    }
+  };
+
+  const handleCancelThemeEditor = () => {
+    setEditingTheme(null);
+    // Remove preview style
+    const el = document.getElementById('nexus-custom-preview');
+    if (el) el.textContent = '';
+    // Restore previous theme
+    const prev = themeBeforePreview.current || 'midnight';
+    if (prev === 'midnight') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', prev);
+    }
+    themeBeforePreview.current = null;
+  };
+
+  const handleSaveTheme = () => {
+    const name = themeEditorName.trim();
+    if (!name) return;
+    // Validate all colors are valid hex
+    for (const key of Object.keys(DEFAULT_CUSTOM_COLORS)) {
+      if (!parseColorInput(themeEditorColors[key])) return;
+    }
+    const isNew = !editingTheme.id;
+    const themeId = isNew ? `custom-${crypto.randomUUID()}` : editingTheme.id;
+    const css = generateThemeCSS(themeId, themeEditorColors);
+    const theme = {
+      id: themeId,
+      name,
+      description: themeEditorDesc.trim(),
+      colors: { ...themeEditorColors },
+      css,
+      createdAt: isNew ? Date.now() : (editingTheme.createdAt || Date.now()),
+    };
+    const updated = isNew
+      ? [...customThemes, theme]
+      : customThemes.map(t => t.id === themeId ? theme : t);
+    saveCustomThemes(updated);
+    setEditingTheme(null);
+    // Remove preview style and apply the saved theme
+    const el = document.getElementById('nexus-custom-preview');
+    if (el) el.textContent = '';
+    handleThemeChange(themeId);
+    themeBeforePreview.current = null;
+  };
+
+  const handleDeleteTheme = (themeId) => {
+    const updated = customThemes.filter(t => t.id !== themeId);
+    saveCustomThemes(updated);
+    if (currentTheme === themeId) {
+      handleThemeChange('midnight');
+    }
+  };
+
+  const handleExportTheme = (theme) => {
+    const data = {
+      nexus_theme: true,
+      version: 1,
+      name: theme.name,
+      description: theme.description || '',
+      colors: { ...theme.colors },
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${theme.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.nexus-theme.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportTheme = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data.nexus_theme || !data.colors) {
+          showActionError('Invalid theme file: missing nexus_theme marker or colors');
+          return;
+        }
+        // Validate all 10 color fields
+        for (const key of Object.keys(DEFAULT_CUSTOM_COLORS)) {
+          if (!data.colors[key] || !parseColorInput(data.colors[key])) {
+            showActionError(`Invalid theme file: missing or invalid color "${key}"`);
+            return;
+          }
+        }
+        const themeId = `custom-${crypto.randomUUID()}`;
+        const colors = {};
+        for (const key of Object.keys(DEFAULT_CUSTOM_COLORS)) {
+          colors[key] = parseColorInput(data.colors[key]);
+        }
+        const css = generateThemeCSS(themeId, colors);
+        const theme = {
+          id: themeId,
+          name: data.name || 'Imported Theme',
+          description: data.description || '',
+          colors,
+          css,
+          createdAt: Date.now(),
+        };
+        saveCustomThemes([...customThemes, theme]);
+      } catch {
+        showActionError('Failed to parse theme file');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be re-imported
+    e.target.value = '';
   };
 
   // ── Soundboard helpers ──
@@ -728,7 +1084,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const loadModData = () => {
     if (!socket || !server) return;
     setModLoading(true);
-    let pending = 3;
+    let pending = 4;
     const done = () => { pending--; if (pending <= 0) setModLoading(false); };
     emitWithTimeout(socket, 'moderation:get-bans', { serverId: server.id }, (r) => {
       if (r?.bans) setModBans(r.bans);
@@ -740,6 +1096,10 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     });
     emitWithTimeout(socket, 'moderation:get-reports', { serverId: server.id }, (r) => {
       if (r?.reports) setModReports(r.reports);
+      done();
+    });
+    emitWithTimeout(socket, 'automod:get-rules', { serverId: server.id }, (r) => {
+      if (r?.rules) setAutomodRules(r.rules);
       done();
     });
   };
@@ -765,6 +1125,65 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     emitWithTimeout(socket, 'moderation:update-report', { reportId, status: newStatus }, (r) => {
       if (r?.error) { showActionError(r.error); return; }
       setModReports(prev => prev.map(rp => rp.id === reportId ? { ...rp, status: newStatus, resolved_at: new Date().toISOString() } : rp));
+    });
+  };
+
+  // ── AutoMod helpers ────────────────────────────────────────────────────
+  const resetAutomodForm = () => {
+    setAutomodForm({ name: '', ruleType: 'keyword', action: 'block', config: {}, exemptRoles: [], exemptChannels: [], timeoutDuration: 60 });
+    setAutomodEditing(null);
+    setAutomodTestInput('');
+    setAutomodTestResult(null);
+  };
+
+  const handleAutomodCreate = () => {
+    if (!socket || !server) return;
+    const { name, ruleType, action, config, exemptRoles, exemptChannels, timeoutDuration } = automodForm;
+    if (!name.trim()) { showActionError('Rule name is required'); return; }
+    emitWithTimeout(socket, 'automod:create-rule', {
+      serverId: server.id, name: name.trim(), ruleType, action, config, exemptRoles, exemptChannels, timeoutDuration
+    }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      if (r?.rule) setAutomodRules(prev => [...prev, r.rule]);
+      resetAutomodForm();
+    });
+  };
+
+  const handleAutomodUpdate = (ruleId, updates) => {
+    if (!socket || !server) return;
+    emitWithTimeout(socket, 'automod:update-rule', { serverId: server.id, ruleId, updates }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      if (r?.rule) setAutomodRules(prev => prev.map(ru => ru.id === ruleId ? r.rule : ru));
+      if (automodEditing === ruleId) resetAutomodForm();
+    });
+  };
+
+  const handleAutomodDelete = (ruleId) => {
+    if (!socket || !server) return;
+    emitWithTimeout(socket, 'automod:delete-rule', { serverId: server.id, ruleId }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setAutomodRules(prev => prev.filter(ru => ru.id !== ruleId));
+    });
+  };
+
+  const handleAutomodTest = () => {
+    if (!socket || !server || !automodTestInput.trim()) return;
+    emitWithTimeout(socket, 'automod:test-rule', {
+      serverId: server.id, ruleType: automodForm.ruleType, config: automodForm.config, testContent: automodTestInput
+    }, (r) => {
+      setAutomodTestResult(r);
+    });
+  };
+
+  const startEditAutomodRule = (rule) => {
+    const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : (rule.config || {});
+    const exemptRoles = typeof rule.exempt_roles === 'string' ? JSON.parse(rule.exempt_roles) : (rule.exempt_roles || []);
+    const exemptChannels = typeof rule.exempt_channels === 'string' ? JSON.parse(rule.exempt_channels) : (rule.exempt_channels || []);
+    setAutomodEditing(rule.id);
+    setAutomodForm({
+      name: rule.name, ruleType: rule.rule_type, action: rule.action,
+      config, exemptRoles, exemptChannels,
+      timeoutDuration: rule.timeout_duration || 60
     });
   };
 
@@ -1625,6 +2044,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     {id:'appearance', label:'Appearance', icon: <SettingsIcon size={16} />},
     {id:'audio', label:'Audio', icon: <VolumeIcon size={16} />},
     {id:'notifications', label:'Notifications', icon: <BellIcon size={16} />},
+    {id:'security', label:'Security', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>},
     {id:'friends', label:'Friends', icon: <FriendsIcon size={16} />},
     {id:'servers', label:'My Servers', icon: <HexagonIcon size={16} />},
     ...(server && !server.isPersonal ? [
@@ -1635,7 +2055,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       ...(userPerms.manageWebhooks || userPerms.admin ? [{id:'webhooks', label:'Webhooks', icon: <LinkIcon size={16} />}] : []),
       ...(userPerms.manageServer || userPerms.admin ? [{id:'soundboard', label:'Soundboard', icon: <SoundboardIcon size={16} />}] : []),
       ...(userPerms.manageEmojis || userPerms.admin ? [{id:'emojis', label:'Emojis', icon: <EmojiIcon size={16} />}] : []),
-      ...(userPerms.admin || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
+      ...(userPerms.admin || userPerms.manageMessages || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
       ...(userPerms.admin || isOwner ? [{id:'audit-log', label:'Audit Log', icon: <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>}] : []),
     ] : []),
     ...(currentUser?.isPlatformAdmin ? [{id:'platform-admin', label:'Platform Admin', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15l-4-4 1.41-1.41L11 13.17l6.59-6.59L19 8l-8 8z"/></svg>}] : []),
@@ -2097,7 +2517,88 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
           {tab==='appearance' && (
             <div className="settings-section">
               <h2>Appearance</h2>
-              <p className="settings-hint">Theme customization coming soon.</p>
+              <p className="settings-hint">Choose a theme for Nexus.</p>
+
+              <h3 style={{marginTop:16,marginBottom:8}}>Built-in Themes</h3>
+              <div className="theme-grid">
+                {THEMES.map(theme => (
+                  <button
+                    key={theme.id}
+                    className={`theme-card${currentTheme === theme.id ? ' active' : ''}`}
+                    onClick={() => handleThemeChange(theme.id)}
+                  >
+                    {currentTheme === theme.id && <span className="theme-check">✓</span>}
+                    <div className="theme-swatches">
+                      {theme.colors.map((color, i) => (
+                        <div key={i} className="theme-swatch" style={{ background: color }} />
+                      ))}
+                    </div>
+                    <div className="theme-name">{theme.name}</div>
+                    <div className="theme-desc">{theme.description}</div>
+                  </button>
+                ))}
+              </div>
+
+              <h3 style={{marginTop:24,marginBottom:8}}>Custom Themes</h3>
+              <div className="theme-custom-actions">
+                <button className="settings-btn primary" onClick={handleCreateTheme}>Create Theme</button>
+                <button className="settings-btn" onClick={() => importFileRef.current?.click()}>Import Theme</button>
+                <input ref={importFileRef} type="file" accept=".json" style={{display:'none'}} onChange={handleImportTheme}/>
+              </div>
+
+              {customThemes.length > 0 && (
+                <div className="theme-grid" style={{marginTop:12}}>
+                  {customThemes.map(theme => (
+                    <div key={theme.id} className={`theme-card${currentTheme === theme.id ? ' active' : ''}`}>
+                      <div style={{cursor:'pointer'}} onClick={() => handleThemeChange(theme.id)}>
+                        {currentTheme === theme.id && <span className="theme-check">✓</span>}
+                        <div className="theme-swatches">
+                          {[theme.colors.bgPrimary, theme.colors.bgSecondary, theme.colors.accent, theme.colors.textPrimary].map((color, i) => (
+                            <div key={i} className="theme-swatch" style={{ background: color }} />
+                          ))}
+                        </div>
+                        <div className="theme-name">{theme.name}</div>
+                        <div className="theme-desc">{theme.description || 'Custom theme'}</div>
+                      </div>
+                      <div className="theme-card-actions">
+                        <button className="settings-btn" onClick={() => handleEditTheme(theme)} title="Edit">Edit</button>
+                        <button className="settings-btn" onClick={() => handleExportTheme(theme)} title="Export">Export</button>
+                        <button className="settings-btn danger-sm" onClick={() => handleDeleteTheme(theme.id)} title="Delete">Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {editingTheme && (
+                <div className="theme-editor">
+                  <h3>{editingTheme.id ? 'Edit Theme' : 'Create Theme'}</h3>
+                  <div className="theme-editor-field">
+                    <label>Name</label>
+                    <input className="settings-input" value={themeEditorName} onChange={e => setThemeEditorName(e.target.value)} placeholder="Theme name" maxLength={32}/>
+                  </div>
+                  <div className="theme-editor-field">
+                    <label>Description</label>
+                    <input className="settings-input" value={themeEditorDesc} onChange={e => setThemeEditorDesc(e.target.value)} placeholder="Optional description" maxLength={100}/>
+                  </div>
+                  {COLOR_FIELDS.map(group => (
+                    <div key={group.group} className="theme-editor-group">
+                      <h4>{group.group}</h4>
+                      {group.fields.map(field => (
+                        <div key={field.key} className="color-row">
+                          <label>{field.label}</label>
+                          <input type="color" value={parseColorInput(themeEditorColors[field.key]) || '#000000'} onChange={e => handleThemeEditorColorChange(field.key, e.target.value)}/>
+                          <input className="settings-input color-hex-input" value={themeEditorColors[field.key]} onChange={e => handleThemeEditorColorChange(field.key, e.target.value)} placeholder="#000000" maxLength={7}/>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <div className="theme-editor-actions">
+                    <button className="settings-btn" onClick={handleCancelThemeEditor}>Cancel</button>
+                    <button className="settings-btn primary" onClick={handleSaveTheme} disabled={!themeEditorName.trim()}>Save Theme</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2771,6 +3272,27 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       setEmojiSharing(e.target.checked);
                       if (socket && server) {
                         socket.emit('server:update', { serverId: server.id, emojiSharing: e.target.checked });
+                      }
+                    }} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+              )}
+
+              {/* LAN Mode Toggle */}
+              {(isOwner || userPerms.admin) && (
+                <div className="audio-toggle" style={{ marginTop: 24 }}>
+                  <div>
+                    <div className="audio-toggle-label">LAN Mode</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Disable external network requests (GIF search, URL previews, external STUN servers). Enable for isolated networks.
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={lanMode} onChange={e => {
+                      setLanMode(e.target.checked);
+                      if (socket && server) {
+                        socket.emit('server:update', { serverId: server.id, lanMode: e.target.checked });
                       }
                     }} />
                     <span className="toggle-slider" />
@@ -3926,6 +4448,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 <button className={`mod-section-tab ${modSection==='reports'?'active':''}`} onClick={()=>{setModSection('reports');setModSearch('');}}>
                   Reports ({modReports.length})
                 </button>
+                <button className={`mod-section-tab ${modSection==='automod'?'active':''}`} onClick={()=>{setModSection('automod');setModSearch('');}}>
+                  AutoMod ({automodRules.length})
+                </button>
               </div>
 
               {modLoading && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>Loading...</p>}
@@ -4064,6 +4589,222 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   </div>
                 );
               })()}
+
+              {/* ── AutoMod ── */}
+              {!modLoading && modSection==='automod' && (
+                <div>
+                  <p className="settings-hint" style={{marginBottom:12}}>Configure automated content moderation rules. Messages matching rules will be blocked before delivery.</p>
+
+                  {/* Rule list */}
+                  {automodRules.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No AutoMod rules configured.</p>}
+                  <div className="members-manage-list" style={{marginBottom:16}}>
+                    {automodRules.map(rule => {
+                      const ruleConfig = typeof rule.config === 'string' ? JSON.parse(rule.config) : (rule.config || {});
+                      const typeLabels = { keyword: 'Keyword Filter', spam: 'Spam Detection', invite_link: 'Invite Links', mention_spam: 'Mention Spam' };
+                      return (
+                        <div key={rule.id} className="member-manage-item" style={{flexDirection:'column',alignItems:'stretch',gap:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <span className="member-manage-username">{rule.name}</span>
+                              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                                {typeLabels[rule.rule_type] || rule.rule_type} &middot; Action: {rule.action}
+                                {rule.rule_type === 'keyword' && ruleConfig.words?.length > 0 && <span> &middot; {ruleConfig.words.length} word(s)</span>}
+                              </div>
+                            </div>
+                            <button
+                              className={`settings-btn-small ${rule.enabled ? 'primary' : ''}`}
+                              style={{fontSize:11,padding:'3px 8px',minWidth:54}}
+                              onClick={() => handleAutomodUpdate(rule.id, { enabled: !rule.enabled })}
+                            >
+                              {rule.enabled ? 'Enabled' : 'Disabled'}
+                            </button>
+                            <button className="settings-btn-small" style={{fontSize:11,padding:'3px 8px'}} onClick={() => startEditAutomodRule(rule)}>Edit</button>
+                            <button className="settings-btn-small" style={{fontSize:11,padding:'3px 8px',color:'var(--danger)'}} onClick={() => handleAutomodDelete(rule.id)}>Delete</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add/Edit Rule Form */}
+                  <div style={{background:'var(--bg-tertiary)',borderRadius:8,padding:16}}>
+                    <h3 style={{margin:'0 0 12px',fontSize:14,color:'var(--text-normal)'}}>{automodEditing ? 'Edit Rule' : 'Add Rule'}</h3>
+
+                    <div style={{display:'flex',gap:8,marginBottom:8}}>
+                      <input className="settings-input" placeholder="Rule name" value={automodForm.name}
+                        onChange={e => setAutomodForm(f => ({...f, name: e.target.value}))} style={{flex:1}} />
+                    </div>
+
+                    <div style={{display:'flex',gap:8,marginBottom:8}}>
+                      <select className="settings-input" value={automodForm.ruleType}
+                        disabled={!!automodEditing}
+                        onChange={e => setAutomodForm(f => ({...f, ruleType: e.target.value, config: {}}))}
+                        style={{flex:1}}>
+                        <option value="keyword">Keyword Filter</option>
+                        <option value="spam">Spam Detection</option>
+                        <option value="invite_link">Invite Link Filter</option>
+                        <option value="mention_spam">Mention Spam</option>
+                      </select>
+                      <select className="settings-input" value={automodForm.action}
+                        onChange={e => setAutomodForm(f => ({...f, action: e.target.value}))}
+                        style={{flex:1}}>
+                        <option value="block">Block</option>
+                        <option value="delete">Delete</option>
+                        <option value="warn">Warn</option>
+                        <option value="timeout">Timeout</option>
+                      </select>
+                    </div>
+
+                    {automodForm.action === 'timeout' && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Timeout duration (seconds)</label>
+                        <input className="settings-input" type="number" min="10" max="86400" value={automodForm.timeoutDuration}
+                          onChange={e => setAutomodForm(f => ({...f, timeoutDuration: parseInt(e.target.value) || 60}))}
+                          style={{width:120}} />
+                      </div>
+                    )}
+
+                    {/* Type-specific config */}
+                    {automodForm.ruleType === 'keyword' && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Blocked words (one per line or comma-separated)</label>
+                        <textarea className="settings-input" rows={4}
+                          value={(automodForm.config.words || []).join('\n')}
+                          onChange={e => {
+                            const words = e.target.value.split(/[,\n]/).map(w => w.trim()).filter(Boolean);
+                            setAutomodForm(f => ({...f, config: {...f.config, words}}));
+                          }}
+                          style={{width:'100%',resize:'vertical',fontFamily:'inherit'}} />
+                        <div style={{display:'flex',gap:8,marginTop:4}}>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'flex',alignItems:'center',gap:4}}>
+                            <input type="radio" name="matchMode" checked={(automodForm.config.matchMode || 'substring') === 'substring'}
+                              onChange={() => setAutomodForm(f => ({...f, config: {...f.config, matchMode: 'substring'}}))} />
+                            Substring match
+                          </label>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'flex',alignItems:'center',gap:4}}>
+                            <input type="radio" name="matchMode" checked={automodForm.config.matchMode === 'wholeWord'}
+                              onChange={() => setAutomodForm(f => ({...f, config: {...f.config, matchMode: 'wholeWord'}}))} />
+                            Whole word match
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {automodForm.ruleType === 'spam' && (
+                      <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+                        <div>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Max messages</label>
+                          <input className="settings-input" type="number" min="2" max="20" value={automodForm.config.maxMessages || 5}
+                            onChange={e => setAutomodForm(f => ({...f, config: {...f.config, maxMessages: parseInt(e.target.value) || 5}}))}
+                            style={{width:80}} />
+                        </div>
+                        <div>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Interval (ms)</label>
+                          <input className="settings-input" type="number" min="1000" max="30000" step="1000" value={automodForm.config.intervalMs || 5000}
+                            onChange={e => setAutomodForm(f => ({...f, config: {...f.config, intervalMs: parseInt(e.target.value) || 5000}}))}
+                            style={{width:100}} />
+                        </div>
+                        <div>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Max duplicates</label>
+                          <input className="settings-input" type="number" min="1" max="10" value={automodForm.config.maxDuplicates || 3}
+                            onChange={e => setAutomodForm(f => ({...f, config: {...f.config, maxDuplicates: parseInt(e.target.value) || 3}}))}
+                            style={{width:80}} />
+                        </div>
+                      </div>
+                    )}
+
+                    {automodForm.ruleType === 'mention_spam' && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Max mentions per message</label>
+                        <input className="settings-input" type="number" min="1" max="50" value={automodForm.config.maxMentions || 10}
+                          onChange={e => setAutomodForm(f => ({...f, config: {...f.config, maxMentions: parseInt(e.target.value) || 10}}))}
+                          style={{width:80}} />
+                      </div>
+                    )}
+
+                    {/* Exempt roles */}
+                    {server && Object.keys(server.roles || {}).filter(r => r !== 'everyone').length > 0 && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Exempt roles</label>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {Object.values(server.roles || {}).filter(r => r.id !== 'everyone').map(role => (
+                            <label key={role.id} style={{fontSize:12,color: role.color || 'var(--text-muted)',display:'flex',alignItems:'center',gap:4,padding:'2px 6px',background:'var(--bg-secondary)',borderRadius:4}}>
+                              <input type="checkbox"
+                                checked={(automodForm.exemptRoles || []).includes(role.id)}
+                                onChange={e => {
+                                  const roles = e.target.checked
+                                    ? [...(automodForm.exemptRoles || []), role.id]
+                                    : (automodForm.exemptRoles || []).filter(r => r !== role.id);
+                                  setAutomodForm(f => ({...f, exemptRoles: roles}));
+                                }} />
+                              {role.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Exempt channels */}
+                    {server && server.channels?.text?.length > 0 && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Exempt channels</label>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {(server.channels?.text || []).map(ch => (
+                            <label key={ch.id} style={{fontSize:12,color:'var(--text-muted)',display:'flex',alignItems:'center',gap:4,padding:'2px 6px',background:'var(--bg-secondary)',borderRadius:4}}>
+                              <input type="checkbox"
+                                checked={(automodForm.exemptChannels || []).includes(ch.id)}
+                                onChange={e => {
+                                  const channels = e.target.checked
+                                    ? [...(automodForm.exemptChannels || []), ch.id]
+                                    : (automodForm.exemptChannels || []).filter(c => c !== ch.id);
+                                  setAutomodForm(f => ({...f, exemptChannels: channels}));
+                                }} />
+                              #{ch.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Test (keyword rules) */}
+                    {automodForm.ruleType === 'keyword' && (automodForm.config.words || []).length > 0 && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Test message</label>
+                        <div style={{display:'flex',gap:8}}>
+                          <input className="settings-input" placeholder="Type a test message..." value={automodTestInput}
+                            onChange={e => { setAutomodTestInput(e.target.value); setAutomodTestResult(null); }}
+                            style={{flex:1}} />
+                          <button className="settings-btn-small" onClick={handleAutomodTest}>Test</button>
+                        </div>
+                        {automodTestResult && (
+                          <div style={{fontSize:12,marginTop:6,padding:'4px 8px',borderRadius:4,
+                            background: automodTestResult.matched ? 'rgba(237,66,69,0.15)' : 'rgba(87,242,135,0.15)',
+                            color: automodTestResult.matched ? '#ed4245' : '#57f287'
+                          }}>
+                            {automodTestResult.matched ? `Blocked: ${automodTestResult.reason}` : 'Not blocked'}
+                            {automodTestResult.normalized && <div style={{color:'var(--text-muted)',marginTop:2}}>Normalized: "{automodTestResult.normalized}"</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{display:'flex',gap:8,marginTop:12}}>
+                      {automodEditing ? (
+                        <>
+                          <button className="settings-btn primary" onClick={() => handleAutomodUpdate(automodEditing, {
+                            name: automodForm.name, action: automodForm.action, config: automodForm.config,
+                            exemptRoles: automodForm.exemptRoles, exemptChannels: automodForm.exemptChannels,
+                            timeoutDuration: automodForm.action === 'timeout' ? automodForm.timeoutDuration : null
+                          })}>Save Changes</button>
+                          <button className="settings-btn" onClick={resetAutomodForm}>Cancel</button>
+                        </>
+                      ) : (
+                        <button className="settings-btn primary" onClick={handleAutomodCreate}>Add Rule</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -4254,6 +4995,117 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab==='security' && (
+            <div className="settings-section">
+              <h2 className="settings-section-title">End-to-End Encryption</h2>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+                1:1 Direct Messages are encrypted end-to-end using X25519 + XSalsa20-Poly1305 (libsodium crypto_box).
+                The server never sees plaintext message content.
+              </p>
+
+              {localStorage.getItem('nexus_e2e_public_key') ? (
+                <>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Key Status</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(87, 242, 135, 0.08)', borderRadius: 8, fontSize: 13, color: 'var(--text-positive, #57F287)' }}>
+                      <span style={{ fontSize: 16 }}>🔒</span>
+                      Encryption keys are configured
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Your Public Key Fingerprint</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Share this with contacts to verify your identity. They should see the same fingerprint.
+                    </p>
+                    <div style={{ fontFamily: 'monospace', fontSize: 13, padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: 8, color: 'var(--text-primary)', wordBreak: 'break-all', letterSpacing: '1px' }}>
+                      {(() => {
+                        try {
+                          const { getFingerprint } = require('../utils/encryption');
+                          return getFingerprint(localStorage.getItem('nexus_e2e_public_key'));
+                        } catch { return 'Unable to compute fingerprint'; }
+                      })()}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Export Private Key</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Export your encrypted private key for backup or transfer to another device.
+                    </p>
+                    <button className="settings-btn" onClick={() => {
+                      const blob = localStorage.getItem('nexus_e2e_encrypted_private_key');
+                      if (blob) {
+                        navigator.clipboard.writeText(blob).then(
+                          () => alert('Encrypted private key copied to clipboard. Store it safely!'),
+                          () => prompt('Copy your encrypted private key:', blob)
+                        );
+                      } else {
+                        alert('No encrypted private key found.');
+                      }
+                    }}>
+                      Copy Encrypted Key
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Import Private Key</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Restore your private key from a backup. You'll need your account password to decrypt it.
+                    </p>
+                    <button className="settings-btn" onClick={() => {
+                      const blob = prompt('Paste your encrypted private key:');
+                      if (blob && blob.trim()) {
+                        localStorage.setItem('nexus_e2e_encrypted_private_key', blob.trim());
+                        alert('Private key imported. Log out and log back in with your password to activate it.');
+                      }
+                    }}>
+                      Import Key
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Regenerate Keys</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Generate a new keypair. Warning: old encrypted messages will become unreadable.
+                    </p>
+                    <button className="settings-btn danger" onClick={async () => {
+                      if (!window.confirm('Are you sure? Old encrypted messages will become permanently unreadable.')) return;
+                      const password = prompt('Enter your password to encrypt the new key:');
+                      if (!password) return;
+                      try {
+                        const { initSodium, generateKeypair, encryptPrivateKey } = require('../utils/encryption');
+                        await initSodium();
+                        const keypair = generateKeypair();
+                        const encryptedSK = encryptPrivateKey(keypair.secretKey, password);
+                        localStorage.setItem('nexus_e2e_public_key', keypair.publicKey);
+                        localStorage.setItem('nexus_e2e_encrypted_private_key', encryptedSK);
+                        if (socket) {
+                          socket.emit('encryption:set-public-key', { publicKey: keypair.publicKey }, (res) => {
+                            if (res?.success) {
+                              alert('Keys regenerated. Log out and log back in to use the new keys.');
+                            } else {
+                              alert('Keys regenerated locally but failed to sync with server. Try again.');
+                            }
+                          });
+                        }
+                      } catch (err) {
+                        alert('Failed to regenerate keys: ' + err.message);
+                      }
+                    }}>
+                      Regenerate Keys
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '10px 14px', background: 'rgba(237, 66, 69, 0.08)', borderRadius: 8, fontSize: 13, color: 'var(--text-danger, #ED4245)' }}>
+                  <span style={{ fontSize: 16 }}>⚠️</span> No encryption keys found. Keys are generated automatically on registration.
+                  Log out and register a new account, or import a key backup to enable encryption.
                 </div>
               )}
             </div>

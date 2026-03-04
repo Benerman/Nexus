@@ -81,6 +81,13 @@ async function applySchemaPatches(databaseUrl) {
       -- Thread names
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_name VARCHAR(100);
 
+      -- LAN mode
+      ALTER TABLE servers ADD COLUMN IF NOT EXISTS lan_mode BOOLEAN DEFAULT false;
+
+      -- E2E encryption
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS public_key TEXT;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS encrypted BOOLEAN DEFAULT FALSE;
+
       -- Recovery codes
       CREATE TABLE IF NOT EXISTS recovery_codes (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -90,6 +97,23 @@ async function applySchemaPatches(databaseUrl) {
         created_at TIMESTAMP DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_recovery_codes_account ON recovery_codes(account_id);
+
+      -- AutoMod rules
+      CREATE TABLE IF NOT EXISTS automod_rules (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        server_id VARCHAR(64) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        rule_type VARCHAR(30) NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        action VARCHAR(20) DEFAULT 'block',
+        config JSONB DEFAULT '{}'::jsonb,
+        exempt_roles JSONB DEFAULT '[]'::jsonb,
+        exempt_channels JSONB DEFAULT '[]'::jsonb,
+        timeout_duration INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_automod_rules_server ON automod_rules(server_id);
     `);
     await pool.end();
     console.log('Schema patches applied successfully');

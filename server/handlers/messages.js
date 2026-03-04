@@ -3,6 +3,7 @@ const { RateLimiterMemory } = require('rate-limiter-flexible');
 const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
 const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast, parseSearchFilters } = require('../helpers');
+const automod = require('../automod');
 
 const messageLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 
@@ -100,7 +101,7 @@ module.exports = function(io, socket) {
     }
   });
 
-  socket.on('message:send', async ({ channelId, content, attachments, replyTo, commandData: clientCommandData }) => {
+  socket.on('message:send', async ({ channelId, content, attachments, replyTo, commandData: clientCommandData, encrypted }) => {
     const user = state.users[socket.id];
     if (!user) return;
     if (!content?.trim() && !attachments?.length && !clientCommandData) return;
@@ -277,13 +278,35 @@ module.exports = function(io, socket) {
       }
     }
 
+    // ── AutoMod check ──
+    if (srv && srv.automodRules && srv.automodRules.length > 0) {
+      const result = automod.evaluateMessage({
+        content: trimmedContent,
+        userId: user.id,
+        serverId: srv.id,
+        channelId,
+        mentions,
+        userRoles: srv.members[user.id]?.roles || [],
+        rules: srv.automodRules
+      });
+      if (result.blocked) {
+        try { await db.createAuditLog(srv.id, 'automod_block', null, user.id, { rule: result.rule.name, reason: result.reason }); } catch(e) {}
+        if (result.rule.action === 'timeout' && result.rule.timeout_duration) {
+          try { await db.timeoutUser(srv.id, user.id, result.rule.timeout_duration); } catch(e) {}
+        }
+        socket.emit('automod:blocked', { reason: result.reason, rule: result.rule.name, action: result.rule.action });
+        return;
+      }
+    }
+
     const msg = {
       id: uuidv4(), channelId,
       content: trimmedContent,
       attachments: (attachments||[]).slice(0,4),
       author: user, timestamp: Date.now(), reactions: {},
       mentions,
-      channelLinks: channelLinks.channels
+      channelLinks: channelLinks.channels,
+      encrypted: encrypted || false
     };
 
     // Add reply reference if provided
@@ -305,7 +328,8 @@ module.exports = function(io, socket) {
         attachments: msg.attachments,
         isWebhook: false,
         replyTo: msg.replyTo || null,
-        mentions
+        mentions,
+        encrypted: msg.encrypted
       });
     } catch (error) {
       console.error('[Message] Error saving message to database:', error);
@@ -372,7 +396,8 @@ module.exports = function(io, socket) {
                   customAvatar: senderAccount.custom_avatar,
                   color: senderAccount.color,
                   status: senderAccount.status,
-                  bio: senderAccount.bio
+                  bio: senderAccount.bio,
+                  publicKey: senderAccount.public_key || null
                 },
                 createdAt: new Date(dmChannel.created_at).getTime()
               },
@@ -478,7 +503,7 @@ module.exports = function(io, socket) {
     io.to(`text:${channelId}`).emit('message:deleted', { channelId, messageId });
   });
 
-  socket.on('message:edit', async ({ channelId, messageId, content }) => {
+  socket.on('message:edit', async ({ channelId, messageId, content, encrypted }) => {
     const user = state.users[socket.id];
     if (!user) return;
     if (!content?.trim()) return;
@@ -500,6 +525,7 @@ module.exports = function(io, socket) {
     // Update message
     msg.content = content.trim().slice(0, 2000);
     msg.editedAt = Date.now();
+    if (encrypted !== undefined) msg.encrypted = encrypted;
 
     // Update in database (all messages)
     try {
@@ -514,7 +540,8 @@ module.exports = function(io, socket) {
       channelId,
       messageId,
       content: msg.content,
-      editedAt: msg.editedAt
+      editedAt: msg.editedAt,
+      encrypted: msg.encrypted || false
     });
   });
 

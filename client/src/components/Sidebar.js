@@ -698,7 +698,7 @@ const Sidebar = React.memo(function Sidebar({
                     {lastMsg && (
                       <div className="dm-last-message">
                         {lastMsg.authorId === currentUser?.id && <span className="dm-you">You: </span>}
-                        {truncateText(lastMsg.content, 40)}
+                        {lastMsg.encrypted ? '🔒 Encrypted message' : truncateText(lastMsg.content, 40)}
                       </div>
                     )}
                   </div>

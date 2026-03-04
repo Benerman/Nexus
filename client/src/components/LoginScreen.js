@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './LoginScreen.css';
 import { HexagonIcon } from './icons';
 import { getServerUrl } from '../config';
+import { initSodium, generateKeypair, encryptPrivateKey, decryptPrivateKey, publicKeyFromSecret } from '../utils/encryption';
 
 export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) {
   const [mode, setMode] = useState('login'); // 'login' | 'register' | 'recover'
@@ -65,16 +66,44 @@ export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) 
           }
         }
       }
+
+      // E2E encryption key management
+      let e2eSecretKey = null;
+      try {
+        await initSodium();
+        if (mode === 'register') {
+          // Generate new keypair on registration
+          const keypair = generateKeypair();
+          const encryptedSK = encryptPrivateKey(keypair.secretKey, password);
+          localStorage.setItem('nexus_e2e_public_key', keypair.publicKey);
+          localStorage.setItem('nexus_e2e_encrypted_private_key', encryptedSK);
+          e2eSecretKey = keypair.secretKey;
+        } else {
+          // Login: decrypt existing private key
+          const encryptedSK = localStorage.getItem('nexus_e2e_encrypted_private_key');
+          if (encryptedSK) {
+            e2eSecretKey = decryptPrivateKey(encryptedSK, password);
+            // Validate by deriving public key
+            if (e2eSecretKey) {
+              const derivedPK = publicKeyFromSecret(e2eSecretKey);
+              localStorage.setItem('nexus_e2e_public_key', derivedPK);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[E2E] Key setup error:', err.message);
+      }
+
       setLoading(false);
 
       // If registration returned recovery codes, show them before completing login
       if (mode === 'register' && data.recoveryCodes) {
         setRecoveryCodes(data.recoveryCodes);
-        setPendingLoginData({ token: data.token, username: (data.account || data.user).username });
+        setPendingLoginData({ token: data.token, username: (data.account || data.user).username, e2eSecretKey });
         return;
       }
 
-      onLogin({ token: data.token, username: (data.account || data.user).username });
+      onLogin({ token: data.token, username: (data.account || data.user).username, e2eSecretKey });
     } catch (err) {
       setError('Could not reach server. Is it running?');
       setLoading(false);
