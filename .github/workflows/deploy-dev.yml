@@ -79,6 +79,24 @@ jobs:
       - name: Build and start dev containers
         run: |
           ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml up --build --force-recreate -d
+        continue-on-error: true
+        id: compose-up
+
+      - name: Dump container logs on failure
+        if: steps.compose-up.outcome == 'failure'
+        run: |
+          echo "=== Container Status ==="
+          ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml ps -a
+          echo ""
+          echo "=== Server Logs ==="
+          docker logs nexus-dev-server 2>&1 || echo "No server logs available"
+          echo ""
+          echo "=== Postgres Logs ==="
+          docker logs nexus-dev-postgres 2>&1 | tail -30 || echo "No postgres logs available"
+          echo ""
+          echo "=== Redis Logs ==="
+          docker logs nexus-dev-redis 2>&1 | tail -10 || echo "No redis logs available"
+          exit 1
 
       - name: Sync dev database password
         run: |
