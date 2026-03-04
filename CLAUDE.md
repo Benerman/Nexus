@@ -13,17 +13,16 @@ Browser (Port 3000) → Nginx → Express + Socket.IO (Port 3001) → PostgreSQL
 ## Build & Run Commands
 
 ```bash
-# Start entire stack (PostgreSQL, Redis, server, client)
-docker-compose up -d --build
+# Production (base + prod override, project name: nexus-prod)
+docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down
+docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml logs -f server
 
-# Stop
-docker-compose down
+# Dev (base + dev override, project name: nexus-dev)
+docker compose -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml down
 
-# View logs
-docker-compose logs -f server
-docker-compose logs -f client
-
-# Quick start / deploy
+# Quick start / deploy (production)
 ./start.sh
 ./deploy.sh
 ```
@@ -165,7 +164,8 @@ Requires `sharp` (listed as a devDependency). On macOS, `iconutil` (bundled with
 
 ## CI/CD
 
-- **`deploy.yml`** — Auto-deploys on push to `main`/`master` via self-hosted runner (Docker rebuild + health checks)
+- **`deploy-prod.yml`** — Auto-deploys on push to `main`/`master` via self-hosted runner (`-p nexus-prod`, ports 3000/3001)
+- **`deploy-dev.yml`** — Auto-deploys on push to `develop` via self-hosted runner (`-p nexus-dev`, ports 3002/3003)
 - **`dev.yml`** — Manual trigger for pre-release builds (Tauri, Electron, Capacitor)
 - **`release.yml`** — Manual trigger for versioned releases (reads version from `client/package.json`)
 

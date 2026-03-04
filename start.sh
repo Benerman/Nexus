@@ -10,14 +10,21 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null && ! command -v docker-compose &> /dev/null; then
-    echo "❌ docker-compose not found. Please install docker-compose first."
+if ! docker compose version > /dev/null 2>&1 && ! docker-compose --version > /dev/null 2>&1; then
+    echo "❌ docker compose not found. Please install docker compose first."
     exit 1
 fi
 
-# Build and start
+# Determine compose command
+if docker compose version > /dev/null 2>&1; then
+    COMPOSE="docker compose"
+else
+    COMPOSE="docker-compose"
+fi
+
+# Build and start production
 echo "🔨 Building containers (this may take a few minutes the first time)..."
-docker-compose up --build -d
+$COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
 echo ""
 echo "✅ Nexus is running!"
@@ -39,7 +46,7 @@ fi
 
 echo ""
 echo "📋 Commands:"
-echo "   Stop:    docker-compose down"
-echo "   Logs:    docker-compose logs -f"
-echo "   Restart: docker-compose restart"
+echo "   Stop:    $COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down"
+echo "   Logs:    $COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml logs -f"
+echo "   Restart: $COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml restart"
 echo ""

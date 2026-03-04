@@ -1,0 +1,68 @@
+# Production overrides — use with: docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Requires .env symlinked from /opt/nexus/.env
+
+services:
+  postgres:
+    container_name: nexus-postgres
+    environment:
+      - POSTGRES_DB=nexus_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: always
+    networks:
+      - nexus-network
+
+  redis:
+    container_name: nexus-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: always
+    networks:
+      - nexus-network
+
+  server:
+    container_name: nexus-server
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nexus_db
+      - REDIS_URL=redis://redis:6379
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - SESSION_EXPIRY=604800000
+      - REFRESH_EXPIRY=2592000000
+      - MAX_MESSAGE_LENGTH=2000
+      - MAX_ATTACHMENTS=4
+      - MAX_ATTACHMENT_SIZE=10485760
+      - ENABLE_GUEST_MODE=true
+      - RATE_LIMIT_MESSAGES=10
+      - RATE_LIMIT_WINDOW=10000
+      - LOG_LEVEL=info
+      - GIPHY_API_KEY=${GIPHY_API_KEY}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - STUN_URLS=${STUN_URLS:-stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}
+      - TURN_URL=${TURN_URL:-}
+      - TURN_SECRET=${TURN_SECRET:-}
+      - PLATFORM_ADMIN=${PLATFORM_ADMIN:-}
+    restart: always
+    networks:
+      - nexus-network
+
+  client:
+    container_name: nexus-client
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_SERVER_URL=${REACT_APP_SERVER_URL:-http://localhost:3001}
+    restart: always
+    networks:
+      - nexus-network
+
+networks:
+  nexus-network:
+    driver: bridge

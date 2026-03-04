@@ -6,17 +6,24 @@ echo ""
 
 cd "$(dirname "$0")"
 
+# Determine compose command
+if docker compose version > /dev/null 2>&1; then
+    COMPOSE="docker compose"
+else
+    COMPOSE="docker-compose"
+fi
+
 # Pre-build: show current disk usage
 DISK_BEFORE=$(df -h / | awk 'NR==2 {print $4}')
 echo "💾 Disk space available: $DISK_BEFORE"
 
 # Stop existing containers
 echo "⏹  Stopping containers..."
-docker-compose down
+$COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down
 
 # Build and start
 echo "🔨 Building and starting..."
-docker-compose up -d --build
+$COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 # Clean up dangling images left from the build
 echo "🧹 Cleaning up old build layers..."
@@ -28,19 +35,13 @@ echo "   $RECLAIMED"
 DISK_AFTER=$(df -h / | awk 'NR==2 {print $4}')
 echo "💾 Disk space available: $DISK_AFTER"
 
-# Extract domain from docker-compose CLIENT_URL
-DOMAIN_URL=$(grep 'CLIENT_URL=' docker-compose.yml | head -1 | sed 's/.*CLIENT_URL=//' | tr -d ' ')
-
 echo ""
 echo "✅ Nexus deployed successfully!"
 echo ""
-if [ -n "$DOMAIN_URL" ]; then
-    echo "   Public:  $DOMAIN_URL"
-fi
 echo "   Local:   http://localhost:3000"
 echo ""
 echo "📋 Commands:"
-echo "   Logs:    docker-compose logs -f"
-echo "   Stop:    docker-compose down"
+echo "   Logs:    $COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml logs -f"
+echo "   Stop:    $COMPOSE -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down"
 echo "   Redeploy: ./deploy.sh"
 echo ""
