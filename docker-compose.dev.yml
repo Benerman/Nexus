@@ -86,27 +86,6 @@ services:
     restart: unless-stopped
     networks:
       - nexus-dev-internal
-      - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
-
-      # API + WebSocket router
-      - "traefik.http.routers.nexus-dev-api.rule=Host(`${DEV_DOMAIN:-dev.nexus.example.com}`) && PathPrefix(`/socket.io`, `/api`)"
-      - "traefik.http.routers.nexus-dev-api.entrypoints=websecure"
-      - "traefik.http.routers.nexus-dev-api.tls=true"
-      - "traefik.http.routers.nexus-dev-api.tls.certresolver=letsencrypt"
-
-      # Service port
-      - "traefik.http.services.nexus-dev-api.loadbalancer.server.port=3001"
-
-      # WebSocket headers
-      - "traefik.http.routers.nexus-dev-api.middlewares=nexus-dev-headers"
-      - "traefik.http.middlewares.nexus-dev-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-
-      # Sticky sessions for Socket.IO
-      - "traefik.http.services.nexus-dev-api.loadbalancer.sticky.cookie=true"
-      - "traefik.http.services.nexus-dev-api.loadbalancer.sticky.cookie.name=nexus_dev_lb"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
       interval: 10s
@@ -137,27 +116,6 @@ services:
     restart: unless-stopped
     networks:
       - nexus-dev-internal
-      - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
-
-      # Client router — catches all non-API requests for the dev domain
-      - "traefik.http.routers.nexus-dev-client.rule=Host(`${DEV_DOMAIN:-dev.nexus.example.com}`)"
-      - "traefik.http.routers.nexus-dev-client.entrypoints=websecure"
-      - "traefik.http.routers.nexus-dev-client.tls=true"
-      - "traefik.http.routers.nexus-dev-client.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.nexus-dev-client.priority=1"
-
-      # Service port
-      - "traefik.http.services.nexus-dev-client.loadbalancer.server.port=80"
-
-      # Security headers
-      - "traefik.http.routers.nexus-dev-client.middlewares=nexus-dev-security"
-      - "traefik.http.middlewares.nexus-dev-security.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.nexus-dev-security.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.nexus-dev-security.headers.stsPreload=true"
-      - "traefik.http.middlewares.nexus-dev-security.headers.forceSTSHeader=true"
     deploy:
       resources:
         limits:
@@ -165,11 +123,7 @@ services:
           cpus: '0.5'
 
 networks:
-  # External network shared with Traefik (same as production)
-  traefik-public:
-    external: true
-
-  # Internal network for dev database/redis (isolated from production)
+  # Internal network for dev stack (isolated from production)
   nexus-dev-internal:
     driver: bridge
 
