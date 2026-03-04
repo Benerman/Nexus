@@ -125,7 +125,7 @@ See `.env.example` and `server/.env.example` for full list.
 - Permissions must be checked on both client and server side
 - Security: bcrypt (12 rounds), Helmet.js, CORS whitelist, input sanitization on all user data
 - Cross-platform: web is primary; Capacitor (mobile), Tauri (desktop), Electron (fallback) are secondary
-- Git workflow: always work on feature branches — never commit directly to main. Create a PR to merge changes.
+- Git workflow: `develop` is the primary development branch. Feature branches should be created from and merged into `develop` via PR. `main` is the production branch — merge `develop` into `main` for releases. Never commit directly to `main` or `develop`.
 
 ## Version Bumping
 
@@ -198,3 +198,16 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 
 - [x] **Correct processing order** — Industry standard is: AEC → Noise Suppression → Noise Gate → AGC → Limiter. Current order (highpass → gate → AGC → compressor) is missing the noise suppression stage. When RNNoise is added, insert it between highpass and gate.
 - [x] **Adaptive noise floor estimation** — Continuously estimate background noise level using minimum statistics (track the minimum RMS over a sliding 2-5 second window during non-speech frames). Use this to auto-adjust gate threshold and AGC gain ceiling. Eliminates the need for users to manually tune the gate threshold for different environments.
+
+## TODO — Theme Visual Polish
+
+- [ ] **Improve theme contrast** — Audit all 7 themes for sufficient contrast ratios on text/background combinations. Ensure readability meets WCAG AA standards especially for muted text and interactive elements.
+- [ ] **More drastic style differentiation between themes** — Current themes only swap CSS variables (colors). Explore WinAmp-level visual differentiation: unique border-radius per theme (sharp corners for retro, rounded for light), distinct shadow styles, different spacing/padding, custom scrollbar styles per theme, unique button shapes. Terminal theme should feel like a real terminal (scanlines, blinking cursor). Retro should have beveled 3D borders throughout, not just in elevation vars.
+
+## TODO — Theme System Preparation
+
+- [ ] **Audit CSS naming consistency** — Review all CSS files across every component. Identify inconsistent naming conventions (camelCase vs kebab-case, abbreviations vs full names) and standardize to a single convention. Document the chosen convention.
+- [ ] **Consolidate CSS custom properties** — Audit all hardcoded color values (`#hex`, `rgb()`, `rgba()`) across all stylesheets. Replace with CSS custom properties (`var(--name)`). Ensure every color, spacing, shadow, and border used in the app flows through a centralized set of variables.
+- [ ] **Normalize variable naming scheme** — Review existing `--bg-*`, `--text-*`, `--brand-*` variables for completeness and consistency. Establish a semantic naming convention (e.g. `--color-surface-primary`, `--color-text-secondary`, `--color-accent`) that can map to different themes.
+- [ ] **Extract root variable definitions** — Move all CSS custom property definitions into a single dedicated file/section (e.g. `:root` block or `theme.css`) so theme switching only needs to swap one set of values.
+- [ ] **Identify component-specific overrides** — Find components that define their own colors outside the variable system (inline styles, component-scoped hardcoded values) and refactor them to use the centralized variables.

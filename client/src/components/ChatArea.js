@@ -1254,15 +1254,15 @@ const ChatArea = React.memo(function ChatArea({
           )}
 
           {/* Thread replies count divider */}
-          <div style={{ padding: '8px 20px', borderBottom: '1px solid #3a3a3e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#b5bac1', fontSize: '13px', fontWeight: 600 }}>{(threadPanel.messages || []).length} {(threadPanel.messages || []).length === 1 ? 'reply' : 'replies'}</span>
-            <div style={{ flex: 1, height: '1px', background: '#3a3a3e' }} />
+          <div style={{ padding: '8px 20px', borderBottom: 'var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: 'var(--header-secondary)', fontSize: '13px', fontWeight: 600 }}>{(threadPanel.messages || []).length} {(threadPanel.messages || []).length === 1 ? 'reply' : 'replies'}</span>
+            <div style={{ flex: 1, height: '1px', background: 'var(--interactive-muted)' }} />
           </div>
 
           {/* Thread messages */}
           <div className="messages-container" style={{ flex: 1, overflowY: 'auto' }}>
             {(threadPanel.messages || []).length === 0 && (
-              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No replies yet. Start the conversation!</div>
+              <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No replies yet. Start the conversation!</div>
             )}
             {(threadPanel.messages || []).map((msg, i) => {
               const prevMsg = i > 0 ? threadPanel.messages[i - 1] : null;
@@ -1544,18 +1544,18 @@ const ChatArea = React.memo(function ChatArea({
                   {(msg.threadReplyCount > 0 || msg.threadName) && (
                     <div style={{ background: 'rgba(0, 168, 252, 0.04)', borderLeft: '3px solid #00a8fc', borderRadius: '4px', padding: '8px 12px', marginTop: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => onOpenThread && onOpenThread(channel.id, msg.id, true)} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.08)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.04)'}>
                       {msg.threadName && (
-                        <div style={{ color: '#fff', fontWeight: 600, fontSize: '13px', marginBottom: msg.threadReplyCount > 0 ? '4px' : 0 }}>{msg.threadName}</div>
+                        <div style={{ color: 'var(--header-primary)', fontWeight: 600, fontSize: '13px', marginBottom: msg.threadReplyCount > 0 ? '4px' : 0 }}>{msg.threadName}</div>
                       )}
                       {msg.threadReplyCount > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00a8fc', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--brand-500)', fontSize: '13px' }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                           <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
-                          <span style={{ color: '#72767d', fontSize: '12px' }}>Last reply {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Last reply {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>
                         </div>
                       )}
                       {msg.threadLastReplyContent && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginLeft: '20px', fontSize: '12px', color: '#8e9297' }}>
-                          <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginLeft: '20px', fontSize: '12px', color: 'var(--channels-default)' }}>
+                          <span style={{ color: msg.threadLastReplyAuthorColor || 'var(--header-secondary)', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'min(300px, 50vw)' }}>{msg.threadLastReplyContent.substring(0, 80)}{msg.threadLastReplyContent.length > 80 ? '...' : ''}</span>
                         </div>
                       )}
@@ -1823,18 +1823,18 @@ const ChatArea = React.memo(function ChatArea({
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.12)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'rgba(0, 168, 252, 0.06)'}>
                     {msg.threadName && (
-                      <div style={{ color: '#fff', fontWeight: 600, fontSize: '12px', marginBottom: msg.threadReplyCount > 0 ? '3px' : 0 }}>{msg.threadName}</div>
+                      <div style={{ color: 'var(--header-primary)', fontWeight: 600, fontSize: '12px', marginBottom: msg.threadReplyCount > 0 ? '3px' : 0 }}>{msg.threadName}</div>
                     )}
                     {msg.threadReplyCount > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#00a8fc', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--brand-500)', fontSize: '12px' }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                         <span style={{ fontWeight: 600 }}>{msg.threadReplyCount} {msg.threadReplyCount === 1 ? 'reply' : 'replies'}</span>
-                        {msg.threadLastReplyAt && <span style={{ color: '#72767d', fontSize: '11px' }}>· {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>}
+                        {msg.threadLastReplyAt && <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>· {new Date(msg.threadLastReplyAt).toLocaleDateString()}</span>}
                       </div>
                     )}
                     {msg.threadLastReplyContent && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontSize: '11px', color: '#8e9297' }}>
-                        <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontSize: '11px', color: 'var(--channels-default)' }}>
+                        <span style={{ color: msg.threadLastReplyAuthorColor || 'var(--header-secondary)', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{msg.threadLastReplyContent.substring(0, 60)}{msg.threadLastReplyContent.length > 60 ? '...' : ''}</span>
                       </div>
                     )}
@@ -1854,30 +1854,30 @@ const ChatArea = React.memo(function ChatArea({
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
             {(channelThreads || []).length === 0 ? (
-              <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No threads in this channel</div>
+              <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No threads in this channel</div>
             ) : (channelThreads || []).map(thread => (
-              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => { onOpenThread(channel.id, thread.id, true); onToggleThreadsListPanel(); }} onMouseEnter={e => e.currentTarget.style.background = '#232428'} onMouseLeave={e => e.currentTarget.style.background = '#1e1f22'}>
+              <div key={thread.id} style={{ padding: '12px', marginBottom: '8px', background: 'var(--bg-tertiary)', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => { onOpenThread(channel.id, thread.id, true); onToggleThreadsListPanel(); }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-modifier-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}>
                 {thread.threadName && (
-                  <div style={{ color: '#fff', fontWeight: 600, fontSize: '15px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#00a8fc"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  <div style={{ color: 'var(--header-primary)', fontWeight: 600, fontSize: '15px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--brand-500)' }}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                     {thread.threadName}
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <span style={{ color: thread.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{thread.author?.username}</span>
-                  <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(thread.timestamp).toLocaleDateString()}</span>
+                  <span style={{ color: thread.author?.color || 'var(--header-primary)', fontWeight: 600, fontSize: '14px' }}>{thread.author?.username}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{new Date(thread.timestamp).toLocaleDateString()}</span>
                 </div>
-                <div style={{ color: '#dcddde', fontSize: '14px', wordBreak: 'break-word', marginBottom: '8px' }}>{thread.content?.substring(0, 150)}{thread.content?.length > 150 ? '...' : ''}</div>
+                <div style={{ color: 'var(--text-normal)', fontSize: '14px', wordBreak: 'break-word', marginBottom: '8px' }}>{thread.content?.substring(0, 150)}{thread.content?.length > 150 ? '...' : ''}</div>
                 {thread.lastReply && (
-                  <div style={{ padding: '6px 8px', background: '#2b2d31', borderRadius: '4px', borderLeft: '2px solid #3a3a3e', marginBottom: '8px' }}>
+                  <div style={{ padding: '6px 8px', background: 'var(--bg-secondary)', borderRadius: '4px', borderLeft: '2px solid var(--interactive-muted)', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                      <span style={{ color: thread.lastReply.author?.color || '#b5bac1', fontWeight: 500 }}>{thread.lastReply.author?.username}</span>
-                      <span style={{ color: '#8e9297' }}>—</span>
-                      <span style={{ color: '#8e9297', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{thread.lastReply.content?.substring(0, 80)}{thread.lastReply.content?.length > 80 ? '...' : ''}</span>
+                      <span style={{ color: thread.lastReply.author?.color || 'var(--header-secondary)', fontWeight: 500 }}>{thread.lastReply.author?.username}</span>
+                      <span style={{ color: 'var(--channels-default)' }}>—</span>
+                      <span style={{ color: 'var(--channels-default)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{thread.lastReply.content?.substring(0, 80)}{thread.lastReply.content?.length > 80 ? '...' : ''}</span>
                     </div>
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#72767d' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                     {thread.replyCount} {thread.replyCount === 1 ? 'reply' : 'replies'}

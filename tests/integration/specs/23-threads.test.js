@@ -45,6 +45,11 @@ describe('Message Threads', () => {
     admin.socket.emit('message:send', { channelId, content: 'Parent message for threading' });
     const msg = await msgPromise;
     parentMessageId = msg.id;
+
+    // Create the thread (set a name) before replying — server requires this
+    const threadCreatedPromise = waitForEvent(admin.socket, 'thread:created', 5000);
+    admin.socket.emit('thread:create', { channelId, parentMessageId, name: 'Test Thread' });
+    await threadCreatedPromise;
   });
 
   afterAll(async () => {

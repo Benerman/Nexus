@@ -105,7 +105,7 @@
 /* Individual job card */
 .activity-job {
   background: var(--bg-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px;
   margin-bottom: 6px;
   animation: fadeIn 0.15s ease;

@@ -22,6 +22,31 @@ import WelcomeTour from './components/WelcomeTour';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
 import './App.css';
+
+// Inject custom theme CSS from localStorage
+function injectCustomThemeStyles() {
+  let el = document.getElementById('nexus-custom-themes');
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'nexus-custom-themes';
+    document.head.appendChild(el);
+  }
+  try {
+    const themes = JSON.parse(localStorage.getItem('nexus_custom_themes') || '[]');
+    el.textContent = themes.map(t => t.css || '').join('\n');
+  } catch { el.textContent = ''; }
+}
+window.__injectCustomThemeStyles = injectCustomThemeStyles;
+
+// Apply saved theme immediately to prevent flash of wrong theme
+(() => {
+  injectCustomThemeStyles();
+  const theme = localStorage.getItem('nexus_theme');
+  if (theme && theme !== 'midnight') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+})();
+
 const EMPTY_CHANNELS = { text: [], voice: [] };
 
 let renderCount = 0;
@@ -575,17 +600,29 @@ export default function App() {
           auto_gain_enabled: 'nexus_auto_gain_enabled',
           auto_gain_target: 'nexus_auto_gain_target',
           server_order: 'nexus_server_order',
+          custom_themes: 'nexus_custom_themes',
           sidebar_width: 'nexus_sidebar_width',
+          theme: 'nexus_theme',
         };
+        const jsonKeys = ['server_order', 'custom_themes'];
         for (const [serverKey, localKey] of Object.entries(settingsKeyMap)) {
           if (user.settings[serverKey] != null) {
-            const val = serverKey === 'server_order' ? JSON.stringify(user.settings[serverKey]) : String(user.settings[serverKey]);
+            const val = jsonKeys.includes(serverKey) ? JSON.stringify(user.settings[serverKey]) : String(user.settings[serverKey]);
             localStorage.setItem(localKey, val);
           }
         }
         // Apply sidebar width from server settings
         if (user.settings.sidebar_width != null) {
           setSidebarWidth(parseInt(user.settings.sidebar_width, 10) || 240);
+        }
+        // Inject custom theme styles from server settings
+        injectCustomThemeStyles();
+        // Apply theme from server settings
+        const syncedTheme = user.settings.theme || localStorage.getItem('nexus_theme') || 'midnight';
+        if (syncedTheme && syncedTheme !== 'midnight') {
+          document.documentElement.setAttribute('data-theme', syncedTheme);
+        } else {
+          document.documentElement.removeAttribute('data-theme');
         }
       }
       // Restore pinned DMs from server settings

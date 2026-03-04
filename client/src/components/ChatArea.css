@@ -259,8 +259,8 @@
 
 .message-text pre {
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
   padding: 8px;
   margin: 4px 0;
   overflow-x: auto;
@@ -318,11 +318,11 @@
   gap: 4px;
   background: var(--bg-secondary);
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
   font-size: 14px;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background var(--transition-speed) var(--transition-fn), border-color var(--transition-speed) var(--transition-fn);
 }
 
 .reaction span {
@@ -352,8 +352,8 @@
   display: flex;
   gap: 4px;
   background: var(--bg-floating);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 4px;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
   padding: 4px;
   opacity: 0;
   pointer-events: none;
@@ -365,11 +365,11 @@
 .reaction-btn,
 .message-options-btn {
   background: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 4px 6px;
   font-size: 16px;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-speed) var(--transition-fn);
   line-height: 1;
 }
 
@@ -407,8 +407,8 @@
   right: 0;
   top: 36px;
   background: var(--bg-floating);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
   padding: 8px;
   display: flex;
   gap: 4px;
@@ -418,11 +418,11 @@
 
 .reaction-picker button {
   background: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 4px;
   font-size: 20px;
   cursor: pointer;
-  transition: background 0.1s, transform 0.1s;
+  transition: background var(--transition-speed) var(--transition-fn), transform var(--transition-speed) var(--transition-fn);
   line-height: 1;
 }
 
@@ -439,8 +439,8 @@
   width: 320px;
   max-height: 380px;
   background: var(--bg-floating);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
+  border: var(--border-prominent);
+  border-radius: var(--radius-md);
   z-index: 20;
   box-shadow: var(--elevation-high);
   display: flex;
@@ -632,10 +632,10 @@
   align-items: flex-end;
   gap: 0;
   background: var(--bg-modifier-hover);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 6px 6px 6px 16px;
   border: 1px solid transparent;
-  transition: border-color 0.2s;
+  transition: border-color var(--transition-speed) var(--transition-fn);
 }
 
 .chat-input-box:focus-within {
@@ -691,13 +691,13 @@
 .send-btn {
   background: var(--brand-500);
   color: #fff;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, transform 0.1s;
+  transition: background var(--transition-speed) var(--transition-fn), transform 0.1s;
   flex-shrink: 0;
 }
 
@@ -717,14 +717,14 @@
 /* Image attachments */
 .msg-attachment-img { margin-top: 6px; max-width: 400px; }
 .msg-attachment-img img {
-  max-width: 100%; max-height: 300px; border-radius: 6px; cursor: zoom-in;
+  max-width: 100%; max-height: 300px; border-radius: var(--radius-sm); cursor: zoom-in;
   display: block; object-fit: contain; background: var(--bg-secondary);
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-speed) var(--transition-fn);
 }
 .msg-attachment-img img:hover { opacity: 0.92; }
 .msg-attachment-file {
   margin-top: 6px; padding: 8px 12px; background: var(--bg-secondary);
-  border-radius: 6px; font-size: 13px; color: var(--text-muted);
+  border-radius: var(--radius-sm); font-size: 13px; color: var(--text-muted);
   display: inline-block;
 }
 
@@ -744,7 +744,7 @@
   flex-wrap: wrap; background: var(--bg-primary);
 }
 .pending-attachment {
-  position: relative; width: 80px; height: 80px; border-radius: 8px;
+  position: relative; width: 80px; height: 80px; border-radius: var(--radius-md);
   overflow: hidden; background: var(--bg-secondary); flex-shrink: 0;
 }
 .pending-attachment img { width: 100%; height: 100%; object-fit: cover; }
@@ -869,7 +869,7 @@
 .chat-header-actions { display: flex; gap: 4px; margin-left: auto; }
 .header-action-btn {
   background: none; color: var(--text-muted); padding: 4px 8px;
-  border-radius: 4px; font-size: 16px; cursor: pointer; transition: all 0.15s;
+  border-radius: var(--radius-sm); font-size: 16px; cursor: pointer; transition: all var(--transition-speed) var(--transition-fn);
   line-height: 1;
 }
 .header-action-btn:hover { background: var(--bg-modifier-hover); color: var(--text-normal); }
@@ -1283,8 +1283,8 @@
   max-height: 240px;
   overflow-y: auto;
   background: var(--bg-secondary);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
+  border: var(--border-prominent);
+  border-radius: var(--radius-md);
   margin-bottom: 4px;
   z-index: 50;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
