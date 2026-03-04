@@ -2093,7 +2093,7 @@ export default function App() {
       )}
 
       {/* Mobile overlay backdrop */}
-      {(mobileSidebarOpen || mobileMemberListOpen || showPinnedPanel || showSearchPanel || showThreadsListPanel) && (
+      {(mobileSidebarOpen || mobileMemberListOpen) && (
         <div className="mobile-overlay" onClick={closeMobilePanels} />
       )}
 
