@@ -461,6 +461,7 @@ const ChatArea = React.memo(function ChatArea({
     isPullingRef.current = false;
     if (pullDistance >= 80 && !isRefreshing) {
       setIsRefreshing(true);
+      setPullDistance(60);
       if (onRefreshData) onRefreshData();
       setTimeout(() => {
         setIsRefreshing(false);
@@ -1324,18 +1325,16 @@ const ChatArea = React.memo(function ChatArea({
       ) : (
       <>
       {/* Pull-to-refresh indicator */}
-      {(pullDistance > 0 || isRefreshing) && (
-        <div className="pull-to-refresh-indicator" style={{ transform: `translateY(${Math.min(pullDistance, 120) - 40}px)`, opacity: isRefreshing ? 1 : Math.min(pullDistance / 80, 1) }}>
-          <div
-            className={`pull-to-refresh-spinner${isRefreshing ? ' spinning' : ''}`}
-            style={!isRefreshing ? { transform: `rotate(${pullDistance * 3}deg)` } : undefined}
-          />
-        </div>
-      )}
+      <div className="pull-to-refresh-indicator" style={{ transform: `translateY(${(pullDistance > 0 || isRefreshing) ? Math.min(pullDistance, 120) : -40}px)`, opacity: isRefreshing ? 1 : Math.min(pullDistance / 80, 1), transition: isPullingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease' }}>
+        <div
+          className={`pull-to-refresh-spinner${isRefreshing ? ' spinning' : ''}`}
+          style={!isRefreshing ? { transform: `rotate(${pullDistance * 3}deg)` } : undefined}
+        />
+      </div>
       {/* Messages */}
-      <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}
+      <div className={`messages-container${pullDistance > 0 || isRefreshing ? ' pulling' : ''}`} ref={messagesContainerRef} onScroll={handleScroll}
         onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}
-        style={pullDistance > 0 ? { transform: `translateY(${pullDistance}px)`, transition: isPullingRef.current ? 'none' : 'transform 0.3s ease-out' } : undefined}
+        style={(pullDistance > 0 || isRefreshing) ? { transform: `translateY(${pullDistance}px)`, transition: isPullingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' } : { transition: 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' }}
       >
         {loadingOlder && (
           <div className="loading-older-messages">
