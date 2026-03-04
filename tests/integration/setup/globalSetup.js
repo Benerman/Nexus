@@ -81,6 +81,13 @@ async function applySchemaPatches(databaseUrl) {
       -- Thread names
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_name VARCHAR(100);
 
+      -- LAN mode
+      ALTER TABLE servers ADD COLUMN IF NOT EXISTS lan_mode BOOLEAN DEFAULT false;
+
+      -- E2E encryption
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS public_key TEXT;
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS encrypted BOOLEAN DEFAULT FALSE;
+
       -- Recovery codes
       CREATE TABLE IF NOT EXISTS recovery_codes (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
