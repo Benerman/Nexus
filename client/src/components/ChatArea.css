@@ -155,8 +155,17 @@
   padding-top: 2px;
 }
 
-.message:hover {
-  background: var(--bg-modifier-hover);
+/* Only apply hover effects on devices with true hover (mouse/trackpad).
+   Touch devices trigger sticky :hover on tap, which would make hidden
+   action buttons clickable before the JS tap handler runs. */
+@media (hover: hover) {
+  .message:hover {
+    background: var(--bg-modifier-hover);
+  }
+  .message:hover .message-actions {
+    opacity: 1;
+    pointer-events: all;
+  }
 }
 
 .message.highlighted {
@@ -176,11 +185,6 @@
 @keyframes toastFadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-
-.message:hover .message-actions {
-  opacity: 1;
-  pointer-events: all;
 }
 
 .message-avatar {
@@ -369,19 +373,9 @@
   line-height: 1;
 }
 
-.reply-action-btn:hover,
-.reaction-btn:hover,
-.message-options-btn:hover {
-  background: var(--bg-modifier-hover);
-}
-
 .reply-action-btn {
   color: var(--text-muted);
   opacity: 0.8;
-}
-.reply-action-btn:hover {
-  opacity: 1;
-  color: var(--text-normal);
 }
 
 .message-options-btn {
@@ -392,9 +386,20 @@
   opacity: 0.8;
 }
 
-.message-options-btn:hover {
-  opacity: 1;
-  color: var(--text-normal);
+@media (hover: hover) {
+  .reply-action-btn:hover,
+  .reaction-btn:hover,
+  .message-options-btn:hover {
+    background: var(--bg-modifier-hover);
+  }
+  .reply-action-btn:hover {
+    opacity: 1;
+    color: var(--text-normal);
+  }
+  .message-options-btn:hover {
+    opacity: 1;
+    color: var(--text-normal);
+  }
 }
 
 .reaction-picker {
@@ -1431,12 +1436,11 @@
     animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Message actions: show on tap via .mobile-actions-visible */
-  .message .message-actions {
-    opacity: 0;
-    pointer-events: none;
+  /* Message actions: conditionally rendered on mobile via JS */
+  .message.mobile-actions-visible {
+    background: var(--bg-modifier-hover);
   }
-  .message.mobile-actions-visible .message-actions {
+  .message .message-actions {
     opacity: 1;
     pointer-events: all;
   }
@@ -1637,5 +1641,52 @@
     border-left: none !important;
     z-index: 100 !important;
     animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Pull-to-refresh */
+.pull-to-refresh-indicator {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  display: none;
+}
+
+.pull-to-refresh-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-secondary, #2b2d31);
+  box-shadow: 0 3px 16px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pull-to-refresh-spinner::after {
+  content: '';
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: #ed4245;
+  border-radius: 50%;
+}
+
+.pull-to-refresh-spinner.spinning::after {
+  animation: ptr-spin 0.8s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  .pull-to-refresh-indicator {
+    display: flex;
   }
 }

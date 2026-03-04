@@ -5,6 +5,14 @@ echo "==================================="
 echo "Nexus Server Initialization"
 echo "==================================="
 
+# Derive database name from DATABASE_URL (supports both prod and dev)
+if [ -n "$DATABASE_URL" ]; then
+  DB_NAME=$(echo "$DATABASE_URL" | sed 's|.*/||' | sed 's|?.*||')
+else
+  DB_NAME="nexus_db"
+fi
+echo "Target database: $DB_NAME"
+
 # Wait for PostgreSQL to be ready (with auth check and max retries)
 echo "Waiting for PostgreSQL to be ready..."
 PG_MAX_RETRIES=30
@@ -21,7 +29,7 @@ while [ "$PG_RETRY" -lt "$PG_MAX_RETRIES" ]; do
 
   # Verify password authentication and database access
   # Note: capture exit code manually; set -e would kill the script on psql failure
-  if PG_OUTPUT=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c 'SELECT 1' 2>&1); then
+  if PG_OUTPUT=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -c 'SELECT 1' 2>&1); then
     PG_EXIT=0
   else
     PG_EXIT=$?
@@ -75,11 +83,11 @@ fi
 
 # Check if database is initialized
 echo "Checking database initialization..."
-TABLE_EXISTS=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -tAc "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'accounts');")
+TABLE_EXISTS=$(PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -tAc "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'accounts');")
 
 if [ "$TABLE_EXISTS" = "f" ]; then
   echo "Database not initialized. Running migrations..."
-  PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/001_initial_schema.sql
+  PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/001_initial_schema.sql
   echo "✓ Database migrations completed!"
 else
   echo "✓ Database already initialized"
@@ -87,8 +95,8 @@ fi
 
 # Run incremental migrations (safe to run repeatedly)
 echo "Running incremental migrations..."
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'::jsonb;" 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c "
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -c "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'::jsonb;" 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -c "
 CREATE TABLE IF NOT EXISTS soundboard_sounds (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   server_id VARCHAR(64) NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
@@ -104,11 +112,11 @@ CREATE TABLE IF NOT EXISTS soundboard_sounds (
 );
 CREATE INDEX IF NOT EXISTS idx_soundboard_server ON soundboard_sounds(server_id);
 " 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c "
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -c "
 ALTER TABLE soundboard_sounds ADD COLUMN IF NOT EXISTS volume REAL DEFAULT 1.0;
 ALTER TABLE soundboard_sounds ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT false;
 " 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -c "
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -c "
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS intro_sound TEXT;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS exit_sound TEXT;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS intro_sound_original TEXT;
@@ -122,13 +130,13 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS exit_sound_duration REAL DEFAULT 0
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS intro_sound_volume REAL DEFAULT 100;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS exit_sound_volume REAL DEFAULT 100;
 " 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/008_webhook_token.sql 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/009_server_ice_config.sql 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/010_dm_preserve_on_delete.sql 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/011_message_requests.sql 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/012_webhook_embeds.sql 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/014_thread_names.sql 2>/dev/null || true
-PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "nexus_db" -f /app/migrations/015_recovery_codes.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/008_webhook_token.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/009_server_ice_config.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/010_dm_preserve_on_delete.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/011_message_requests.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/012_webhook_embeds.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/014_thread_names.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/015_recovery_codes.sql 2>/dev/null || true
 echo "✓ Migrations complete"
 
 # Clean up expired tokens on startup

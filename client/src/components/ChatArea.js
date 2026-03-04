@@ -348,6 +348,12 @@ const ChatArea = React.memo(function ChatArea({
   const scrollPositionsRef = useRef({});
   const isNearBottomRef = useRef(true);
 
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const isPullingRef = useRef(false);
+  const pullStartYRef = useRef(0);
+
   // Track if user is near the bottom of chat
   const checkNearBottom = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -421,6 +427,50 @@ const ChatArea = React.memo(function ChatArea({
       }).catch(() => setLoadingOlder(false));
     }
   }, [hasMore, loadingOlder, channel?.id, messages, onFetchOlderMessages, checkNearBottom]);
+
+  // Pull-to-refresh touch handlers
+  const handlePullTouchStart = useCallback((e) => {
+    if (!('ontouchstart' in window) || isRefreshing) return;
+    const container = messagesContainerRef.current;
+    if (container && container.scrollTop <= 0) {
+      pullStartYRef.current = e.touches[0].clientY;
+      isPullingRef.current = true;
+    }
+  }, [isRefreshing]);
+
+  const handlePullTouchMove = useCallback((e) => {
+    if (!isPullingRef.current || isRefreshing) return;
+    const container = messagesContainerRef.current;
+    if (!container || container.scrollTop > 0) {
+      isPullingRef.current = false;
+      setPullDistance(0);
+      return;
+    }
+    const deltaY = e.touches[0].clientY - pullStartYRef.current;
+    if (deltaY > 0) {
+      e.preventDefault();
+      setPullDistance(Math.min(deltaY * 0.4, 120));
+    } else {
+      isPullingRef.current = false;
+      setPullDistance(0);
+    }
+  }, [isRefreshing]);
+
+  const handlePullTouchEnd = useCallback(() => {
+    if (!isPullingRef.current && !pullDistance) return;
+    isPullingRef.current = false;
+    if (pullDistance >= 80 && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(60);
+      if (onRefreshData) onRefreshData();
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setPullDistance(0);
+      }, 1500);
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance, isRefreshing, onRefreshData]);
 
   // ✅ Auto-focus message input when user starts typing
   useEffect(() => {
@@ -1274,8 +1324,18 @@ const ChatArea = React.memo(function ChatArea({
         </>
       ) : (
       <>
+      {/* Pull-to-refresh indicator */}
+      <div className="pull-to-refresh-indicator" style={{ transform: `translateY(${(pullDistance > 0 || isRefreshing) ? Math.min(pullDistance, 120) : -40}px)`, opacity: isRefreshing ? 1 : Math.min(pullDistance / 80, 1), transition: isPullingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease' }}>
+        <div
+          className={`pull-to-refresh-spinner${isRefreshing ? ' spinning' : ''}`}
+          style={!isRefreshing ? { transform: `rotate(${pullDistance * 3}deg)` } : undefined}
+        />
+      </div>
       {/* Messages */}
-      <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
+      <div className={`messages-container${pullDistance > 0 || isRefreshing ? ' pulling' : ''}`} ref={messagesContainerRef} onScroll={handleScroll}
+        onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}
+        style={(pullDistance > 0 || isRefreshing) ? { transform: `translateY(${pullDistance}px)`, transition: isPullingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' } : { transition: 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' }}
+      >
         {loadingOlder && (
           <div className="loading-older-messages">
             <span className="loading-spinner" />Loading older messages...
@@ -1323,9 +1383,17 @@ const ChatArea = React.memo(function ChatArea({
                 onTouchMove={messageLongPress.onTouchMove}
                 onTouchEnd={(e) => {
                   messageLongPress.onTouchEnd(e);
-                  // Single tap toggles mobile actions (only on touch devices)
+                  // Single tap toggles mobile actions (only on touch devices).
+                  // Skip if the tap landed on an interactive element (button, link,
+                  // action bar) — those should handle their own click events.
                   if (!e.defaultPrevented && 'ontouchstart' in window) {
-                    handleMobileTap(msg.id);
+                    const target = e.target;
+                    const isInteractive = target.closest('.message-actions') ||
+                      target.closest('a') || target.closest('button') ||
+                      target.closest('.reaction');
+                    if (!isInteractive) {
+                      handleMobileTap(msg.id);
+                    }
                   }
                 }}
               >
@@ -1488,13 +1556,13 @@ const ChatArea = React.memo(function ChatArea({
                       {msg.threadLastReplyContent && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginLeft: '20px', fontSize: '12px', color: '#8e9297' }}>
                           <span style={{ color: msg.threadLastReplyAuthorColor || '#b5bac1', fontWeight: 500 }}>{msg.threadLastReplyAuthor}:</span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>{msg.threadLastReplyContent.substring(0, 80)}{msg.threadLastReplyContent.length > 80 ? '...' : ''}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'min(300px, 50vw)' }}>{msg.threadLastReplyContent.substring(0, 80)}{msg.threadLastReplyContent.length > 80 ? '...' : ''}</span>
                         </div>
                       )}
                     </div>
                   )}
                 </div>
-                {!isEditing && (
+                {!isEditing && (!('ontouchstart' in window) || mobileActionsId === msg.id) && (
                   <div className="message-actions">
                     <button className="reply-action-btn"
                       onClick={e=>{e.stopPropagation();handleReplyToMessage(msg);}}
