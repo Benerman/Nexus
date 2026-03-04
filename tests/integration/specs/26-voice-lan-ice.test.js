@@ -149,8 +149,16 @@ describe('Voice, LAN Mode & ICE Configuration', () => {
 
   // ─── Per-Server Custom ICE Config ─────────────────────────────────────────
 
-  test('owner can set custom ICE config via server:update', async () => {
-    // ICE-only changes emit server:ice-config:updated, not server:updated
+  test('setting custom ICE config replaces default STUN servers', async () => {
+    // Capture default ICE servers before changing config
+    const before = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    const defaultStunUrls = before.iceServers.map(s => s.urls);
+    expect(defaultStunUrls.length).toBeGreaterThan(0);
+    expect(defaultStunUrls.some(u => u.includes('google'))).toBe(true);
+    // No TURN server in defaults (no TURN_SECRET set in test env)
+    expect(before.iceServers.every(s => !s.username)).toBe(true);
+
+    // Apply custom config
     const iceUpdatedPromise = waitForEvent(owner.socket, 'server:ice-config:updated', 5000);
     owner.socket.emit('server:update', {
       serverId,
@@ -160,46 +168,87 @@ describe('Voice, LAN Mode & ICE Configuration', () => {
         turnSecret: 'test-secret-123',
       },
     });
-    const data = await iceUpdatedPromise;
+    const ack = await iceUpdatedPromise;
+    expect(ack.success).toBe(true);
 
-    expect(data.success).toBe(true);
-    expect(data.serverId).toBe(serverId);
-  });
+    // Verify ICE servers changed from defaults to custom
+    const after = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    const afterUrls = after.iceServers.map(s => s.urls);
 
-  test('voice:ice-config returns custom STUN/TURN after config', async () => {
-    const result = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
-
-    expect(result.iceServers).toBeDefined();
-    const stunServer = result.iceServers.find(s => s.urls?.startsWith('stun:custom-stun'));
-    const turnServer = result.iceServers.find(s => s.urls?.startsWith('turn:custom-turn'));
-
-    expect(stunServer).toBeDefined();
+    // Default Google STUN should be gone
+    expect(afterUrls.some(u => u.includes('google'))).toBe(false);
+    // Custom STUN should be present
+    expect(afterUrls).toContain('stun:custom-stun.example.com:3478');
+    // TURN should be present with ephemeral credentials
+    const turnServer = after.iceServers.find(s => s.urls?.startsWith('turn:'));
     expect(turnServer).toBeDefined();
-    expect(turnServer.username).toBeDefined();
-    expect(turnServer.credential).toBeDefined();
+    expect(turnServer.urls).toBe('turn:custom-turn.example.com:3478');
     expect(turnServer.username).toMatch(/^\d+:/);
+    expect(turnServer.credential).toBeDefined();
   });
 
-  test('server:get-ice-config shows custom config (secret masked)', async () => {
+  test('server:get-ice-config reflects the custom config (secret masked)', async () => {
     const result = await emitAndWait(owner.socket, 'server:get-ice-config', { serverId });
 
-    expect(result.iceConfig).toBeDefined();
+    expect(result.iceConfig).not.toBeNull();
     expect(result.iceConfig.stunUrls).toEqual(['stun:custom-stun.example.com:3478']);
     expect(result.iceConfig.turnUrl).toBe('turn:custom-turn.example.com:3478');
+    // Secret is never exposed — only a boolean flag
     expect(result.iceConfig.hasSecret).toBe(true);
     expect(result.iceConfig.turnSecret).toBeUndefined();
   });
 
-  test('owner can clear custom ICE config', async () => {
+  test('updating only STUN URLs preserves existing TURN secret', async () => {
+    // Change STUN URLs without resending the secret
     const iceUpdatedPromise = waitForEvent(owner.socket, 'server:ice-config:updated', 5000);
     owner.socket.emit('server:update', {
       serverId,
-      iceConfig: null,
+      iceConfig: {
+        stunUrls: ['stun:updated-stun.example.com:3478'],
+        turnUrl: 'turn:custom-turn.example.com:3478',
+      },
     });
     await iceUpdatedPromise;
 
-    const result = await emitAndWait(owner.socket, 'server:get-ice-config', { serverId });
-    expect(result.iceConfig).toBeNull();
+    // TURN should still work (secret preserved from previous update)
+    const iceResult = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    const turnServer = iceResult.iceServers.find(s => s.urls?.startsWith('turn:'));
+    expect(turnServer).toBeDefined();
+    expect(turnServer.credential).toBeDefined();
+
+    // STUN should reflect the new URL
+    expect(iceResult.iceServers.map(s => s.urls)).toContain('stun:updated-stun.example.com:3478');
+    expect(iceResult.iceServers.map(s => s.urls)).not.toContain('stun:custom-stun.example.com:3478');
+
+    // get-ice-config should still show hasSecret
+    const configResult = await emitAndWait(owner.socket, 'server:get-ice-config', { serverId });
+    expect(configResult.iceConfig.hasSecret).toBe(true);
+  });
+
+  test('clearing custom ICE config reverts to default STUN servers', async () => {
+    // Capture custom state before clearing
+    const before = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    expect(before.iceServers.map(s => s.urls)).toContain('stun:updated-stun.example.com:3478');
+
+    // Clear custom config
+    const iceUpdatedPromise = waitForEvent(owner.socket, 'server:ice-config:updated', 5000);
+    owner.socket.emit('server:update', { serverId, iceConfig: null });
+    await iceUpdatedPromise;
+
+    // Verify config is cleared
+    const configResult = await emitAndWait(owner.socket, 'server:get-ice-config', { serverId });
+    expect(configResult.iceConfig).toBeNull();
+
+    // Verify ICE servers reverted to defaults
+    const after = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    const afterUrls = after.iceServers.map(s => s.urls);
+    // Custom URLs should be gone
+    expect(afterUrls.some(u => u.includes('updated-stun'))).toBe(false);
+    expect(afterUrls.some(u => u.includes('custom-turn'))).toBe(false);
+    // Default Google STUN should be back
+    expect(afterUrls.some(u => u.includes('google'))).toBe(true);
+    // No TURN credentials (no global TURN_SECRET in test env)
+    expect(after.iceServers.every(s => !s.username)).toBe(true);
   });
 
   // ─── ICE Config Validation ────────────────────────────────────────────────
@@ -249,20 +298,20 @@ describe('Voice, LAN Mode & ICE Configuration', () => {
 
   // ─── LAN Mode ────────────────────────────────────────────────────────────
 
-  test('owner can enable LAN mode', async () => {
+  test('enabling LAN mode clears ICE servers that were previously returned', async () => {
+    // Capture ICE servers before enabling LAN mode
+    const before = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    expect(before.iceServers.length).toBeGreaterThan(0);
+
+    // Enable LAN mode
     const updatePromise = waitForEvent(owner.socket, 'server:updated', 5000);
     owner.socket.emit('server:update', { serverId, lanMode: true });
     const data = await updatePromise;
-
-    expect(data.server).toBeDefined();
     expect(data.server.lanMode).toBe(true);
-  });
 
-  test('LAN mode returns empty ICE servers', async () => {
-    const result = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
-
-    expect(result.iceServers).toBeDefined();
-    expect(result.iceServers).toHaveLength(0);
+    // ICE servers should now be empty
+    const after = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    expect(after.iceServers).toHaveLength(0);
   });
 
   test('LAN mode suppresses GIF search', async () => {
@@ -295,28 +344,27 @@ describe('Voice, LAN Mode & ICE Configuration', () => {
     expect(body.error).toMatch(/LAN mode/);
   });
 
-  test('owner can disable LAN mode', async () => {
+  test('disabling LAN mode restores ICE servers and URL previews', async () => {
+    // Confirm LAN mode is still on
+    const iceBefore = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    expect(iceBefore.iceServers).toHaveLength(0);
+
+    // Disable LAN mode
     const updatePromise = waitForEvent(owner.socket, 'server:updated', 5000);
     owner.socket.emit('server:update', { serverId, lanMode: false });
     const data = await updatePromise;
-
-    expect(data.server).toBeDefined();
     expect(data.server.lanMode).toBe(false);
-  });
 
-  test('ICE servers return after LAN mode disabled', async () => {
-    const result = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    // ICE servers should be back
+    const iceAfter = await emitAndWait(owner.socket, 'voice:ice-config', { serverId });
+    expect(iceAfter.iceServers.length).toBeGreaterThan(0);
+    expect(iceAfter.iceServers[0].urls).toMatch(/^stun:/);
 
-    expect(result.iceServers).toBeDefined();
-    expect(result.iceServers.length).toBeGreaterThan(0);
-  });
-
-  test('URL previews work after LAN mode disabled', async () => {
+    // URL previews should no longer be blocked
     const { status } = await api.get(
       `/api/og?url=https://example.com&serverId=${serverId}`,
       owner.token
     );
-
     expect(status).not.toBe(403);
   });
 
