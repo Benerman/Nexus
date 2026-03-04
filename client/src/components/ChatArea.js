@@ -348,6 +348,12 @@ const ChatArea = React.memo(function ChatArea({
   const scrollPositionsRef = useRef({});
   const isNearBottomRef = useRef(true);
 
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const isPullingRef = useRef(false);
+  const pullStartYRef = useRef(0);
+
   // Track if user is near the bottom of chat
   const checkNearBottom = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -421,6 +427,49 @@ const ChatArea = React.memo(function ChatArea({
       }).catch(() => setLoadingOlder(false));
     }
   }, [hasMore, loadingOlder, channel?.id, messages, onFetchOlderMessages, checkNearBottom]);
+
+  // Pull-to-refresh touch handlers
+  const handlePullTouchStart = useCallback((e) => {
+    if (!('ontouchstart' in window) || isRefreshing) return;
+    const container = messagesContainerRef.current;
+    if (container && container.scrollTop <= 0) {
+      pullStartYRef.current = e.touches[0].clientY;
+      isPullingRef.current = true;
+    }
+  }, [isRefreshing]);
+
+  const handlePullTouchMove = useCallback((e) => {
+    if (!isPullingRef.current || isRefreshing) return;
+    const container = messagesContainerRef.current;
+    if (!container || container.scrollTop > 0) {
+      isPullingRef.current = false;
+      setPullDistance(0);
+      return;
+    }
+    const deltaY = e.touches[0].clientY - pullStartYRef.current;
+    if (deltaY > 0) {
+      e.preventDefault();
+      setPullDistance(Math.min(deltaY * 0.4, 120));
+    } else {
+      isPullingRef.current = false;
+      setPullDistance(0);
+    }
+  }, [isRefreshing]);
+
+  const handlePullTouchEnd = useCallback(() => {
+    if (!isPullingRef.current && !pullDistance) return;
+    isPullingRef.current = false;
+    if (pullDistance >= 80 && !isRefreshing) {
+      setIsRefreshing(true);
+      if (onRefreshData) onRefreshData();
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setPullDistance(0);
+      }, 1500);
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance, isRefreshing, onRefreshData]);
 
   // ✅ Auto-focus message input when user starts typing
   useEffect(() => {
@@ -1274,8 +1323,20 @@ const ChatArea = React.memo(function ChatArea({
         </>
       ) : (
       <>
+      {/* Pull-to-refresh indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div className="pull-to-refresh-indicator" style={{ transform: `translateY(${Math.min(pullDistance, 120) - 40}px)`, opacity: isRefreshing ? 1 : Math.min(pullDistance / 80, 1) }}>
+          <div
+            className={`pull-to-refresh-spinner${isRefreshing ? ' spinning' : ''}`}
+            style={!isRefreshing ? { transform: `rotate(${pullDistance * 3}deg)` } : undefined}
+          />
+        </div>
+      )}
       {/* Messages */}
-      <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
+      <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}
+        onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}
+        style={pullDistance > 0 ? { transform: `translateY(${pullDistance}px)`, transition: isPullingRef.current ? 'none' : 'transform 0.3s ease-out' } : undefined}
+      >
         {loadingOlder && (
           <div className="loading-older-messages">
             <span className="loading-spinner" />Loading older messages...
