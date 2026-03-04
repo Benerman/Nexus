@@ -98,7 +98,8 @@ module.exports = function(io, socket) {
           pinned: dbMsg.pinned || false,
           pinnedAt: dbMsg.pinned_at ? new Date(dbMsg.pinned_at).getTime() : null,
           pinnedBy: dbMsg.pinned_by || null,
-          threadId: dbMsg.thread_id || null
+          threadId: dbMsg.thread_id || null,
+          encrypted: dbMsg.encrypted || false
         };
       }));
 
@@ -113,7 +114,8 @@ module.exports = function(io, socket) {
         customAvatar: targetAccount.custom_avatar,
         color: targetAccount.color,
         status: targetAccount.status,
-        bio: targetAccount.bio
+        bio: targetAccount.bio,
+        publicKey: targetAccount.public_key || null
       };
 
       // Join the DM channel room
@@ -224,7 +226,8 @@ module.exports = function(io, socket) {
             customAvatar: row.p2_custom_avatar,
             color: row.p2_color,
             status: row.p2_status,
-            bio: row.p2_bio
+            bio: row.p2_bio,
+            publicKey: row.p2_public_key || null
           };
         } else {
           // Other user is participant_1 — use p1_* fields
@@ -235,7 +238,8 @@ module.exports = function(io, socket) {
             customAvatar: row.p1_custom_avatar,
             color: row.p1_color,
             status: row.p1_status,
-            bio: row.p1_bio
+            bio: row.p1_bio,
+            publicKey: row.p1_public_key || null
           };
         }
 
@@ -257,7 +261,8 @@ module.exports = function(io, socket) {
             id: row.last_msg_id,
             content: row.last_msg_content,
             timestamp: new Date(row.last_msg_created_at).getTime(),
-            authorId: row.last_msg_author_id
+            authorId: row.last_msg_author_id,
+            encrypted: row.last_msg_encrypted || false
           };
         }
 

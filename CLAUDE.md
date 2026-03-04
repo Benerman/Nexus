@@ -211,3 +211,45 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 - [ ] **Normalize variable naming scheme** — Review existing `--bg-*`, `--text-*`, `--brand-*` variables for completeness and consistency. Establish a semantic naming convention (e.g. `--color-surface-primary`, `--color-text-secondary`, `--color-accent`) that can map to different themes.
 - [ ] **Extract root variable definitions** — Move all CSS custom property definitions into a single dedicated file/section (e.g. `:root` block or `theme.css`) so theme switching only needs to swap one set of values.
 - [ ] **Identify component-specific overrides** — Find components that define their own colors outside the variable system (inline styles, component-scoped hardcoded values) and refactor them to use the centralized variables.
+
+## TODO — Competitive Feature Gaps (High Priority)
+
+- [ ] **AutoMod system** — Add `moderation_rules` table with keyword filter, spam detection, and invite filter. Process rules on `message:send` before broadcast. Configurable actions (warn, delete, timeout, ban). UI in server settings. Every competitor has content filtering; Nexus only has rate limiting.
+- [ ] **Two-factor authentication (2FA)** — TOTP support using `speakeasy` or `otpauth`. QR code setup flow in security settings. Backup codes for recovery. Table-stakes security feature missing from Nexus.
+- [ ] **Push-to-talk** — Spacebar hotkey (configurable) to transmit only when pressed. Mute mic track when PTT key released. Setting toggle in Audio Settings.
+- [ ] **Forum channels** — New channel type `forum` with post-based threads. Each post has a title + initial message. Tags for categorization. Sort by recent activity or creation date. Discord's most successful channel type for communities.
+- [ ] **Typing indicators** — Add `typing:start` / `typing:stop` socket events. Show "[user] is typing..." in chat footer. Debounce with 3-second timeout. Basic UX expectation in all messaging platforms.
+
+## TODO — Competitive Feature Gaps (Medium Priority)
+
+- [ ] **Scheduled messages** — Store in `scheduled_messages` table with delivery timestamp. Job queue or interval check for reliable delivery. Calendar icon in message input with date/time picker.
+- [ ] **Message edit history** — Add `message_edits` table tracking old content + edit timestamp. Show "(edited)" badge on messages. Click to view previous versions. No competitor does this well — opportunity to lead.
+- [ ] **Keyboard shortcuts** — Comprehensive shortcut system for navigation, message actions, voice controls. Configurable bindings. Document in a shortcuts modal (Ctrl+/).
+- [ ] **Stage channels** — Speaker queue model for town halls, AMAs, presentations. Audience can "raise hand" to request speaking. Moderator approves/denies.
+- [ ] **Server onboarding** — Customizable welcome screen for new members. Select roles, read rules, pick channels. Discord's onboarding flow significantly improves new-member experience.
+
+## TODO — End-to-End Encryption
+
+- [x] **E2E encryption for DMs** — Implement Signal Protocol-style encryption for direct messages. Each user generates an X25519 keypair on registration (stored encrypted in localStorage, public key synced to server). DM messages encrypted client-side before sending; server stores only ciphertext. Key exchange on DM channel creation. Decrypt on receive using recipient's private key. Server never sees plaintext. Show lock icon on encrypted conversations. Consider using `libsodium.js` (NaCl) for crypto primitives — well-audited, fast WASM build, simpler than full Signal Protocol for 1:1 DMs.
+- [x] **Key backup / recovery** — Allow users to export/import their private key (encrypted with a passphrase). Without this, losing localStorage means losing access to message history. Warn users clearly during setup.
+- [x] **Device verification** — Show key fingerprints in user profiles so users can verify they're talking to the right person (no MITM). Similar to Signal's safety numbers.
+
+## TODO — LAN Mode / Offline-Ready
+
+- [x] **Remove Google Fonts dependency** — Download `DM Sans` (weights 300-700) and `Space Grotesk` (weights 400-700) as WOFF2 files. Bundle in `client/public/fonts/`. Add `@font-face` declarations in `index.css`. Remove `<link>` tags from `client/public/index.html`. Remove `fonts.googleapis.com` and `fonts.gstatic.com` from CSP headers in `nginx.conf`, `nginx.dev.conf`, and `client/src-tauri/tauri.conf.json`.
+- [ ] **Self-hosted STUN/TURN** — Replace default Google STUN servers (`stun.l.google.com`) with a bundled `coturn` container in `docker-compose.yml`. On LAN, WebRTC can often connect without STUN (same subnet), but STUN is needed for NAT traversal across subnets. Coturn handles both STUN and TURN. Add `STUN_URLS=stun:coturn:3478` and `TURN_URL=turn:coturn:3478` to default env.
+- [x] **Disable external API calls in LAN mode** — Per-server `lanMode` toggle in server settings. When enabled: hides GIF picker, suppresses URL previews, returns empty ICE servers (direct LAN connections only). Server enforces on `/api/og` and `/api/gifs/*` routes.
+- [ ] **Service worker for offline shell** — Register a service worker that caches the app shell (HTML, CSS, JS, fonts, icons) so the client loads even if the server is temporarily unreachable. Not full offline messaging, but prevents blank page on network hiccup.
+
+## TODO — Infrastructure Gaps
+
+- [ ] **Structured logging** — Replace all console.log/error/warn with Winston or Pino. Add log levels, timestamps, request context. Redact sensitive data.
+- [ ] **Automated database backups** — Daily pg_dump via sidecar container or cron. Compress with 30-day retention.
+- [ ] **SSO/OAuth support** — Add OAuth2 login flow for Google/GitHub. Important for team/org deployments.
+- [ ] **Data retention policies** — Configurable per-server message retention. Auto-purge messages older than N days.
+
+## TODO — Accessibility
+
+- [ ] **ARIA labels** — Add aria-label, aria-live, role attributes to all interactive elements. Screen reader announcements for new messages.
+- [ ] **Keyboard navigation** — Full keyboard support for context menus, emoji picker, settings modal, channel list. Focus management and tab order.
+- [ ] **Reduced motion** — Respect `prefers-reduced-motion` media query. Disable animations for users who need it.

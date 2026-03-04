@@ -103,7 +103,7 @@ module.exports = function(io, socket) {
     }
   });
 
-  socket.on('server:update', async ({ serverId, name, icon, description, customIcon, emojiSharing, iceConfig }) => {
+  socket.on('server:update', async ({ serverId, name, icon, description, customIcon, emojiSharing, iceConfig, lanMode }) => {
     const user = state.users[socket.id];
     if (!user) return;
     const perms = getUserPerms(user.id, serverId);
@@ -136,6 +136,10 @@ module.exports = function(io, socket) {
       if (emojiSharing !== undefined) {
         srv.emojiSharing = !!emojiSharing;
         updates.emoji_sharing = srv.emojiSharing;
+      }
+      if (lanMode !== undefined) {
+        srv.lanMode = !!lanMode;
+        updates.lan_mode = srv.lanMode;
       }
 
       // ICE config — owner-only

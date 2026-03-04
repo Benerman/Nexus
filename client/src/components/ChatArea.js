@@ -11,6 +11,7 @@ import MessageLinkEmbed from './MessageLinkEmbed';
 import PollCreator from './PollCreator';
 import useLongPress from '../hooks/useLongPress';
 import emojiImageCache from '../utils/emojiCache';
+import { encryptMessage } from '../utils/encryption';
 
 const SLASH_COMMANDS = [
   { name: 'poll', description: 'Create a poll', usage: '/poll', icon: '📊' },
@@ -307,6 +308,7 @@ const ChatArea = React.memo(function ChatArea({
   threadPanel, onOpenThread, onCloseThread, onThreadReply,
   showThreadsListPanel, onToggleThreadsListPanel, channelThreads,
   screenShareActive,
+  e2eSecretKey, publicKeyCache,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -734,6 +736,24 @@ const ChatArea = React.memo(function ChatArea({
     if (replyingTo) {
       payload.replyTo = replyingTo.id;
     }
+    // E2E encrypt for 1:1 DMs when both parties have keys
+    if (channel.isDM && channel.type === 'dm' && e2eSecretKey && channel.participant?.id) {
+      const recipientPK = publicKeyCache?.get(channel.participant.id);
+      if (recipientPK) {
+        try {
+          payload.content = encryptMessage(input, recipientPK, e2eSecretKey);
+          if (pendingAttachments.length > 0) {
+            payload.attachments = pendingAttachments.map(att => ({
+              ...att,
+              url: att.url ? encryptMessage(att.url, recipientPK, e2eSecretKey) : att.url
+            }));
+          }
+          payload.encrypted = true;
+        } catch (err) {
+          console.warn('[E2E] Encryption failed, sending plaintext:', err.message);
+        }
+      }
+    }
     socket.emit('message:send', payload);
     setInput('');
     setPendingAttachments([]);
@@ -881,14 +901,27 @@ const ChatArea = React.memo(function ChatArea({
 
   const handleSaveEdit = useCallback(() => {
     if (!socket || !channel || !editingMessage || !editInput.trim()) return;
-    socket.emit('message:edit', {
+    const editPayload = {
       channelId: channel.id,
       messageId: editingMessage.id,
       content: editInput
-    });
+    };
+    // Re-encrypt if the original message was encrypted
+    if ((editingMessage.encrypted || editingMessage._encrypted) && e2eSecretKey && channel.participant?.id) {
+      const recipientPK = publicKeyCache?.get(channel.participant.id);
+      if (recipientPK) {
+        try {
+          editPayload.content = encryptMessage(editInput, recipientPK, e2eSecretKey);
+          editPayload.encrypted = true;
+        } catch (err) {
+          console.warn('[E2E] Edit encryption failed:', err.message);
+        }
+      }
+    }
+    socket.emit('message:edit', editPayload);
     setEditingMessage(null);
     setEditInput('');
-  }, [socket, channel, editingMessage, editInput]);
+  }, [socket, channel, editingMessage, editInput, e2eSecretKey, publicKeyCache]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingMessage(null);
@@ -1109,7 +1142,12 @@ const ChatArea = React.memo(function ChatArea({
                 </svg>
               )}
             </div>
-            <span className="chat-header-name">{channel.isDM ? (channel.participant?.username || channel.name) : channel.name}</span>
+            <span className="chat-header-name">
+              {channel.isDM ? (channel.participant?.username || channel.name) : channel.name}
+              {channel.isDM && channel.type === 'dm' && e2eSecretKey && publicKeyCache?.get(channel.participant?.id) && (
+                <span className="e2e-lock-icon" title="End-to-end encrypted" style={{ marginLeft: 6, opacity: 0.6, fontSize: 14 }}>🔒</span>
+              )}
+            </span>
             {!channel.isDM && channel.description && <><div className="chat-header-divider"/><span className="chat-header-desc">{channel.description}</span></>}
             {!channel.isDM && channel.topic && <span className="chat-header-topic" title={channel.topic}>│ {channel.topic}</span>}
           </>
@@ -1352,6 +1390,12 @@ const ChatArea = React.memo(function ChatArea({
                 </div>
                 <h3>{channel.participant?.username || channel.name}</h3>
                 <p>This is the beginning of your direct message history with <strong>{channel.participant?.username || channel.name}</strong>.</p>
+                {channel.type === 'dm' && e2eSecretKey && publicKeyCache?.get(channel.participant?.id) && (
+                  <div className="e2e-banner" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'rgba(87, 242, 135, 0.08)', borderRadius: 8, marginTop: 12, fontSize: 13, color: 'var(--text-positive, #57F287)' }}>
+                    <span style={{ fontSize: 16 }}>🔒</span>
+                    Messages in this conversation are end-to-end encrypted. Only you and <strong style={{ marginLeft: 2 }}>{channel.participant?.username}</strong> can read them.
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -1367,6 +1411,8 @@ const ChatArea = React.memo(function ChatArea({
           const isEditing = editingMessage?.id === msg.id;
           const replyToMsg = msg.replyTo ? messages.find(m => m.id === msg.replyTo) : null;
           const isAdmin = server?.members?.[currentUser?.id]?.roles?.includes('admin');
+          const isEncryptedDM = channel.isDM && channel.type === 'dm' && e2eSecretKey && publicKeyCache?.get(channel.participant?.id);
+          const isUnencryptedInEncryptedDM = isEncryptedDM && !msg.encrypted && !msg._encrypted && !msg.isSystem;
 
           return (
             <React.Fragment key={msg.id}>
@@ -1374,7 +1420,7 @@ const ChatArea = React.memo(function ChatArea({
               <div
                 ref={el => messageRefs.current[msg.id] = el}
                 data-message-id={msg.id}
-                className={`message ${msg.isGrouped?'grouped':''} ${msg.author.id===currentUser?.id?'own':''} ${msg.isWebhook?'webhook-msg':''} ${isEditing?'editing':''} ${highlightedMessageId===msg.id?'highlighted':''} ${mobileActionsId===msg.id?'mobile-actions-visible':''} ${(msg.mentions?.everyone || msg.mentions?.users?.some(u => u.id === currentUser?.id)) ? 'mention-highlight' : ''}`}
+                className={`message ${msg.isGrouped?'grouped':''} ${msg.author.id===currentUser?.id?'own':''} ${msg.isWebhook?'webhook-msg':''} ${isEditing?'editing':''} ${highlightedMessageId===msg.id?'highlighted':''} ${mobileActionsId===msg.id?'mobile-actions-visible':''} ${(msg.mentions?.everyone || msg.mentions?.users?.some(u => u.id === currentUser?.id)) ? 'mention-highlight' : ''} ${isUnencryptedInEncryptedDM ? 'not-encrypted' : ''}`}
                 onContextMenu={(e) => handleMessageContextMenu(e, msg)}
                 onTouchStart={(e) => {
                   longPressCallbackRef.current = (ev) => handleMessageContextMenu(ev, msg);
@@ -1415,6 +1461,7 @@ const ChatArea = React.memo(function ChatArea({
                       <span className="message-time">{formatTime(msg.timestamp)}</span>
                       {msg.pinned && <span style={{ color: '#ed4245', marginLeft: '4px', display: 'inline-flex', verticalAlign: 'middle' }} title="Pinned"><PinIcon size={12} /></span>}
                       {msg.editedAt && <span className="edited-badge">(edited)</span>}
+                      {isUnencryptedInEncryptedDM && <span className="not-encrypted-badge" title="This message is not encrypted">🔓</span>}
                     </div>
                   )}
                   {replyToMsg && (
@@ -1462,7 +1509,7 @@ const ChatArea = React.memo(function ChatArea({
                                 <InviteEmbed key={`${msg.id}-invite-${i}`} inviteCode={p.code} socket={socket} />
                               ))
                           )}
-                          {extractURLs(msg.content).slice(0, 3).map((embedUrl, i) => (
+                          {!server?.lanMode && !msg.encrypted && !msg._encrypted && extractURLs(msg.content).slice(0, 3).map((embedUrl, i) => (
                             <URLEmbed key={`${msg.id}-url-${i}`} url={embedUrl} />
                           ))}
                           {(() => {
@@ -1740,14 +1787,16 @@ const ChatArea = React.memo(function ChatArea({
             <button className="attach-btn" onClick={()=>fileInputRef.current?.click()} title="Attach image">
               <AttachmentIcon size={18} color="currentColor" />
             </button>
-            <div style={{ position: 'relative' }}>
-              <button className={`attach-btn ${gifPickerOpen ? 'active' : ''}`} onClick={() => setGifPickerOpen(!gifPickerOpen)} title="GIF">
-                <span style={{ fontSize: 12, fontWeight: 700 }}>GIF</span>
-              </button>
-              {gifPickerOpen && (
-                <GifPicker onSelect={handleGifSelect} onClose={() => setGifPickerOpen(false)} />
-              )}
-            </div>
+            {!server?.lanMode && (
+              <div style={{ position: 'relative' }}>
+                <button className={`attach-btn ${gifPickerOpen ? 'active' : ''}`} onClick={() => setGifPickerOpen(!gifPickerOpen)} title="GIF">
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>GIF</span>
+                </button>
+                {gifPickerOpen && (
+                  <GifPicker onSelect={handleGifSelect} onClose={() => setGifPickerOpen(false)} />
+                )}
+              </div>
+            )}
             <div style={{ position: 'relative' }}>
               <button className={`attach-btn ${inputEmojiOpen ? 'active' : ''}`} onClick={() => setInputEmojiOpen(!inputEmojiOpen)} title="Emoji">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

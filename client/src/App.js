@@ -21,6 +21,7 @@ import IncomingCallOverlay from './components/IncomingCallOverlay';
 import WelcomeTour from './components/WelcomeTour';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
+import { initSodium, decryptMessage, encryptMessage } from './utils/encryption';
 import './App.css';
 
 // Inject custom theme CSS from localStorage
@@ -185,6 +186,8 @@ export default function App() {
   const webrtcRef = useRef(webrtc);
   webrtcRef.current = webrtc;
   const socketRef = useRef(null);
+  const e2eSecretKeyRef = useRef(null);
+  const publicKeyCacheRef = useRef(new Map());
   const sessionRestored = useRef(false);
   const pendingInviteCode = useRef(null);
   const activeChannelRef = useRef(null);
@@ -494,8 +497,46 @@ export default function App() {
     setTimeout(() => setErrorMsg(null), durationMs);
   }, []);
 
-  const handleLogin = useCallback(({ token, username }) => {
+  // ─── E2E Encryption helpers ─────────────────────────────────────────────────
+
+  /**
+   * Decrypt a message with full DM context (knows the other participant).
+   * Used for DM messages where we can determine the recipient/sender.
+   */
+  const decryptDmMessage = useCallback((msg, otherUserId) => {
+    if (!msg.encrypted) return msg;
+    const sk = e2eSecretKeyRef.current;
+    if (!sk) return { ...msg, content: '[Encrypted message]', _decryptionFailed: true };
+    const otherPK = publicKeyCacheRef.current.get(otherUserId);
+    if (!otherPK) return { ...msg, content: '[Unable to decrypt]', _decryptionFailed: true };
+    try {
+      const plaintext = decryptMessage(msg.content, otherPK, sk);
+      if (plaintext === null) return { ...msg, content: '[Unable to decrypt]', _decryptionFailed: true };
+      const decrypted = { ...msg, content: plaintext, _encrypted: true };
+      if (msg.attachments?.length) {
+        decrypted.attachments = msg.attachments.map(att => {
+          if (att.url && att.url.includes('.')) {
+            try {
+              const decUrl = decryptMessage(att.url, otherPK, sk);
+              if (decUrl) return { ...att, url: decUrl };
+            } catch { /* keep original */ }
+          }
+          return att;
+        });
+      }
+      return decrypted;
+    } catch {
+      return { ...msg, content: '[Unable to decrypt]', _decryptionFailed: true };
+    }
+  }, []);
+
+  const handleLogin = useCallback(({ token, username, e2eSecretKey }) => {
     console.log('[App]  handleLogin called with', { token: token?.slice(0, 10) + '...', username });
+
+    // Store E2E secret key in ref (never in state to avoid re-renders)
+    if (e2eSecretKey) {
+      e2eSecretKeyRef.current = e2eSecretKey;
+    }
 
     // Always disconnect and clean up existing socket before creating a new one
     if (socketRef.current) {
@@ -703,6 +744,25 @@ export default function App() {
 
       // Request notification permission
       requestNotificationPermission();
+
+      // Sync E2E public key with server
+      const storedPK = localStorage.getItem('nexus_e2e_public_key');
+      if (storedPK && token) {
+        s.emit('encryption:set-public-key', { publicKey: storedPK }, (res) => {
+          if (res?.error) console.warn('[E2E] Failed to sync public key:', res.error);
+        });
+      }
+
+      // Populate public key cache from DM participant data
+      servers.forEach(srv => {
+        if (srv.isPersonal || srv.id?.startsWith('personal:')) {
+          (srv.channels?.text || []).forEach(ch => {
+            if (ch.type === 'dm' && ch.participant?.publicKey) {
+              publicKeyCacheRef.current.set(ch.participant.id, ch.participant.publicKey);
+            }
+          });
+        }
+      });
     });
 
     // Handle data refresh response (for visibility change / reconnection)
@@ -717,6 +777,16 @@ export default function App() {
       });
       setOnlineUsers(onlineUsers);
       setVoiceChannelState(voiceChannels);
+      // Refresh public key cache from DM participant data
+      servers.forEach(srv => {
+        if (srv.isPersonal || srv.id?.startsWith('personal:')) {
+          (srv.channels?.text || []).forEach(ch => {
+            if (ch.type === 'dm' && ch.participant?.publicKey) {
+              publicKeyCacheRef.current.set(ch.participant.id, ch.participant.publicKey);
+            }
+          });
+        }
+      });
     });
 
     s.on('user:joined', ({ onlineUsers }) => setOnlineUsers(onlineUsers));
@@ -727,6 +797,20 @@ export default function App() {
     });
 
     s.on('channel:history', ({ channelId, messages: msgs, hasMore }) => {
+      // Decrypt E2E encrypted messages in bulk
+      if (e2eSecretKeyRef.current && msgs.some(m => m.encrypted)) {
+        const srvData = serverDataRef.current;
+        let otherUserId = null;
+        for (const sId of Object.keys(srvData)) {
+          const sv = srvData[sId];
+          if (!sv.isPersonal && !sv.id?.startsWith('personal:')) continue;
+          const ch = sv.channels?.text?.find(c => c.id === channelId);
+          if (ch?.participant?.id) { otherUserId = ch.participant.id; break; }
+        }
+        if (otherUserId) {
+          msgs = msgs.map(m => m.encrypted ? decryptDmMessage(m, otherUserId) : m);
+        }
+      }
       setMessages(prev => {
         const existing = prev[channelId] || [];
         if (existing.length === 0) {
@@ -751,6 +835,24 @@ export default function App() {
       }
     });
     s.on('message:new', msg => {
+      // Decrypt E2E encrypted messages
+      if (msg.encrypted && e2eSecretKeyRef.current) {
+        // Find the other participant's userId for this DM channel
+        const srvData = serverDataRef.current;
+        let otherUserId = null;
+        for (const sId of Object.keys(srvData)) {
+          const sv = srvData[sId];
+          if (!sv.isPersonal && !sv.id?.startsWith('personal:')) continue;
+          const ch = sv.channels?.text?.find(c => c.id === msg.channelId);
+          if (ch?.participant?.id) {
+            otherUserId = ch.participant.id;
+            break;
+          }
+        }
+        if (otherUserId) {
+          msg = decryptDmMessage(msg, otherUserId);
+        }
+      }
       setMessages(prev => ({ ...prev, [msg.channelId]: [...(prev[msg.channelId] || []), msg] }));
       // Auto-mark as read if user is currently viewing this channel
       const isViewingChannel = activeChannelRef.current?.id === msg.channelId;
@@ -845,13 +947,32 @@ export default function App() {
         ...prev,
         [channelId]: (prev[channelId] || []).filter(m => m.id !== messageId)
       })));
-    s.on('message:edited', ({ channelId, messageId, content, editedAt }) =>
+    s.on('message:edited', ({ channelId, messageId, content, editedAt, encrypted }) => {
+      let decryptedContent = content;
+      if (encrypted && e2eSecretKeyRef.current) {
+        const srvData = serverDataRef.current;
+        let otherUserId = null;
+        for (const sId of Object.keys(srvData)) {
+          const sv = srvData[sId];
+          if (!sv.isPersonal && !sv.id?.startsWith('personal:')) continue;
+          const ch = sv.channels?.text?.find(c => c.id === channelId);
+          if (ch?.participant?.id) { otherUserId = ch.participant.id; break; }
+        }
+        if (otherUserId) {
+          const otherPK = publicKeyCacheRef.current.get(otherUserId);
+          if (otherPK) {
+            const plain = decryptMessage(content, otherPK, e2eSecretKeyRef.current);
+            if (plain !== null) decryptedContent = plain;
+          }
+        }
+      }
       setMessages(prev => ({
         ...prev,
         [channelId]: (prev[channelId] || []).map(m =>
-          m.id === messageId ? { ...m, content, editedAt } : m
+          m.id === messageId ? { ...m, content: decryptedContent, editedAt, encrypted: encrypted || false, _encrypted: encrypted || false } : m
         )
-      })));
+      }));
+    });
 
     // Poll vote updates
     s.on('poll:updated', ({ channelId, messageId, commandData }) =>
@@ -1106,6 +1227,10 @@ export default function App() {
     // ✅ Phase 2: DM channels now handled via Personal server
     // When a new DM is created, backend will emit 'server:updated' with the Personal server
     s.on('dm:created', ({ channel, messages: msgs, navigate = true }) => {
+      // Cache participant's public key for E2E encryption
+      if (channel.participant?.publicKey) {
+        publicKeyCacheRef.current.set(channel.participant.id, channel.participant.publicKey);
+      }
       // Add the DM channel to the Personal server's channel list
       setServerData(prev => {
         const personalServer = Object.values(prev).find(srv => srv.isPersonal || srv.id?.startsWith('personal:'));
@@ -1421,6 +1546,9 @@ export default function App() {
       console.log('[App]  Detected invite URL, code:', inviteMatch[1]);
     }
 
+    // Initialize libsodium early so decryption is ready when messages arrive
+    initSodium().catch(() => {});
+
     const token = localStorage.getItem('nexus_token');
     const username = localStorage.getItem('nexus_username');
     if (token && username) {
@@ -1656,10 +1784,25 @@ export default function App() {
       if (!socketRef.current) return resolve({ messages: [], hasMore: false });
       socketRef.current.emit('messages:fetch-older', { channelId, beforeTimestamp, limit: 30 }, (response) => {
         if (response?.messages?.length > 0) {
+          // Decrypt E2E encrypted messages
+          let msgs = response.messages;
+          if (e2eSecretKeyRef.current && msgs.some(m => m.encrypted)) {
+            const srvData = serverDataRef.current;
+            let otherUserId = null;
+            for (const sId of Object.keys(srvData)) {
+              const sv = srvData[sId];
+              if (!sv.isPersonal && !sv.id?.startsWith('personal:')) continue;
+              const ch = sv.channels?.text?.find(c => c.id === channelId);
+              if (ch?.participant?.id) { otherUserId = ch.participant.id; break; }
+            }
+            if (otherUserId) {
+              msgs = msgs.map(m => m.encrypted ? decryptDmMessage(m, otherUserId) : m);
+            }
+          }
           setMessages(prev => {
             const existing = prev[channelId] || [];
             const existingIds = new Set(existing.map(m => m.id));
-            const newMsgs = response.messages.filter(m => !existingIds.has(m.id));
+            const newMsgs = msgs.filter(m => !existingIds.has(m.id));
             return { ...prev, [channelId]: [...newMsgs, ...existing] };
           });
         }
@@ -1667,7 +1810,7 @@ export default function App() {
         resolve(response);
       });
     });
-  }, []);
+  }, [decryptDmMessage]);
 
   // Navigate to the active voice channel when clicking "Voice Connected"
   const handleNavigateToVoice = useCallback(() => {
@@ -2384,6 +2527,8 @@ export default function App() {
             onToggleThreadsListPanel={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }}
             channelThreads={channelThreads[activeChannel?.id] || []}
             screenShareActive={webrtc.isSharingScreen || Object.keys(webrtc.remoteScreenStreams).length > 0}
+            e2eSecretKey={e2eSecretKeyRef.current}
+            publicKeyCache={publicKeyCacheRef.current}
           />
         )}
       </div>

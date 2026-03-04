@@ -935,7 +935,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
               resolve(result);
             });
           });
-          if (iceResult?.iceServers?.length > 0) {
+          if (Array.isArray(iceResult?.iceServers)) {
             iceServersRef.current = iceResult.iceServers;
           }
         } catch (err) {
@@ -1142,7 +1142,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
             resolve(result);
           });
         });
-        if (iceResult?.iceServers?.length > 0) {
+        if (Array.isArray(iceResult?.iceServers)) {
           iceServersRef.current = iceResult.iceServers;
         }
       } catch (err) {

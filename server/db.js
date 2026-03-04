@@ -86,10 +86,32 @@ async function getAccountByUsername(username) {
  */
 async function getAccountById(id) {
   const result = await query(
-    'SELECT id, username, avatar, custom_avatar, color, bio, status, settings, created_at FROM accounts WHERE id = $1',
+    'SELECT id, username, avatar, custom_avatar, color, bio, status, settings, public_key, created_at FROM accounts WHERE id = $1',
     [id]
   );
   return result.rows[0];
+}
+
+/**
+ * Set a user's E2E encryption public key
+ */
+async function setPublicKey(accountId, publicKey) {
+  const result = await query(
+    'UPDATE accounts SET public_key = $1 WHERE id = $2 RETURNING id, public_key',
+    [publicKey, accountId]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Get a user's E2E encryption public key
+ */
+async function getPublicKey(accountId) {
+  const result = await query(
+    'SELECT public_key FROM accounts WHERE id = $1',
+    [accountId]
+  );
+  return result.rows[0]?.public_key || null;
 }
 
 /**
@@ -243,7 +265,7 @@ async function getServersForAccount(accountId) {
  * Update server
  */
 async function updateServer(serverId, updates) {
-  const allowedFields = ['name', 'icon', 'custom_icon', 'description', 'emoji_sharing', 'ice_config'];
+  const allowedFields = ['name', 'icon', 'custom_icon', 'description', 'emoji_sharing', 'ice_config', 'lan_mode'];
   const fields = [];
   const values = [];
   let paramCount = 1;
@@ -312,12 +334,12 @@ async function getServerMembers(serverId) {
 /**
  * Save a message
  */
-async function saveMessage({ id, channelId, authorId, content, attachments = [], isWebhook = false, webhookUsername, webhookAvatar, replyTo = null, mentions = null, commandData = null, embeds = [] }) {
+async function saveMessage({ id, channelId, authorId, content, attachments = [], isWebhook = false, webhookUsername, webhookAvatar, replyTo = null, mentions = null, commandData = null, embeds = [], encrypted = false }) {
   const result = await query(
-    `INSERT INTO messages (id, channel_id, author_id, content, attachments, is_webhook, webhook_username, webhook_avatar, reply_to, mentions, command_data, embeds)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO messages (id, channel_id, author_id, content, attachments, is_webhook, webhook_username, webhook_avatar, reply_to, mentions, command_data, embeds, encrypted)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
-    [id, channelId, authorId, content, JSON.stringify(attachments), isWebhook, webhookUsername, webhookAvatar, replyTo, mentions ? JSON.stringify(mentions) : '{}', commandData ? JSON.stringify(commandData) : null, JSON.stringify(embeds)]
+    [id, channelId, authorId, content, JSON.stringify(attachments), isWebhook, webhookUsername, webhookAvatar, replyTo, mentions ? JSON.stringify(mentions) : '{}', commandData ? JSON.stringify(commandData) : null, JSON.stringify(embeds), encrypted]
   );
   return result.rows[0];
 }
@@ -462,17 +484,20 @@ async function getDMChannelsWithDetails(userId) {
             a1.username AS p1_username, a1.avatar AS p1_avatar,
             a1.custom_avatar AS p1_custom_avatar, a1.color AS p1_color,
             a1.status AS p1_status, a1.bio AS p1_bio,
+            a1.public_key AS p1_public_key,
             a2.username AS p2_username, a2.avatar AS p2_avatar,
             a2.custom_avatar AS p2_custom_avatar, a2.color AS p2_color,
             a2.status AS p2_status, a2.bio AS p2_bio,
+            a2.public_key AS p2_public_key,
             lm.id AS last_msg_id, lm.content AS last_msg_content,
-            lm.created_at AS last_msg_created_at, lm.author_id AS last_msg_author_id
+            lm.created_at AS last_msg_created_at, lm.author_id AS last_msg_author_id,
+            lm.encrypted AS last_msg_encrypted
      FROM dm_channels dc
      LEFT JOIN dm_participants dp ON dc.id = dp.channel_id
      LEFT JOIN accounts a1 ON dc.participant_1 = a1.id
      LEFT JOIN accounts a2 ON dc.participant_2 = a2.id
      LEFT JOIN LATERAL (
-       SELECT id, content, created_at, author_id
+       SELECT id, content, created_at, author_id, encrypted
        FROM messages WHERE channel_id = dc.id::text
        ORDER BY created_at DESC LIMIT 1
      ) lm ON true
@@ -1912,6 +1937,8 @@ module.exports = {
   createAccount,
   getAccountByUsername,
   getAccountById,
+  setPublicKey,
+  getPublicKey,
   updateAccount,
   updateAccountPassword,
   getUserSettings,

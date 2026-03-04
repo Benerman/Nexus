@@ -100,7 +100,7 @@ module.exports = function(io, socket) {
     }
   });
 
-  socket.on('message:send', async ({ channelId, content, attachments, replyTo, commandData: clientCommandData }) => {
+  socket.on('message:send', async ({ channelId, content, attachments, replyTo, commandData: clientCommandData, encrypted }) => {
     const user = state.users[socket.id];
     if (!user) return;
     if (!content?.trim() && !attachments?.length && !clientCommandData) return;
@@ -283,7 +283,8 @@ module.exports = function(io, socket) {
       attachments: (attachments||[]).slice(0,4),
       author: user, timestamp: Date.now(), reactions: {},
       mentions,
-      channelLinks: channelLinks.channels
+      channelLinks: channelLinks.channels,
+      encrypted: encrypted || false
     };
 
     // Add reply reference if provided
@@ -305,7 +306,8 @@ module.exports = function(io, socket) {
         attachments: msg.attachments,
         isWebhook: false,
         replyTo: msg.replyTo || null,
-        mentions
+        mentions,
+        encrypted: msg.encrypted
       });
     } catch (error) {
       console.error('[Message] Error saving message to database:', error);
@@ -372,7 +374,8 @@ module.exports = function(io, socket) {
                   customAvatar: senderAccount.custom_avatar,
                   color: senderAccount.color,
                   status: senderAccount.status,
-                  bio: senderAccount.bio
+                  bio: senderAccount.bio,
+                  publicKey: senderAccount.public_key || null
                 },
                 createdAt: new Date(dmChannel.created_at).getTime()
               },
@@ -478,7 +481,7 @@ module.exports = function(io, socket) {
     io.to(`text:${channelId}`).emit('message:deleted', { channelId, messageId });
   });
 
-  socket.on('message:edit', async ({ channelId, messageId, content }) => {
+  socket.on('message:edit', async ({ channelId, messageId, content, encrypted }) => {
     const user = state.users[socket.id];
     if (!user) return;
     if (!content?.trim()) return;
@@ -500,6 +503,7 @@ module.exports = function(io, socket) {
     // Update message
     msg.content = content.trim().slice(0, 2000);
     msg.editedAt = Date.now();
+    if (encrypted !== undefined) msg.encrypted = encrypted;
 
     // Update in database (all messages)
     try {
@@ -514,7 +518,8 @@ module.exports = function(io, socket) {
       channelId,
       messageId,
       content: msg.content,
-      editedAt: msg.editedAt
+      editedAt: msg.editedAt,
+      encrypted: msg.encrypted || false
     });
   });
 

@@ -504,7 +504,8 @@ const GIPHY_API_KEY = process.env.GIPHY_API_KEY;
 
 app.get('/api/gifs/search', requireApiAuth, async (req, res) => {
   if (!GIPHY_API_KEY) return res.json({ results: [] });
-  const { q } = req.query;
+  const { q, serverId } = req.query;
+  if (serverId && state.servers[serverId]?.lanMode) return res.json({ results: [] });
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
   if (!q) return res.json({ results: [] });
@@ -531,6 +532,8 @@ app.get('/api/gifs/search', requireApiAuth, async (req, res) => {
 
 app.get('/api/gifs/trending', requireApiAuth, async (req, res) => {
   if (!GIPHY_API_KEY) return res.json({ results: [] });
+  const { serverId } = req.query;
+  if (serverId && state.servers[serverId]?.lanMode) return res.json({ results: [] });
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
   try {
@@ -576,8 +579,11 @@ async function safeFetch(url, options = {}) {
 }
 
 app.get('/api/og', requireApiAuth, async (req, res) => {
-  const { url } = req.query;
+  const { url, serverId } = req.query;
   if (!url) return res.status(400).json({ error: 'URL required' });
+  if (serverId && state.servers[serverId]?.lanMode) {
+    return res.status(403).json({ error: 'URL previews disabled in LAN mode' });
+  }
 
   try { new URL(url); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
 
@@ -756,6 +762,7 @@ const PORT = process.env.PORT || 3001;
         srv.description = dbServer.description || '';
         srv.emojiSharing = dbServer.emoji_sharing || false;
         srv.iceConfig = dbServer.ice_config || null;
+        srv.lanMode = dbServer.lan_mode || false;
 
         await db.query('DELETE FROM categories WHERE server_id = $1', [serverId]);
         for (const [catId, cat] of Object.entries(srv.categories)) {
@@ -833,7 +840,8 @@ const PORT = process.env.PORT || 3001;
           channels: { text: textChannels, voice: voiceChannels },
           customEmojis: [],
           emojiSharing: dbServer.emoji_sharing || false,
-          iceConfig: dbServer.ice_config || null
+          iceConfig: dbServer.ice_config || null,
+          lanMode: dbServer.lan_mode || false
         };
       }
 

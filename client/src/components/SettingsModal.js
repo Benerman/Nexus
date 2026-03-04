@@ -628,6 +628,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [emojiForm, setEmojiForm] = useState({ name: '', file: null, preview: null });
   const [emojiSaving, setEmojiSaving] = useState(false);
   const [emojiSharing, setEmojiSharing] = useState(server?.emojiSharing || false);
+  const [lanMode, setLanMode] = useState(server?.lanMode || false);
   const emojiFileRef = useRef(null);
 
   // ICE / STUN/TURN config (owner-only)
@@ -688,10 +689,25 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     if (!socket) return;
     const h = ({webhook})=>setCreatedWebhook(webhook);
     socket.on('webhook:created', h);
-    const handlePasswordChanged = ({ success, error }) => {
+    const handlePasswordChanged = async ({ success, error }) => {
       clearTimeout(passwordTimeoutRef.current);
       setPasswordLoading(false);
       if (success) {
+        // Re-encrypt E2E private key with the new password
+        try {
+          const encryptedSK = localStorage.getItem('nexus_e2e_encrypted_private_key');
+          if (encryptedSK && currentPassword && newPassword) {
+            const { initSodium, decryptPrivateKey, encryptPrivateKey } = require('../utils/encryption');
+            await initSodium();
+            const sk = decryptPrivateKey(encryptedSK, currentPassword);
+            if (sk) {
+              const reEncrypted = encryptPrivateKey(sk, newPassword);
+              localStorage.setItem('nexus_e2e_encrypted_private_key', reEncrypted);
+            }
+          }
+        } catch (err) {
+          console.warn('[E2E] Failed to re-encrypt private key:', err.message);
+        }
         setPasswordSuccess(true);
         setCurrentPassword('');
         setNewPassword('');
@@ -1957,6 +1973,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     {id:'appearance', label:'Appearance', icon: <SettingsIcon size={16} />},
     {id:'audio', label:'Audio', icon: <VolumeIcon size={16} />},
     {id:'notifications', label:'Notifications', icon: <BellIcon size={16} />},
+    {id:'security', label:'Security', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>},
     {id:'friends', label:'Friends', icon: <FriendsIcon size={16} />},
     {id:'servers', label:'My Servers', icon: <HexagonIcon size={16} />},
     ...(server && !server.isPersonal ? [
@@ -3184,6 +3201,27 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       setEmojiSharing(e.target.checked);
                       if (socket && server) {
                         socket.emit('server:update', { serverId: server.id, emojiSharing: e.target.checked });
+                      }
+                    }} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+              )}
+
+              {/* LAN Mode Toggle */}
+              {(isOwner || userPerms.admin) && (
+                <div className="audio-toggle" style={{ marginTop: 24 }}>
+                  <div>
+                    <div className="audio-toggle-label">LAN Mode</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Disable external network requests (GIF search, URL previews, external STUN servers). Enable for isolated networks.
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={lanMode} onChange={e => {
+                      setLanMode(e.target.checked);
+                      if (socket && server) {
+                        socket.emit('server:update', { serverId: server.id, lanMode: e.target.checked });
                       }
                     }} />
                     <span className="toggle-slider" />
@@ -4667,6 +4705,117 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab==='security' && (
+            <div className="settings-section">
+              <h2 className="settings-section-title">End-to-End Encryption</h2>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+                1:1 Direct Messages are encrypted end-to-end using X25519 + XSalsa20-Poly1305 (libsodium crypto_box).
+                The server never sees plaintext message content.
+              </p>
+
+              {localStorage.getItem('nexus_e2e_public_key') ? (
+                <>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Key Status</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(87, 242, 135, 0.08)', borderRadius: 8, fontSize: 13, color: 'var(--text-positive, #57F287)' }}>
+                      <span style={{ fontSize: 16 }}>🔒</span>
+                      Encryption keys are configured
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Your Public Key Fingerprint</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Share this with contacts to verify your identity. They should see the same fingerprint.
+                    </p>
+                    <div style={{ fontFamily: 'monospace', fontSize: 13, padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: 8, color: 'var(--text-primary)', wordBreak: 'break-all', letterSpacing: '1px' }}>
+                      {(() => {
+                        try {
+                          const { getFingerprint } = require('../utils/encryption');
+                          return getFingerprint(localStorage.getItem('nexus_e2e_public_key'));
+                        } catch { return 'Unable to compute fingerprint'; }
+                      })()}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Export Private Key</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Export your encrypted private key for backup or transfer to another device.
+                    </p>
+                    <button className="settings-btn" onClick={() => {
+                      const blob = localStorage.getItem('nexus_e2e_encrypted_private_key');
+                      if (blob) {
+                        navigator.clipboard.writeText(blob).then(
+                          () => alert('Encrypted private key copied to clipboard. Store it safely!'),
+                          () => prompt('Copy your encrypted private key:', blob)
+                        );
+                      } else {
+                        alert('No encrypted private key found.');
+                      }
+                    }}>
+                      Copy Encrypted Key
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Import Private Key</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Restore your private key from a backup. You'll need your account password to decrypt it.
+                    </p>
+                    <button className="settings-btn" onClick={() => {
+                      const blob = prompt('Paste your encrypted private key:');
+                      if (blob && blob.trim()) {
+                        localStorage.setItem('nexus_e2e_encrypted_private_key', blob.trim());
+                        alert('Private key imported. Log out and log back in with your password to activate it.');
+                      }
+                    }}>
+                      Import Key
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Regenerate Keys</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Generate a new keypair. Warning: old encrypted messages will become unreadable.
+                    </p>
+                    <button className="settings-btn danger" onClick={async () => {
+                      if (!window.confirm('Are you sure? Old encrypted messages will become permanently unreadable.')) return;
+                      const password = prompt('Enter your password to encrypt the new key:');
+                      if (!password) return;
+                      try {
+                        const { initSodium, generateKeypair, encryptPrivateKey } = require('../utils/encryption');
+                        await initSodium();
+                        const keypair = generateKeypair();
+                        const encryptedSK = encryptPrivateKey(keypair.secretKey, password);
+                        localStorage.setItem('nexus_e2e_public_key', keypair.publicKey);
+                        localStorage.setItem('nexus_e2e_encrypted_private_key', encryptedSK);
+                        if (socket) {
+                          socket.emit('encryption:set-public-key', { publicKey: keypair.publicKey }, (res) => {
+                            if (res?.success) {
+                              alert('Keys regenerated. Log out and log back in to use the new keys.');
+                            } else {
+                              alert('Keys regenerated locally but failed to sync with server. Try again.');
+                            }
+                          });
+                        }
+                      } catch (err) {
+                        alert('Failed to regenerate keys: ' + err.message);
+                      }
+                    }}>
+                      Regenerate Keys
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '10px 14px', background: 'rgba(237, 66, 69, 0.08)', borderRadius: 8, fontSize: 13, color: 'var(--text-danger, #ED4245)' }}>
+                  <span style={{ fontSize: 16 }}>⚠️</span> No encryption keys found. Keys are generated automatically on registration.
+                  Log out and register a new account, or import a key backup to enable encryption.
                 </div>
               )}
             </div>

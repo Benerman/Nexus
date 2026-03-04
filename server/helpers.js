@@ -87,7 +87,8 @@ function serializeServer(serverId) {
     type: srv.type,
     soundboard: srv.soundboard || [],
     customEmojis: (srv.customEmojis || []).map(e => ({ id: e.id, name: e.name, contentType: e.content_type || e.contentType, animated: e.animated })),
-    emojiSharing: srv.emojiSharing || false
+    emojiSharing: srv.emojiSharing || false,
+    lanMode: srv.lanMode || false
   };
 }
 
@@ -195,7 +196,8 @@ function convertDbMessagesToRuntime(dbMessages, channelId) {
         threadLastReplyAt: dbMsg.thread_last_reply_at ? new Date(dbMsg.thread_last_reply_at).getTime() : null,
         threadLastReplyContent: dbMsg.thread_last_reply_content || null,
         threadLastReplyAuthor: dbMsg.thread_last_reply_author || null,
-        threadLastReplyAuthorColor: dbMsg.thread_last_reply_author_color || null
+        threadLastReplyAuthorColor: dbMsg.thread_last_reply_author_color || null,
+        encrypted: dbMsg.encrypted || false
       };
     } catch (err) {
       console.error(`[Messages] Error converting message ${dbMsg.id} (webhook=${dbMsg.is_webhook}):`, err.message);
@@ -271,7 +273,8 @@ async function convertDbMessages(dbMessages, channelId) {
         threadLastReplyAt: dbMsg.thread_last_reply_at ? new Date(dbMsg.thread_last_reply_at).getTime() : null,
         threadLastReplyContent: dbMsg.thread_last_reply_content || null,
         threadLastReplyAuthor: dbMsg.thread_last_reply_author || null,
-        threadLastReplyAuthorColor: dbMsg.thread_last_reply_author_color || null
+        threadLastReplyAuthorColor: dbMsg.thread_last_reply_author_color || null,
+        encrypted: dbMsg.encrypted || false
       };
     } catch (err) {
       console.error(`[Messages] Error converting message ${dbMsg.id} (webhook=${dbMsg.is_webhook}):`, err.message);
@@ -295,6 +298,10 @@ function generateTurnCredentials(secret, userId) {
 function buildIceServers(serverId, userId) {
   const config = require('./config');
   const srv = state.servers[serverId];
+
+  // LAN mode: no external STUN/TURN — force direct LAN connections only
+  if (srv?.lanMode) return [];
+
   const iceConfig = srv?.iceConfig;
 
   const stunUrls = iceConfig?.stunUrls?.length > 0
@@ -372,7 +379,8 @@ async function createPersonalServer(userId, dmChannels) {
         id: dbMsg.id,
         content: dbMsg.content,
         timestamp: new Date(dbMsg.created_at).getTime(),
-        authorId: dbMsg.author_id
+        authorId: dbMsg.author_id,
+        encrypted: dbMsg.encrypted || false
       };
     }
 
@@ -413,7 +421,8 @@ async function createPersonalServer(userId, dmChannels) {
       customAvatar: participantAccount.custom_avatar,
       color: participantAccount.color,
       status: participantAccount.status || 'offline',
-      bio: participantAccount.bio
+      bio: participantAccount.bio,
+      publicKey: participantAccount.public_key || null
     } : {
       id: otherUserId,
       username: 'Unknown User',

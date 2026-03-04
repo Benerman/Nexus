@@ -291,6 +291,45 @@ module.exports = function(io, socket) {
     }
   });
 
+  // ─── E2E Encryption Key Management ──────────────────────────────────────────
+  socket.on('encryption:set-public-key', async ({ publicKey }, callback) => {
+    const user = state.users[socket.id];
+    if (!user || user.isGuest) {
+      if (typeof callback === 'function') callback({ error: 'Authentication required' });
+      return;
+    }
+    if (!publicKey || typeof publicKey !== 'string' || publicKey.length > 256) {
+      if (typeof callback === 'function') callback({ error: 'Invalid public key' });
+      return;
+    }
+    try {
+      await db.setPublicKey(user.id, publicKey);
+      if (typeof callback === 'function') callback({ success: true });
+    } catch (err) {
+      console.error('[Encryption] Failed to set public key:', err.message);
+      if (typeof callback === 'function') callback({ error: 'Failed to save public key' });
+    }
+  });
+
+  socket.on('encryption:get-public-key', async ({ userId }, callback) => {
+    const user = state.users[socket.id];
+    if (!user) {
+      if (typeof callback === 'function') callback({ error: 'Authentication required' });
+      return;
+    }
+    if (!userId) {
+      if (typeof callback === 'function') callback({ error: 'User ID required' });
+      return;
+    }
+    try {
+      const publicKey = await db.getPublicKey(userId);
+      if (typeof callback === 'function') callback({ publicKey });
+    } catch (err) {
+      console.error('[Encryption] Failed to get public key:', err.message);
+      if (typeof callback === 'function') callback({ error: 'Failed to get public key' });
+    }
+  });
+
   socket.on('user:change-password', async ({ currentPassword, newPassword }) => {
     const user = state.users[socket.id];
     if (!user || user.isGuest) {
