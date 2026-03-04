@@ -1,0 +1,26 @@
+# Coturn STUN/TURN server — development overlay
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.coturn.dev.yml up -d --build
+#
+# Uses port 3479 to avoid conflicts with a production coturn on the same host.
+# Default TURN_SECRET provided for convenience (override in .env for shared environments).
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: nexus-dev-coturn
+    network_mode: host
+    environment:
+      - TURN_SECRET=${TURN_SECRET:-nexus-dev-turn-secret}
+    command: >
+      -n --realm=nexus-dev --use-auth-secret
+      --static-auth-secret=$${TURN_SECRET}
+      --listening-port=3479 --min-port=49253 --max-port=49353
+      --no-cli --no-tls --no-dtls --fingerprint --lt-cred-mech
+      --log-file=stdout
+    restart: unless-stopped
+
+  server:
+    environment:
+      - STUN_URLS=stun:host.docker.internal:3479
+      - TURN_URL=turn:host.docker.internal:3479
+      - TURN_SECRET=${TURN_SECRET:-nexus-dev-turn-secret}
