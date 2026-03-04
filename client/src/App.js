@@ -1224,6 +1224,11 @@ export default function App() {
       showError(message);
     });
 
+    s.on('automod:blocked', ({ reason, rule, action }) => {
+      console.log('[App] AutoMod blocked message:', reason, rule, action);
+      showError(`AutoMod: ${reason}`, 5000);
+    });
+
     // ✅ Phase 2: DM channels now handled via Personal server
     // When a new DM is created, backend will emit 'server:updated' with the Personal server
     s.on('dm:created', ({ channel, messages: msgs, navigate = true }) => {

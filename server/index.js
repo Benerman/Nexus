@@ -31,6 +31,7 @@ const emojiHandlers = require('./handlers/emoji');
 const adminHandlers = require('./handlers/admin');
 const bookmarkHandlers = require('./handlers/bookmarks');
 const auditHandlers = require('./handlers/audit');
+const automodHandlers = require('./handlers/automod');
 
 // ─── Express setup ──────────────────────────────────────────────────────────
 const app = express();
@@ -713,6 +714,7 @@ io.on('connection', (socket) => {
   adminHandlers(io, socket);
   bookmarkHandlers(io, socket);
   auditHandlers(io, socket);
+  automodHandlers(io, socket);
 
   socket.on('disconnect', () => {
     const user = state.users[socket.id];
@@ -912,6 +914,13 @@ const PORT = process.env.PORT || 3001;
       } catch (err) {
         console.error(`[Server] Error loading custom emojis for ${serverId}:`, err.message);
         srv.customEmojis = [];
+      }
+
+      try {
+        srv.automodRules = await db.getAutomodRules(serverId);
+      } catch (err) {
+        console.error(`[Server] Error loading automod rules for ${serverId}:`, err.message);
+        srv.automodRules = [];
       }
 
       console.log(`[Server] Loaded server: ${srv.name} (${serverId}) - ${srv.channels.text.length} text, ${srv.channels.voice.length} voice channels, ${Object.keys(srv.members).length} members, ${Object.keys(srv.roles).length} roles, ${srv.soundboard.length} sounds, ${srv.customEmojis.length} emojis`);

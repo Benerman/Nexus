@@ -594,6 +594,14 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [modLoading, setModLoading] = useState(false);
   const [modSearch, setModSearch] = useState('');
 
+  // AutoMod
+  const [automodRules, setAutomodRules] = useState([]);
+  const [automodLoading, setAutomodLoading] = useState(false);
+  const [automodEditing, setAutomodEditing] = useState(null);
+  const [automodForm, setAutomodForm] = useState({ name: '', ruleType: 'keyword', action: 'block', config: {}, exemptRoles: [], exemptChannels: [], timeoutDuration: 60 });
+  const [automodTestInput, setAutomodTestInput] = useState('');
+  const [automodTestResult, setAutomodTestResult] = useState(null);
+
   // Audit Log
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -1076,7 +1084,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const loadModData = () => {
     if (!socket || !server) return;
     setModLoading(true);
-    let pending = 3;
+    let pending = 4;
     const done = () => { pending--; if (pending <= 0) setModLoading(false); };
     emitWithTimeout(socket, 'moderation:get-bans', { serverId: server.id }, (r) => {
       if (r?.bans) setModBans(r.bans);
@@ -1088,6 +1096,10 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     });
     emitWithTimeout(socket, 'moderation:get-reports', { serverId: server.id }, (r) => {
       if (r?.reports) setModReports(r.reports);
+      done();
+    });
+    emitWithTimeout(socket, 'automod:get-rules', { serverId: server.id }, (r) => {
+      if (r?.rules) setAutomodRules(r.rules);
       done();
     });
   };
@@ -1113,6 +1125,65 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     emitWithTimeout(socket, 'moderation:update-report', { reportId, status: newStatus }, (r) => {
       if (r?.error) { showActionError(r.error); return; }
       setModReports(prev => prev.map(rp => rp.id === reportId ? { ...rp, status: newStatus, resolved_at: new Date().toISOString() } : rp));
+    });
+  };
+
+  // ── AutoMod helpers ────────────────────────────────────────────────────
+  const resetAutomodForm = () => {
+    setAutomodForm({ name: '', ruleType: 'keyword', action: 'block', config: {}, exemptRoles: [], exemptChannels: [], timeoutDuration: 60 });
+    setAutomodEditing(null);
+    setAutomodTestInput('');
+    setAutomodTestResult(null);
+  };
+
+  const handleAutomodCreate = () => {
+    if (!socket || !server) return;
+    const { name, ruleType, action, config, exemptRoles, exemptChannels, timeoutDuration } = automodForm;
+    if (!name.trim()) { showActionError('Rule name is required'); return; }
+    emitWithTimeout(socket, 'automod:create-rule', {
+      serverId: server.id, name: name.trim(), ruleType, action, config, exemptRoles, exemptChannels, timeoutDuration
+    }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      if (r?.rule) setAutomodRules(prev => [...prev, r.rule]);
+      resetAutomodForm();
+    });
+  };
+
+  const handleAutomodUpdate = (ruleId, updates) => {
+    if (!socket || !server) return;
+    emitWithTimeout(socket, 'automod:update-rule', { serverId: server.id, ruleId, updates }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      if (r?.rule) setAutomodRules(prev => prev.map(ru => ru.id === ruleId ? r.rule : ru));
+      if (automodEditing === ruleId) resetAutomodForm();
+    });
+  };
+
+  const handleAutomodDelete = (ruleId) => {
+    if (!socket || !server) return;
+    emitWithTimeout(socket, 'automod:delete-rule', { serverId: server.id, ruleId }, (r) => {
+      if (r?.error) { showActionError(r.error); return; }
+      setAutomodRules(prev => prev.filter(ru => ru.id !== ruleId));
+    });
+  };
+
+  const handleAutomodTest = () => {
+    if (!socket || !server || !automodTestInput.trim()) return;
+    emitWithTimeout(socket, 'automod:test-rule', {
+      serverId: server.id, ruleType: automodForm.ruleType, config: automodForm.config, testContent: automodTestInput
+    }, (r) => {
+      setAutomodTestResult(r);
+    });
+  };
+
+  const startEditAutomodRule = (rule) => {
+    const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : (rule.config || {});
+    const exemptRoles = typeof rule.exempt_roles === 'string' ? JSON.parse(rule.exempt_roles) : (rule.exempt_roles || []);
+    const exemptChannels = typeof rule.exempt_channels === 'string' ? JSON.parse(rule.exempt_channels) : (rule.exempt_channels || []);
+    setAutomodEditing(rule.id);
+    setAutomodForm({
+      name: rule.name, ruleType: rule.rule_type, action: rule.action,
+      config, exemptRoles, exemptChannels,
+      timeoutDuration: rule.timeout_duration || 60
     });
   };
 
@@ -1984,7 +2055,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       ...(userPerms.manageWebhooks || userPerms.admin ? [{id:'webhooks', label:'Webhooks', icon: <LinkIcon size={16} />}] : []),
       ...(userPerms.manageServer || userPerms.admin ? [{id:'soundboard', label:'Soundboard', icon: <SoundboardIcon size={16} />}] : []),
       ...(userPerms.manageEmojis || userPerms.admin ? [{id:'emojis', label:'Emojis', icon: <EmojiIcon size={16} />}] : []),
-      ...(userPerms.admin || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
+      ...(userPerms.admin || userPerms.manageMessages || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
       ...(userPerms.admin || isOwner ? [{id:'audit-log', label:'Audit Log', icon: <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>}] : []),
     ] : []),
     ...(currentUser?.isPlatformAdmin ? [{id:'platform-admin', label:'Platform Admin', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15l-4-4 1.41-1.41L11 13.17l6.59-6.59L19 8l-8 8z"/></svg>}] : []),
@@ -4377,6 +4448,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 <button className={`mod-section-tab ${modSection==='reports'?'active':''}`} onClick={()=>{setModSection('reports');setModSearch('');}}>
                   Reports ({modReports.length})
                 </button>
+                <button className={`mod-section-tab ${modSection==='automod'?'active':''}`} onClick={()=>{setModSection('automod');setModSearch('');}}>
+                  AutoMod ({automodRules.length})
+                </button>
               </div>
 
               {modLoading && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>Loading...</p>}
@@ -4515,6 +4589,222 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   </div>
                 );
               })()}
+
+              {/* ── AutoMod ── */}
+              {!modLoading && modSection==='automod' && (
+                <div>
+                  <p className="settings-hint" style={{marginBottom:12}}>Configure automated content moderation rules. Messages matching rules will be blocked before delivery.</p>
+
+                  {/* Rule list */}
+                  {automodRules.length === 0 && <p style={{color:'var(--text-muted)',textAlign:'center',padding:20}}>No AutoMod rules configured.</p>}
+                  <div className="members-manage-list" style={{marginBottom:16}}>
+                    {automodRules.map(rule => {
+                      const ruleConfig = typeof rule.config === 'string' ? JSON.parse(rule.config) : (rule.config || {});
+                      const typeLabels = { keyword: 'Keyword Filter', spam: 'Spam Detection', invite_link: 'Invite Links', mention_spam: 'Mention Spam' };
+                      return (
+                        <div key={rule.id} className="member-manage-item" style={{flexDirection:'column',alignItems:'stretch',gap:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <span className="member-manage-username">{rule.name}</span>
+                              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                                {typeLabels[rule.rule_type] || rule.rule_type} &middot; Action: {rule.action}
+                                {rule.rule_type === 'keyword' && ruleConfig.words?.length > 0 && <span> &middot; {ruleConfig.words.length} word(s)</span>}
+                              </div>
+                            </div>
+                            <button
+                              className={`settings-btn-small ${rule.enabled ? 'primary' : ''}`}
+                              style={{fontSize:11,padding:'3px 8px',minWidth:54}}
+                              onClick={() => handleAutomodUpdate(rule.id, { enabled: !rule.enabled })}
+                            >
+                              {rule.enabled ? 'Enabled' : 'Disabled'}
+                            </button>
+                            <button className="settings-btn-small" style={{fontSize:11,padding:'3px 8px'}} onClick={() => startEditAutomodRule(rule)}>Edit</button>
+                            <button className="settings-btn-small" style={{fontSize:11,padding:'3px 8px',color:'var(--danger)'}} onClick={() => handleAutomodDelete(rule.id)}>Delete</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add/Edit Rule Form */}
+                  <div style={{background:'var(--bg-tertiary)',borderRadius:8,padding:16}}>
+                    <h3 style={{margin:'0 0 12px',fontSize:14,color:'var(--text-normal)'}}>{automodEditing ? 'Edit Rule' : 'Add Rule'}</h3>
+
+                    <div style={{display:'flex',gap:8,marginBottom:8}}>
+                      <input className="settings-input" placeholder="Rule name" value={automodForm.name}
+                        onChange={e => setAutomodForm(f => ({...f, name: e.target.value}))} style={{flex:1}} />
+                    </div>
+
+                    <div style={{display:'flex',gap:8,marginBottom:8}}>
+                      <select className="settings-input" value={automodForm.ruleType}
+                        disabled={!!automodEditing}
+                        onChange={e => setAutomodForm(f => ({...f, ruleType: e.target.value, config: {}}))}
+                        style={{flex:1}}>
+                        <option value="keyword">Keyword Filter</option>
+                        <option value="spam">Spam Detection</option>
+                        <option value="invite_link">Invite Link Filter</option>
+                        <option value="mention_spam">Mention Spam</option>
+                      </select>
+                      <select className="settings-input" value={automodForm.action}
+                        onChange={e => setAutomodForm(f => ({...f, action: e.target.value}))}
+                        style={{flex:1}}>
+                        <option value="block">Block</option>
+                        <option value="delete">Delete</option>
+                        <option value="warn">Warn</option>
+                        <option value="timeout">Timeout</option>
+                      </select>
+                    </div>
+
+                    {automodForm.action === 'timeout' && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Timeout duration (seconds)</label>
+                        <input className="settings-input" type="number" min="10" max="86400" value={automodForm.timeoutDuration}
+                          onChange={e => setAutomodForm(f => ({...f, timeoutDuration: parseInt(e.target.value) || 60}))}
+                          style={{width:120}} />
+                      </div>
+                    )}
+
+                    {/* Type-specific config */}
+                    {automodForm.ruleType === 'keyword' && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Blocked words (one per line or comma-separated)</label>
+                        <textarea className="settings-input" rows={4}
+                          value={(automodForm.config.words || []).join('\n')}
+                          onChange={e => {
+                            const words = e.target.value.split(/[,\n]/).map(w => w.trim()).filter(Boolean);
+                            setAutomodForm(f => ({...f, config: {...f.config, words}}));
+                          }}
+                          style={{width:'100%',resize:'vertical',fontFamily:'inherit'}} />
+                        <div style={{display:'flex',gap:8,marginTop:4}}>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'flex',alignItems:'center',gap:4}}>
+                            <input type="radio" name="matchMode" checked={(automodForm.config.matchMode || 'substring') === 'substring'}
+                              onChange={() => setAutomodForm(f => ({...f, config: {...f.config, matchMode: 'substring'}}))} />
+                            Substring match
+                          </label>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'flex',alignItems:'center',gap:4}}>
+                            <input type="radio" name="matchMode" checked={automodForm.config.matchMode === 'wholeWord'}
+                              onChange={() => setAutomodForm(f => ({...f, config: {...f.config, matchMode: 'wholeWord'}}))} />
+                            Whole word match
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {automodForm.ruleType === 'spam' && (
+                      <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+                        <div>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Max messages</label>
+                          <input className="settings-input" type="number" min="2" max="20" value={automodForm.config.maxMessages || 5}
+                            onChange={e => setAutomodForm(f => ({...f, config: {...f.config, maxMessages: parseInt(e.target.value) || 5}}))}
+                            style={{width:80}} />
+                        </div>
+                        <div>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Interval (ms)</label>
+                          <input className="settings-input" type="number" min="1000" max="30000" step="1000" value={automodForm.config.intervalMs || 5000}
+                            onChange={e => setAutomodForm(f => ({...f, config: {...f.config, intervalMs: parseInt(e.target.value) || 5000}}))}
+                            style={{width:100}} />
+                        </div>
+                        <div>
+                          <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Max duplicates</label>
+                          <input className="settings-input" type="number" min="1" max="10" value={automodForm.config.maxDuplicates || 3}
+                            onChange={e => setAutomodForm(f => ({...f, config: {...f.config, maxDuplicates: parseInt(e.target.value) || 3}}))}
+                            style={{width:80}} />
+                        </div>
+                      </div>
+                    )}
+
+                    {automodForm.ruleType === 'mention_spam' && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Max mentions per message</label>
+                        <input className="settings-input" type="number" min="1" max="50" value={automodForm.config.maxMentions || 10}
+                          onChange={e => setAutomodForm(f => ({...f, config: {...f.config, maxMentions: parseInt(e.target.value) || 10}}))}
+                          style={{width:80}} />
+                      </div>
+                    )}
+
+                    {/* Exempt roles */}
+                    {server && Object.keys(server.roles || {}).filter(r => r !== 'everyone').length > 0 && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Exempt roles</label>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {Object.values(server.roles || {}).filter(r => r.id !== 'everyone').map(role => (
+                            <label key={role.id} style={{fontSize:12,color: role.color || 'var(--text-muted)',display:'flex',alignItems:'center',gap:4,padding:'2px 6px',background:'var(--bg-secondary)',borderRadius:4}}>
+                              <input type="checkbox"
+                                checked={(automodForm.exemptRoles || []).includes(role.id)}
+                                onChange={e => {
+                                  const roles = e.target.checked
+                                    ? [...(automodForm.exemptRoles || []), role.id]
+                                    : (automodForm.exemptRoles || []).filter(r => r !== role.id);
+                                  setAutomodForm(f => ({...f, exemptRoles: roles}));
+                                }} />
+                              {role.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Exempt channels */}
+                    {server && server.channels?.text?.length > 0 && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Exempt channels</label>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {(server.channels?.text || []).map(ch => (
+                            <label key={ch.id} style={{fontSize:12,color:'var(--text-muted)',display:'flex',alignItems:'center',gap:4,padding:'2px 6px',background:'var(--bg-secondary)',borderRadius:4}}>
+                              <input type="checkbox"
+                                checked={(automodForm.exemptChannels || []).includes(ch.id)}
+                                onChange={e => {
+                                  const channels = e.target.checked
+                                    ? [...(automodForm.exemptChannels || []), ch.id]
+                                    : (automodForm.exemptChannels || []).filter(c => c !== ch.id);
+                                  setAutomodForm(f => ({...f, exemptChannels: channels}));
+                                }} />
+                              #{ch.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Test (keyword rules) */}
+                    {automodForm.ruleType === 'keyword' && (automodForm.config.words || []).length > 0 && (
+                      <div style={{marginBottom:8}}>
+                        <label style={{fontSize:12,color:'var(--text-muted)',display:'block',marginBottom:4}}>Test message</label>
+                        <div style={{display:'flex',gap:8}}>
+                          <input className="settings-input" placeholder="Type a test message..." value={automodTestInput}
+                            onChange={e => { setAutomodTestInput(e.target.value); setAutomodTestResult(null); }}
+                            style={{flex:1}} />
+                          <button className="settings-btn-small" onClick={handleAutomodTest}>Test</button>
+                        </div>
+                        {automodTestResult && (
+                          <div style={{fontSize:12,marginTop:6,padding:'4px 8px',borderRadius:4,
+                            background: automodTestResult.matched ? 'rgba(237,66,69,0.15)' : 'rgba(87,242,135,0.15)',
+                            color: automodTestResult.matched ? '#ed4245' : '#57f287'
+                          }}>
+                            {automodTestResult.matched ? `Blocked: ${automodTestResult.reason}` : 'Not blocked'}
+                            {automodTestResult.normalized && <div style={{color:'var(--text-muted)',marginTop:2}}>Normalized: "{automodTestResult.normalized}"</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{display:'flex',gap:8,marginTop:12}}>
+                      {automodEditing ? (
+                        <>
+                          <button className="settings-btn primary" onClick={() => handleAutomodUpdate(automodEditing, {
+                            name: automodForm.name, action: automodForm.action, config: automodForm.config,
+                            exemptRoles: automodForm.exemptRoles, exemptChannels: automodForm.exemptChannels,
+                            timeoutDuration: automodForm.action === 'timeout' ? automodForm.timeoutDuration : null
+                          })}>Save Changes</button>
+                          <button className="settings-btn" onClick={resetAutomodForm}>Cancel</button>
+                        </>
+                      ) : (
+                        <button className="settings-btn primary" onClick={handleAutomodCreate}>Add Rule</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -1919,6 +1919,62 @@ async function getAuditLogs(serverId, options = {}) {
   return result.rows;
 }
 
+// ============================================================================
+// AUTOMOD FUNCTIONS
+// ============================================================================
+
+async function getAutomodRules(serverId) {
+  const result = await query(
+    'SELECT * FROM automod_rules WHERE server_id = $1 ORDER BY created_at ASC',
+    [serverId]
+  );
+  return result.rows;
+}
+
+async function getAutomodRule(ruleId) {
+  const result = await query('SELECT * FROM automod_rules WHERE id = $1', [ruleId]);
+  return result.rows[0];
+}
+
+async function createAutomodRule(serverId, { name, ruleType, action, config, exemptRoles, exemptChannels, timeoutDuration }) {
+  const result = await query(
+    `INSERT INTO automod_rules (server_id, name, rule_type, action, config, exempt_roles, exempt_channels, timeout_duration)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING *`,
+    [serverId, name, ruleType, action || 'block', JSON.stringify(config || {}), JSON.stringify(exemptRoles || []), JSON.stringify(exemptChannels || []), timeoutDuration || null]
+  );
+  return result.rows[0];
+}
+
+async function updateAutomodRule(ruleId, updates) {
+  const fields = [];
+  const params = [];
+  let idx = 1;
+
+  if (updates.name !== undefined) { fields.push(`name = $${idx++}`); params.push(updates.name); }
+  if (updates.enabled !== undefined) { fields.push(`enabled = $${idx++}`); params.push(updates.enabled); }
+  if (updates.action !== undefined) { fields.push(`action = $${idx++}`); params.push(updates.action); }
+  if (updates.config !== undefined) { fields.push(`config = $${idx++}`); params.push(JSON.stringify(updates.config)); }
+  if (updates.exemptRoles !== undefined) { fields.push(`exempt_roles = $${idx++}`); params.push(JSON.stringify(updates.exemptRoles)); }
+  if (updates.exemptChannels !== undefined) { fields.push(`exempt_channels = $${idx++}`); params.push(JSON.stringify(updates.exemptChannels)); }
+  if (updates.timeoutDuration !== undefined) { fields.push(`timeout_duration = $${idx++}`); params.push(updates.timeoutDuration); }
+
+  if (fields.length === 0) return null;
+
+  fields.push(`updated_at = NOW()`);
+  params.push(ruleId);
+
+  const result = await query(
+    `UPDATE automod_rules SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+    params
+  );
+  return result.rows[0];
+}
+
+async function deleteAutomodRule(ruleId) {
+  await query('DELETE FROM automod_rules WHERE id = $1', [ruleId]);
+}
+
 async function close() {
   await pool.end();
   console.log('[DB] Database connections closed');
@@ -2101,6 +2157,13 @@ module.exports = {
   // Audit log functions
   createAuditLog,
   getAuditLogs,
+
+  // AutoMod functions
+  getAutomodRules,
+  getAutomodRule,
+  createAutomodRule,
+  updateAutomodRule,
+  deleteAutomodRule,
 
   // Maintenance
   initializeDatabase,

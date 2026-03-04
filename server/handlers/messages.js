@@ -3,6 +3,7 @@ const { RateLimiterMemory } = require('rate-limiter-flexible');
 const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
 const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast, parseSearchFilters } = require('../helpers');
+const automod = require('../automod');
 
 const messageLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 
@@ -274,6 +275,27 @@ module.exports = function(io, socket) {
         if (!perms.mentionEveryone && !perms.admin) {
           mentions.everyone = false;
         }
+      }
+    }
+
+    // ── AutoMod check ──
+    if (srv && srv.automodRules && srv.automodRules.length > 0) {
+      const result = automod.evaluateMessage({
+        content: trimmedContent,
+        userId: user.id,
+        serverId: srv.id,
+        channelId,
+        mentions,
+        userRoles: srv.members[user.id]?.roles || [],
+        rules: srv.automodRules
+      });
+      if (result.blocked) {
+        try { await db.createAuditLog(srv.id, 'automod_block', null, user.id, { rule: result.rule.name, reason: result.reason }); } catch(e) {}
+        if (result.rule.action === 'timeout' && result.rule.timeout_duration) {
+          try { await db.timeoutUser(srv.id, user.id, result.rule.timeout_duration); } catch(e) {}
+        }
+        socket.emit('automod:blocked', { reason: result.reason, rule: result.rule.name, action: result.rule.action });
+        return;
       }
     }
 
