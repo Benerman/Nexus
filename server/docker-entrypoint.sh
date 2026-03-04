@@ -7,7 +7,7 @@ echo "==================================="
 
 # Derive database name from DATABASE_URL (supports both prod and dev)
 if [ -n "$DATABASE_URL" ]; then
-  DB_NAME=$(echo "$DATABASE_URL" | sed 's|.*/||' | sed 's|\?.*||')
+  DB_NAME=$(echo "$DATABASE_URL" | sed 's|.*/||' | sed 's|?.*||')
 else
   DB_NAME="nexus_db"
 fi
