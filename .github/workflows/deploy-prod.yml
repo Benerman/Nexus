@@ -1,17 +1,20 @@
-name: Deploy to Local Server
+name: Deploy Production
 
 on:
   push:
     branches: [main, master]
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-prod
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: [self-hosted, linux]
     timeout-minutes: 15
+
+    env:
+      COMPOSE_CMD: ""
 
     steps:
       - name: Checkout latest code
@@ -45,28 +48,24 @@ jobs:
             exit 1
           fi
 
-      - name: Stop existing containers
+      - name: Stop existing prod containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml down --remove-orphans || true
+          ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans || true
 
-      - name: Build and start containers
+      - name: Build and start prod containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml up --build --force-recreate -d
+          ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build --force-recreate
 
       - name: Sync database password
         run: |
-          # The postgres volume may have been initialized with a different password
-          # than what's in the current .env. Reset it to match.
           source .env 2>/dev/null || true
           PW="${POSTGRES_PASSWORD:-postgres}"
 
-          # Try normal auth first, fall back to local socket with no password
           if docker exec nexus-postgres psql -U postgres -c "SELECT 1" > /dev/null 2>&1; then
             docker exec nexus-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '${PW}'"
             echo "Database password synced."
           else
             echo "Normal auth failed — attempting via local trust override..."
-            # Temporarily allow trust auth, sync password, then revert
             docker exec nexus-postgres bash -c "
               cp /var/lib/postgresql/data/pg_hba.conf /var/lib/postgresql/data/pg_hba.conf.bak
               echo 'local all all trust' > /tmp/pg_hba_override.conf
@@ -83,7 +82,6 @@ jobs:
             echo "Database password synced via trust override."
           fi
 
-          # Restart server so it picks up the corrected auth
           docker restart nexus-server
 
       - name: Verify server is responding
@@ -95,7 +93,7 @@ jobs:
             fi
             if [ "$i" -eq 20 ]; then
               echo "Server did not respond after 20 attempts. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs server
+              ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml logs server
               exit 1
             fi
             echo "Waiting for server... (attempt $i/20)"
@@ -111,7 +109,7 @@ jobs:
             fi
             if [ "$i" -eq 10 ]; then
               echo "Client did not respond. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} -f docker-compose.yml logs client
+              ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml logs client
               exit 1
             fi
             echo "Waiting for client... (attempt $i/10)"
@@ -126,7 +124,7 @@ jobs:
         run: |
           echo ""
           echo "========================================="
-          echo "  Nexus deployed successfully!"
+          echo "  Nexus PROD deployed successfully!"
           echo "========================================="
           echo ""
           echo "  Commit:  ${{ github.sha }}"
@@ -135,7 +133,7 @@ jobs:
           echo "  Server:  http://localhost:3001"
           echo ""
           echo "  Commands:"
-          echo "    Logs:    docker compose logs -f"
-          echo "    Stop:    docker compose down"
-          echo "    Status:  docker compose ps"
+          echo "    Logs:    docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml logs -f"
+          echo "    Stop:    docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down"
+          echo "    Status:  docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml ps"
           echo ""

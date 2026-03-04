@@ -40,7 +40,7 @@ jobs:
             echo ""
             echo "Example:"
             echo "  sudo mkdir -p /opt/nexus-dev"
-            echo "  sudo cp .env.dev.example /opt/nexus-dev/.env"
+            echo "  sudo cp .env.example /opt/nexus-dev/.env"
             echo "  sudo nano /opt/nexus-dev/.env  # fill in real values"
             exit 1
           fi
@@ -64,7 +64,6 @@ jobs:
 
       - name: Verify production is running
         run: |
-          # Sanity check: make sure we're not about to interfere with production
           if docker ps --format '{{.Names}}' | grep -q '^nexus-server$'; then
             echo "Production containers are running — good, we won't touch them."
           else
@@ -74,11 +73,11 @@ jobs:
 
       - name: Stop existing dev containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml down --remove-orphans || true
+          ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans || true
 
       - name: Build and start dev containers
         run: |
-          ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml up --build --force-recreate -d
+          ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build --force-recreate
         continue-on-error: true
         id: compose-up
 
@@ -86,7 +85,7 @@ jobs:
         if: steps.compose-up.outcome == 'failure'
         run: |
           echo "=== Container Status ==="
-          ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml ps -a
+          ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml ps -a
           echo ""
           echo "=== Server Logs ==="
           docker logs nexus-dev-server 2>&1 || echo "No server logs available"
@@ -135,7 +134,7 @@ jobs:
             fi
             if [ "$i" -eq 20 ]; then
               echo "Dev server did not respond after 20 attempts. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml logs server
+              ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml logs server
               exit 1
             fi
             echo "Waiting for dev server... (attempt $i/20)"
@@ -151,7 +150,7 @@ jobs:
             fi
             if [ "$i" -eq 10 ]; then
               echo "Dev client did not respond. Logs:"
-              ${{ steps.docker-check.outputs.compose_cmd }} --env-file .env.dev -f docker-compose.dev.yml logs client
+              ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml logs client
               exit 1
             fi
             echo "Waiting for dev client... (attempt $i/10)"
@@ -195,7 +194,7 @@ jobs:
           echo "    Server:  http://localhost:3001"
           echo ""
           echo "  Commands:"
-          echo "    Logs:    docker compose --env-file .env.dev -f docker-compose.dev.yml logs -f"
-          echo "    Stop:    docker compose --env-file .env.dev -f docker-compose.dev.yml down"
-          echo "    Status:  docker compose --env-file .env.dev -f docker-compose.dev.yml ps"
+          echo "    Logs:    docker compose -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml logs -f"
+          echo "    Stop:    docker compose -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml down"
+          echo "    Status:  docker compose -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml ps"
           echo ""

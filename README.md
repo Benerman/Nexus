@@ -16,7 +16,7 @@ A self-hosted, real-time communication platform built with React, Node.js, Socke
 # Clone and start all services
 git clone https://github.com/Benerman/Nexus.git
 cd Nexus
-docker-compose up -d --build
+docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 # Access the app
 open http://localhost:3000
