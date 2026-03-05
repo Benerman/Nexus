@@ -1448,13 +1448,19 @@
     animation: mobilePanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Message actions: conditionally rendered on mobile via JS */
+  /* Message actions: conditionally rendered on mobile via JS.
+     pointer-events stays none for 300ms so the tap that revealed
+     the buttons can't accidentally trigger one of them. */
   .message.mobile-actions-visible {
     background: var(--bg-modifier-hover);
   }
   .message.mobile-actions-visible .message-actions {
     opacity: 1;
-    pointer-events: all;
+    pointer-events: none;
+    animation: mobileActionsEnable 0s 300ms forwards;
+  }
+  @keyframes mobileActionsEnable {
+    to { pointer-events: all; }
   }
   .message-actions {
     right: 8px;
