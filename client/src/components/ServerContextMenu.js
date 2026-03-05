@@ -248,7 +248,7 @@ const ServerContextMenu = ({ server, position, socket, currentUser, onClose, onO
               onMuteServer(server.id, opt.duration);
               onClose();
             }}>
-              <span className="context-menu-icon">🔕</span>
+              <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>
               {opt.label}
             </button>
           ))}
@@ -263,25 +263,25 @@ const ServerContextMenu = ({ server, position, socket, currentUser, onClose, onO
       {!isPersonal && (
         <>
           <button className="context-menu-item" onClick={() => setView('create-invite')}>
-            <span className="context-menu-icon">🔗</span>
+            <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
             Create Invite Link
           </button>
           <button className="context-menu-item" onClick={() => {
             onClose();
             if (onOpenSettings) onOpenSettings('server-settings');
           }}>
-            <span className="context-menu-icon">⚙️</span>
+            <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg></span>
             Server Settings
           </button>
           <div className="context-menu-divider" />
           {isMuted ? (
             <button className="context-menu-item" onClick={() => { onUnmuteServer(server.id); onClose(); }}>
-              <span className="context-menu-icon">🔔</span>
+              <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
               Unmute Server{muteTimeRemaining ? ` (${muteTimeRemaining} left)` : ''}
             </button>
           ) : (
             <button className="context-menu-item" onClick={() => setView('mute-options')}>
-              <span className="context-menu-icon">🔕</span>
+              <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>
               Mute Server
             </button>
           )}
@@ -289,7 +289,7 @@ const ServerContextMenu = ({ server, position, socket, currentUser, onClose, onO
         </>
       )}
       <button className="context-menu-item" onClick={() => setView('join-server')}>
-        <span className="context-menu-icon">📨</span>
+        <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg></span>
         Join a Server
       </button>
       {developerMode && !isPersonal && (
@@ -301,7 +301,7 @@ const ServerContextMenu = ({ server, position, socket, currentUser, onClose, onO
               setTimeout(() => { setCopied(false); onClose(); }, 1200);
             });
           }}>
-            <span className="context-menu-icon">📋</span>
+            <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg></span>
             {copied ? '✓ ID Copied to Clipboard' : 'Copy Server ID'}
           </button>
         </>

@@ -2347,6 +2347,8 @@ export default function App() {
           <>
             <button className="mobile-nav-left" onClick={() => setThreadPanel(null)}>
               <span className="mobile-nav-arrow">‹</span>
+              <span className="mobile-nav-channel" style={{ opacity: 0.7 }}># {activeChannel?.name || 'channel'}</span>
+              <span style={{ color: 'var(--text-muted)', margin: '0 2px' }}>|</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.7, flexShrink: 0 }}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
               <span className="mobile-nav-channel">{threadPanel?.threadName || 'Thread'}</span>
             </button>
