@@ -1838,7 +1838,7 @@ const ChatArea = React.memo(function ChatArea({
       )}
 
       {showPinnedPanel && (
-        <div className="chat-side-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="chat-side-panel mobile-pinned-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Pinned Messages</h3>
             <button onClick={onTogglePinnedPanel} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
@@ -1896,7 +1896,7 @@ const ChatArea = React.memo(function ChatArea({
       )}
 
       {showThreadsListPanel && (
-        <div className="chat-side-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="chat-side-panel mobile-thread-list-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Threads</h3>
             <button onClick={onToggleThreadsListPanel} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
@@ -1940,7 +1940,7 @@ const ChatArea = React.memo(function ChatArea({
       )}
 
       {showSearchPanel && (
-        <div className="chat-side-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="chat-side-panel mobile-search-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e' }}>
             <h3 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '16px' }}>Search Messages</h3>
             <input type="text" placeholder="Search... try from: in: has: before:" value={searchQuery} onChange={e => onSearch(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#1e1f22', border: '1px solid #3a3a3e', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
