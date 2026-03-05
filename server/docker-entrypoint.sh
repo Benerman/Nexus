@@ -139,6 +139,7 @@ PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$
 PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/015_recovery_codes.sql 2>/dev/null || true
 PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/016_lan_mode.sql 2>/dev/null || true
 PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/017_e2e_encryption.sql 2>/dev/null || true
+PGPASSWORD=${POSTGRES_PASSWORD:-postgres} psql -h "postgres" -U "postgres" -d "$DB_NAME" -f /app/migrations/018_automod.sql 2>/dev/null || true
 echo "✓ Migrations complete"
 
 # Clean up expired tokens on startup
