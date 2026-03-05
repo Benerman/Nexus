@@ -1395,16 +1395,9 @@
 
 /* ── Mobile ───────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Chat header: hide channel info (shown in mobile nav bar), keep only for thread view */
+  /* Chat header: hide on mobile (info shown in mobile nav bar instead) */
   .chat-header {
     display: none;
-  }
-  /* Show chat header when in thread view (thread panel back button) */
-  .chat-area--thread-view .chat-header {
-    display: flex;
-    height: 44px;
-    padding: 0 8px;
-    gap: 4px;
   }
   .chat-header-name {
     flex-shrink: 1;
