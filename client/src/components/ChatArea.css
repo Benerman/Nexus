@@ -1564,6 +1564,14 @@
     min-width: 32px;
     min-height: 32px;
   }
+
+  /* Thread list / search / pinned panels full-width on mobile */
+  .mobile-thread-list-panel,
+  .mobile-search-panel,
+  .mobile-pinned-panel {
+    width: 100% !important;
+    border-left: none !important;
+  }
 }
 
 /* ─── Message Request Banner ──────────────────────────────────────────────── */
