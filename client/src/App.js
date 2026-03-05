@@ -1833,6 +1833,7 @@ export default function App() {
   const voiceControls = useMemo(() => ({
     isMuted: webrtc.isMuted,
     isDeafened: webrtc.isDeafened,
+    pttActive: webrtc.pttActive,
     toggleMute: webrtc.toggleMute,
     toggleDeafen: webrtc.toggleDeafen,
     leaveVoice: handleLeaveVoice,
@@ -1840,6 +1841,7 @@ export default function App() {
   }), [
     webrtc.isMuted,
     webrtc.isDeafened,
+    webrtc.pttActive,
     webrtc.toggleMute,
     webrtc.toggleDeafen,
     handleLeaveVoice,
@@ -2440,6 +2442,8 @@ export default function App() {
               voiceStatus={webrtc.voiceStatus}
               voiceQuality={webrtc.voiceQuality}
               voiceStatusMessage={webrtc.voiceStatusMessage}
+              pttActive={webrtc.pttActive}
+              isPttMode={localStorage.getItem('nexus_voice_input_mode') === 'push_to_talk'}
             />
           </div>
         )}
@@ -2476,6 +2480,8 @@ export default function App() {
             voiceStatus={webrtc.voiceStatus}
             voiceQuality={webrtc.voiceQuality}
             voiceStatusMessage={webrtc.voiceStatusMessage}
+            pttActive={webrtc.pttActive}
+            isPttMode={localStorage.getItem('nexus_voice_input_mode') === 'push_to_talk'}
           />
         ) : !activeChannel && !hasRegularServers ? (
           <div className="empty-state">

@@ -367,6 +367,16 @@
   background: rgba(237, 66, 69, 0.3);
 }
 
+.voice-ctrl-btn.ptt-active {
+  background: rgba(67, 181, 129, 0.25);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.voice-ctrl-btn.ptt-active:hover {
+  background: rgba(67, 181, 129, 0.35);
+}
+
 .voice-ctrl-btn.leave {
   background: rgba(237, 66, 69, 0.2);
   color: var(--red);
@@ -639,6 +649,16 @@
 
 .fullscreen-ctrl-btn.active {
   background: var(--brand-500);
+}
+
+.fullscreen-ctrl-btn.ptt-active {
+  background: rgba(67, 181, 129, 0.4);
+  color: #43b581;
+  border: 1px solid rgba(67, 181, 129, 0.6);
+}
+
+.fullscreen-ctrl-btn.ptt-active:hover {
+  background: rgba(67, 181, 129, 0.5);
 }
 
 .fullscreen-ctrl-btn.leave {

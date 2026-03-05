@@ -215,10 +215,8 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 ## TODO — Competitive Feature Gaps (High Priority)
 
 - [x] **AutoMod system** — Add `moderation_rules` table with keyword filter, spam detection, and invite filter. Process rules on `message:send` before broadcast. Configurable actions (warn, delete, timeout, ban). UI in server settings. Every competitor has content filtering; Nexus only has rate limiting.
-- [ ] **Two-factor authentication (2FA)** — TOTP support using `speakeasy` or `otpauth`. QR code setup flow in security settings. Backup codes for recovery. Table-stakes security feature missing from Nexus.
-- [ ] **Push-to-talk** — Spacebar hotkey (configurable) to transmit only when pressed. Mute mic track when PTT key released. Setting toggle in Audio Settings.
 - [ ] **Forum channels** — New channel type `forum` with post-based threads. Each post has a title + initial message. Tags for categorization. Sort by recent activity or creation date. Discord's most successful channel type for communities.
-- [ ] **Typing indicators** — Add `typing:start` / `typing:stop` socket events. Show "[user] is typing..." in chat footer. Debounce with 3-second timeout. Basic UX expectation in all messaging platforms.
+- [x] **Typing indicators** — Add `typing:start` / `typing:stop` socket events. Show "[user] is typing..." in chat footer. Debounce with 3-second timeout. Basic UX expectation in all messaging platforms.
 
 ## TODO — Competitive Feature Gaps (Medium Priority)
 

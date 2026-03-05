@@ -241,7 +241,9 @@ const VoiceArea = React.memo(function VoiceArea({
   onOpenSettings,
   voiceStatus,
   voiceQuality,
-  voiceStatusMessage
+  voiceStatusMessage,
+  pttActive,
+  isPttMode
 }) {
   console.log('[VoiceArea] RENDER - channel:', channel?.name, 'users:', voiceChannelData?.users?.length);
 
@@ -646,12 +648,12 @@ const VoiceArea = React.memo(function VoiceArea({
                 {/* Bottom call controls */}
                 <div className="fullscreen-bottom-controls">
                   <button
-                    className={`fullscreen-ctrl-btn ${isMuted ? 'danger' : ''}`}
+                    className={`fullscreen-ctrl-btn ${isPttMode && pttActive ? 'ptt-active' : isMuted ? 'danger' : ''}`}
                     onClick={onToggleMute}
-                    title={isMuted ? 'Unmute' : 'Mute'}
+                    title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT') : (isMuted ? 'Unmute' : 'Mute')}
                   >
-                    <MicrophoneIcon size={20} muted={isMuted} />
-                    <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+                    <MicrophoneIcon size={20} muted={isMuted && !pttActive} />
+                    <span>{isPttMode ? (pttActive ? 'Talking' : 'PTT') : (isMuted ? 'Unmute' : 'Mute')}</span>
                   </button>
                   <button
                     className={`fullscreen-ctrl-btn ${isDeafened ? 'danger' : ''}`}
@@ -764,14 +766,14 @@ const VoiceArea = React.memo(function VoiceArea({
       {/* Controls */}
       <div className="voice-controls">
         <button
-          className={`voice-ctrl-btn ${isMuted ? 'danger' : ''}`}
+          className={`voice-ctrl-btn ${isPttMode && pttActive ? 'ptt-active' : isMuted ? 'danger' : ''}`}
           onClick={onToggleMute}
-          title={isMuted ? 'Unmute' : 'Mute'}
+          title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT — Hold key to talk') : (isMuted ? 'Unmute' : 'Mute')}
         >
           <span className="voice-ctrl-icon">
-            <MicrophoneIcon size={20} muted={isMuted} />
+            <MicrophoneIcon size={20} muted={isMuted && !pttActive} />
           </span>
-          <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+          <span>{isPttMode ? (pttActive ? 'Talking' : 'PTT') : (isMuted ? 'Unmute' : 'Mute')}</span>
         </button>
 
         <button
