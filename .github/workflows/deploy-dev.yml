@@ -74,6 +74,8 @@ jobs:
       - name: Stop existing dev containers
         run: |
           ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans || true
+          # Force-remove stale containers if compose down didn't clean them up
+          docker rm -f nexus-dev-server nexus-dev-client nexus-dev-postgres nexus-dev-redis 2>/dev/null || true
 
       - name: Build and start dev containers
         run: |
