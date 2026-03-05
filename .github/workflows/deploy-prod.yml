@@ -51,8 +51,6 @@ jobs:
       - name: Stop existing prod containers
         run: |
           ${{ steps.docker-check.outputs.compose_cmd }} -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans || true
-          # Force-remove stale containers if compose down didn't clean them up
-          docker rm -f nexus-server nexus-client nexus-postgres nexus-redis 2>/dev/null || true
 
       - name: Build and start prod containers
         run: |
