@@ -1452,7 +1452,7 @@
   .message.mobile-actions-visible {
     background: var(--bg-modifier-hover);
   }
-  .message .message-actions {
+  .message.mobile-actions-visible .message-actions {
     opacity: 1;
     pointer-events: all;
   }
