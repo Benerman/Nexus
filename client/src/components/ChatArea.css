@@ -1449,7 +1449,7 @@
   }
 
   /* Message actions: conditionally rendered on mobile via JS.
-     pointer-events stays none for 300ms so the tap that revealed
+     pointer-events stays none for 200ms so the tap that revealed
      the buttons can't accidentally trigger one of them. */
   .message.mobile-actions-visible {
     background: var(--bg-modifier-hover);
@@ -1457,7 +1457,7 @@
   .message.mobile-actions-visible .message-actions {
     opacity: 1;
     pointer-events: none;
-    animation: mobileActionsEnable 0s 300ms forwards;
+    animation: mobileActionsEnable 0s 200ms forwards;
   }
   @keyframes mobileActionsEnable {
     to { pointer-events: all; }
