@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 const crypto = require('crypto');
-const { state, getSocketIdForUser, isUserOnline } = require('./state');
+const { state, getSocketIdForUser, isUserOnline, channelToServer } = require('./state');
 const utils = require('./utils');
 
 const { DEFAULT_PERMS, makeCategory, parseDuration, CRITICIZE_ROASTS, getRandomRoast } = utils;
@@ -93,10 +93,10 @@ function serializeServer(serverId) {
 }
 
 function findServerByChannelId(channelId) {
-  for (const srv of Object.values(state.servers)) {
-    if (srv.isPersonal) continue;
-    const allChannels = [...(srv.channels?.text || []), ...(srv.channels?.voice || [])];
-    if (allChannels.some(ch => ch.id === channelId)) return srv;
+  const serverId = channelToServer.get(channelId);
+  if (serverId) {
+    const srv = state.servers[serverId];
+    if (srv && !srv.isPersonal) return srv;
   }
   return null;
 }
@@ -335,7 +335,9 @@ function leaveVoice(socket, io) {
       socket.leave(`voice:${chId}`);
       socket.to(`voice:${chId}`).emit('peer:left', { socketId: socket.id });
 
+      const leavingUser = state.users[socket.id];
       if (chData.isDMCall) {
+        console.log(`[Voice] ${leavingUser?.username || 'Unknown'} left DM call ${chId}`);
         io.emit('voice:channel:update', { channelId: chId, channel: { ...chData, users: chData.users.map(s=>state.users[s]).filter(Boolean) } });
         if (chData.users.length === 0) {
           if (chData.endTimer) clearTimeout(chData.endTimer);
@@ -347,15 +349,16 @@ function leaveVoice(socket, io) {
           }, 30000);
         }
       } else {
-        for (const srv of Object.values(state.servers)) {
-          if (srv.channels.voice.find(c => c.id === chId)) {
-            io.emit('voice:channel:update', {
-              channelId: chId,
-              channel: { ...chData, users: chData.users.map(s=>state.users[s]).filter(Boolean) }
-            });
-            io.to(`voice:${chId}`).emit('voice:cue', { type: 'leave', user: state.users[socket.id], customSound: state.users[socket.id]?.exitSound || null, customSoundVolume: state.users[socket.id]?.exitSoundVolume ?? 100 });
-            break;
-          }
+        const srvId = channelToServer.get(chId);
+        const srv = srvId && state.servers[srvId];
+        const voiceCh = srv?.channels.voice.find(c => c.id === chId);
+        if (voiceCh) {
+          console.log(`[Voice] ${leavingUser?.username || 'Unknown'} left ${voiceCh.name} in ${srv.name}`);
+          io.emit('voice:channel:update', {
+            channelId: chId,
+            channel: { ...chData, users: chData.users.map(s=>state.users[s]).filter(Boolean) }
+          });
+          io.to(`voice:${chId}`).emit('voice:cue', { type: 'leave', user: state.users[socket.id], customSound: state.users[socket.id]?.exitSound || null, customSoundVolume: state.users[socket.id]?.exitSoundVolume ?? 100 });
         }
       }
     }

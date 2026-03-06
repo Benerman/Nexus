@@ -1,4 +1,5 @@
 -- Migration 008: Add token and avatar columns to webhooks table
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ALTER TABLE webhooks ADD COLUMN IF NOT EXISTS token VARCHAR(64);
 ALTER TABLE webhooks ADD COLUMN IF NOT EXISTS avatar VARCHAR(255);
 

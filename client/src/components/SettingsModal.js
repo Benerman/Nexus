@@ -5,6 +5,7 @@ import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/s
 import { getServerUrl, isStandaloneApp, isTauriApp, isCapacitorApp, openExternalUrl } from '../config';
 import { checkForUpdates } from '../utils/updater';
 import { checkForCapacitorUpdate } from '../utils/capacitor-updater';
+import clientLogger from '../utils/logger';
 import './SettingsModal.css';
 import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon, BellIcon, SoundboardIcon, EmojiIcon } from './icons';
 
@@ -550,6 +551,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
   const [transferTargetId, setTransferTargetId] = useState('');
 
+  // PTT (Push-to-Talk) settings
+  const [voiceInputMode, setVoiceInputMode] = useState(() => localStorage.getItem('nexus_voice_input_mode') || 'voice_activity');
+  const [pttKey, setPttKey] = useState(() => localStorage.getItem('nexus_ptt_key') || 'Space');
+  const [pttDelay, setPttDelay] = useState(() => parseInt(localStorage.getItem('nexus_ptt_delay') || '200', 10));
+  const [pttRecording, setPttRecording] = useState(false);
+
   // Collapsible sections
   const [audioAdvancedOpen, setAudioAdvancedOpen] = useState(false);
   const [yourServersOpen, setYourServersOpen] = useState(true);
@@ -777,6 +784,24 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     return () => socket.off('friend:list', handleFriendList);
   }, [socket, tab]);
 
+  // PTT key recording — capture next keydown when pttRecording is true
+  useEffect(() => {
+    if (!pttRecording) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        setPttRecording(false);
+        return;
+      }
+      setPttKey(e.code);
+      localStorage.setItem('nexus_ptt_key', e.code);
+      setPttRecording(false);
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [pttRecording]);
+
   // Sync current audio settings to server
   const syncSettingsToServer = () => {
     if (!socket) return;
@@ -794,6 +819,9 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       sidebar_width: localStorage.getItem('nexus_sidebar_width') || '240',
       theme: localStorage.getItem('nexus_theme') || 'midnight',
       custom_themes: JSON.parse(localStorage.getItem('nexus_custom_themes') || '[]'),
+      voice_input_mode: localStorage.getItem('nexus_voice_input_mode') || 'voice_activity',
+      ptt_key: localStorage.getItem('nexus_ptt_key') || 'Space',
+      ptt_delay: localStorage.getItem('nexus_ptt_delay') || '200',
     };
     socket.emit('user:settings-update', { settings });
   };
@@ -2606,6 +2634,104 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
           {tab==='audio' && (
             <div className="settings-section">
               <h2>Audio Settings</h2>
+
+              <h3>Input Mode</h3>
+              <div className="ptt-mode-toggle">
+                <button
+                  className={`ptt-mode-btn ${voiceInputMode === 'voice_activity' ? 'active' : ''}`}
+                  onClick={() => {
+                    setVoiceInputMode('voice_activity');
+                    localStorage.setItem('nexus_voice_input_mode', 'voice_activity');
+                    syncSettingsToServer();
+                    window.dispatchEvent(new Event('nexus-ptt-settings-changed'));
+                    updateAudioProcessing?.();
+                  }}
+                >
+                  Voice Activity
+                </button>
+                <button
+                  className={`ptt-mode-btn ${voiceInputMode === 'push_to_talk' ? 'active' : ''}`}
+                  onClick={() => {
+                    setVoiceInputMode('push_to_talk');
+                    localStorage.setItem('nexus_voice_input_mode', 'push_to_talk');
+                    syncSettingsToServer();
+                    window.dispatchEvent(new Event('nexus-ptt-settings-changed'));
+                    updateAudioProcessing?.();
+                  }}
+                >
+                  Push to Talk
+                </button>
+              </div>
+
+              {voiceInputMode === 'push_to_talk' && (
+                <div className="ptt-settings">
+                  <label className="settings-label">Shortcut</label>
+                  <div className="ptt-key-row">
+                    <span className="ptt-key-display">{
+                      pttKey.startsWith('Key') ? pttKey.slice(3) :
+                      pttKey.startsWith('Digit') ? pttKey.slice(5) :
+                      pttKey === 'Backquote' ? '`' :
+                      pttKey === 'Minus' ? '-' :
+                      pttKey === 'Equal' ? '=' :
+                      pttKey === 'BracketLeft' ? '[' :
+                      pttKey === 'BracketRight' ? ']' :
+                      pttKey === 'Backslash' ? '\\' :
+                      pttKey === 'Semicolon' ? ';' :
+                      pttKey === 'Quote' ? "'" :
+                      pttKey === 'Comma' ? ',' :
+                      pttKey === 'Period' ? '.' :
+                      pttKey === 'Slash' ? '/' :
+                      pttKey === 'ShiftLeft' ? 'Left Shift' :
+                      pttKey === 'ShiftRight' ? 'Right Shift' :
+                      pttKey === 'ControlLeft' ? 'Left Ctrl' :
+                      pttKey === 'ControlRight' ? 'Right Ctrl' :
+                      pttKey === 'AltLeft' ? 'Left Alt' :
+                      pttKey === 'AltRight' ? 'Right Alt' :
+                      pttKey === 'MetaLeft' ? 'Left Meta' :
+                      pttKey === 'MetaRight' ? 'Right Meta' :
+                      pttKey === 'ArrowUp' ? 'Up' :
+                      pttKey === 'ArrowDown' ? 'Down' :
+                      pttKey === 'ArrowLeft' ? 'Left' :
+                      pttKey === 'ArrowRight' ? 'Right' :
+                      pttKey
+                    }</span>
+                    <button
+                      className={`settings-btn ${pttRecording ? 'cancel' : ''}`}
+                      onClick={() => setPttRecording(true)}
+                    >
+                      {pttRecording ? 'Press a key...' : 'Record Key'}
+                    </button>
+                  </div>
+                  <label className="settings-label" style={{marginTop: 12}}>Release Delay: {pttDelay}ms</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="500"
+                    step="10"
+                    value={pttDelay}
+                    onChange={e => {
+                      const val = parseInt(e.target.value);
+                      setPttDelay(val);
+                      localStorage.setItem('nexus_ptt_delay', String(val));
+                      syncSettingsToServer();
+                    }}
+                    style={{width: '100%'}}
+                  />
+                  <p className="settings-hint" style={{marginTop: 4}}>
+                    How long to keep transmitting after releasing the key.
+                  </p>
+
+                  {isTauriApp() ? (
+                    <p className="settings-hint" style={{color: 'var(--green)', marginTop: 8}}>
+                      Works in background (desktop app)
+                    </p>
+                  ) : (
+                    <p className="settings-hint" style={{color: 'var(--yellow)', marginTop: 8}}>
+                      Only works when window is focused
+                    </p>
+                  )}
+                </div>
+              )}
 
               <h3>Input Device</h3>
               <CustomSelect
@@ -5181,6 +5307,20 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   )}
                 </div>
               )}
+
+              <div style={{marginBottom: 20}}>
+                <h3 style={{fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8}}>Diagnostics</h3>
+                <button
+                  className="settings-btn"
+                  onClick={() => clientLogger.download()}
+                  style={{width: '100%', textAlign: 'left'}}
+                >
+                  Download Client Logs
+                  <span style={{marginLeft: 8, fontSize: 12, color: 'var(--text-muted)'}}>
+                    ({clientLogger.getEntries().length} entries)
+                  </span>
+                </button>
+              </div>
 
               <div style={{fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: 12}}>
                 <p style={{margin: '0 0 4px'}}>Made with care by the Nexus team.</p>

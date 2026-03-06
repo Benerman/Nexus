@@ -21,7 +21,9 @@
     "rate-limiter-flexible": "^9.1.1",
     "redis": "^4.6.10",
     "socket.io": "^4.6.1",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

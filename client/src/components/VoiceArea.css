@@ -211,13 +211,13 @@
   gap: 8px;
   position: relative;
   border: 2px solid transparent;
-  transition: border-color 0.2s;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
   overflow: visible;
 }
 
 .voice-user-tile.speaking {
   border-color: var(--green);
-  animation: speaking 1s infinite;
+  transition: none;
 }
 
 .voice-users-grid.with-screen .voice-user-tile {
@@ -299,10 +299,12 @@
   border-radius: 8px;
   overflow: hidden;
   border: 2px solid transparent;
+  transition: border-color 0.3s ease;
 }
 
 .video-tile.speaking {
   border-color: var(--green);
+  transition: none;
 }
 
 .video-tile video {
@@ -367,6 +369,16 @@
   background: rgba(237, 66, 69, 0.3);
 }
 
+.voice-ctrl-btn.ptt-active {
+  background: rgba(67, 181, 129, 0.25);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.voice-ctrl-btn.ptt-active:hover {
+  background: rgba(67, 181, 129, 0.35);
+}
+
 .voice-ctrl-btn.leave {
   background: rgba(237, 66, 69, 0.2);
   color: var(--red);
@@ -406,7 +418,7 @@
 }
 
 .voice-tile-indicator.deafened {
-  background: rgba(114, 118, 125, 0.8);
+  background: rgba(237, 66, 69, 0.8);
 }
 
 .user-audio-btn {
@@ -639,6 +651,16 @@
 
 .fullscreen-ctrl-btn.active {
   background: var(--brand-500);
+}
+
+.fullscreen-ctrl-btn.ptt-active {
+  background: rgba(67, 181, 129, 0.4);
+  color: #43b581;
+  border: 1px solid rgba(67, 181, 129, 0.6);
+}
+
+.fullscreen-ctrl-btn.ptt-active:hover {
+  background: rgba(67, 181, 129, 0.5);
 }
 
 .fullscreen-ctrl-btn.leave {
@@ -1013,6 +1035,39 @@
   display: flex;
   gap: 6px;
   margin-top: 8px;
+}
+
+/* ── Voice tile context menu ── */
+.voice-tile-context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-floating);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 180px;
+}
+
+.voice-tile-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.voice-tile-context-item:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--header-primary);
 }
 
 @media (max-width: 768px) {

@@ -1121,3 +1121,64 @@
   .color-row label { min-width: 100%; margin-bottom: 2px; }
   .theme-custom-actions { flex-wrap: wrap; }
 }
+
+/* ── PTT (Push-to-Talk) Settings ── */
+.ptt-mode-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 16px;
+}
+
+.ptt-mode-btn {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ptt-mode-btn:first-child {
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ptt-mode-btn:hover {
+  background: var(--bg-modifier-hover);
+  color: var(--text-normal);
+}
+
+.ptt-mode-btn.active {
+  background: var(--brand-500);
+  color: #fff;
+}
+
+.ptt-settings {
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.ptt-key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.ptt-key-display {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--header-primary);
+  min-width: 60px;
+  text-align: center;
+}

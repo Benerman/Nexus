@@ -26,6 +26,7 @@ module.exports = function(io, socket) {
       if (room !== socket.id && room.startsWith('text:')) socket.leave(room);
     });
     socket.join(`text:${channelId}`);
+    console.debug(`[Message] ${user.username} joined channel ${channelId}`);
 
     // If memory is empty, try loading from database
     if (!state.messages[channelId] || state.messages[channelId].length === 0) {
@@ -94,6 +95,7 @@ module.exports = function(io, socket) {
         }
       } catch (err) { /* ignore */ }
 
+      console.debug(`[Message] ${user.username} fetched ${olderMsgs.length} older messages in ${channelId}`);
       callback({ messages: olderMsgs, hasMore: dbMsgs.length >= limit });
     } catch (err) {
       console.error('[Messages] Error fetching older messages:', err.message);
@@ -125,10 +127,11 @@ module.exports = function(io, socket) {
     }
 
     // For DM channels, check if either user has blocked the other and check message request status
+    let dmChannel = null;
     if (!srv) {
       try {
         const dmChannels = await db.getDMChannelsForUser(user.id);
-        const dmChannel = dmChannels.find(dm => dm.id === channelId);
+        dmChannel = dmChannels.find(dm => dm.id === channelId);
         if (dmChannel) {
           const otherUserId = dmChannel.participant_1 === user.id
             ? dmChannel.participant_2
@@ -337,14 +340,16 @@ module.exports = function(io, socket) {
 
     io.to(`text:${channelId}`).emit('message:new', msg);
 
-    // If this is a DM channel, ensure the other participant is in the room and notify them
-    try {
-      const dmChannels = await db.getDMChannelsForUser(user.id);
-      const isDMChannel = dmChannels.some(dm => dm.id === channelId);
+    if (srv) {
+      const ch = [...(srv.channels?.text || [])].find(c => c.id === channelId);
+      console.log(`[Message] ${user.username} sent message in #${ch?.name || channelId} (${srv.name})`);
+    } else {
+      console.log(`[Message] ${user.username} sent DM in ${channelId}`);
+    }
 
-      if (isDMChannel) {
-        const dmChannel = dmChannels.find(dm => dm.id === channelId);
-        // Find the other participant
+    // If this is a DM channel, ensure the other participant is in the room and notify them
+    if (dmChannel) {
+      try {
         const otherUserId = dmChannel.participant_1 === user.id
           ? dmChannel.participant_2
           : dmChannel.participant_1;
@@ -380,24 +385,22 @@ module.exports = function(io, socket) {
           io.to(otherUserSocketId).emit('dm:unread-counts', { counts: unreadCounts });
 
           // Notify recipient about the DM channel if they don't have it yet
-          const otherUser = state.users[otherUserSocketId];
-          const senderAccount = await db.getAccountById(user.id);
-          if (otherSocket && senderAccount) {
+          if (otherSocket) {
             otherSocket.emit('dm:created', {
               channel: {
                 id: channelId,
-                name: senderAccount.username,
+                name: user.username,
                 type: 'dm',
                 isDM: true,
                 participant: {
-                  id: senderAccount.id,
-                  username: senderAccount.username,
-                  avatar: senderAccount.avatar,
-                  customAvatar: senderAccount.custom_avatar,
-                  color: senderAccount.color,
-                  status: senderAccount.status,
-                  bio: senderAccount.bio,
-                  publicKey: senderAccount.public_key || null
+                  id: user.id,
+                  username: user.username,
+                  avatar: user.avatar,
+                  customAvatar: user.customAvatar || null,
+                  color: user.color,
+                  status: user.status,
+                  bio: user.bio,
+                  publicKey: null
                 },
                 createdAt: new Date(dmChannel.created_at).getTime()
               },
@@ -406,9 +409,9 @@ module.exports = function(io, socket) {
             });
           }
         }
+      } catch (error) {
+        console.error('[Message] Error updating DM unread counts:', error);
       }
-    } catch (error) {
-      console.error('[Message] Error updating DM unread counts:', error);
     }
   });
 
@@ -430,6 +433,7 @@ module.exports = function(io, socket) {
       console.error('[Messages] Failed to persist reactions:', err.message);
     });
 
+    console.log(`[Message] ${user.username} reacted ${emoji} on ${messageId}`);
     io.to(`text:${channelId}`).emit('message:reaction', { messageId, reactions: msg.reactions });
   });
 
@@ -459,6 +463,7 @@ module.exports = function(io, socket) {
       console.error('[Poll] Error persisting vote:', err.message);
     });
 
+    console.log(`[Message] ${user.username} voted on poll ${messageId}`);
     io.to(`text:${channelId}`).emit('poll:updated', { channelId, messageId, commandData: poll });
   });
 
@@ -499,6 +504,8 @@ module.exports = function(io, socket) {
       console.error('[Message] Error deleting message from database:', error);
     }
 
+    console.log(`[Message] ${user.username} deleted message ${messageId}`);
+
     // Broadcast deletion
     io.to(`text:${channelId}`).emit('message:deleted', { channelId, messageId });
   });
@@ -534,6 +541,8 @@ module.exports = function(io, socket) {
       console.error('[Message] Error updating message in database:', error);
       // Continue even if database update fails
     }
+
+    console.log(`[Message] ${user.username} edited message ${messageId}`);
 
     // Broadcast edit
     io.to(`text:${channelId}`).emit('message:edited', {
@@ -576,6 +585,7 @@ module.exports = function(io, socket) {
         msg.pinnedBy = user.id;
       }
 
+      console.log(`[Message] ${user.username} pinned message ${messageId}`);
       io.to(`text:${channelId}`).emit('message:pinned', { channelId, messageId, pinnedBy: user.id, pinnedAt: Date.now() });
 
       db.createAuditLog(srv.id, 'message_pin', user.id, messageId, { channelId }).catch(() => {});
@@ -608,6 +618,7 @@ module.exports = function(io, socket) {
         msg.pinnedBy = null;
       }
 
+      console.log(`[Message] ${user.username} unpinned message ${messageId}`);
       io.to(`text:${channelId}`).emit('message:unpinned', { channelId, messageId });
 
       db.createAuditLog(srv.id, 'message_unpin', user.id, messageId, { channelId }).catch(() => {});
@@ -647,6 +658,7 @@ module.exports = function(io, socket) {
         threadLastReplyAuthor: row.thread_last_reply_author || null,
         threadLastReplyAuthorColor: row.thread_last_reply_author_color || null
       }));
+      console.debug(`[Message] ${user.username} fetched ${pinned.length} pinned messages in ${channelId}`);
       socket.emit('messages:pinned', { channelId, messages: pinned });
     } catch (err) {
       console.error('[Pin] Error fetching pinned messages:', err.message);
@@ -729,6 +741,7 @@ module.exports = function(io, socket) {
         pinned: row.pinned || false
       }));
 
+      console.debug(`[Message] ${user.username} searched messages in ${serverId} — ${results.length} results`);
       socket.emit('messages:search-results', { results, query: searchQuery });
     } catch (err) {
       console.error('[Search] Error searching messages:', err.message);
@@ -761,6 +774,7 @@ module.exports = function(io, socket) {
         if (msg) msg.threadName = trimmedName;
       }
 
+      console.log(`[Message] ${user.username} created thread "${trimmedName}" on ${parentMessageId}`);
       io.to(`text:${channelId}`).emit('thread:created', { channelId, parentMessageId, threadName: trimmedName });
 
       // Send thread messages back to creator (same as thread:get)
@@ -868,6 +882,7 @@ module.exports = function(io, socket) {
       // Get updated thread info
       const threadInfo = await db.getThreadInfo(threadId);
 
+      console.log(`[Message] ${user.username} replied in thread ${threadId}`);
       io.to(`text:${channelId}`).emit('thread:new-reply', {
         channelId,
         threadId,
@@ -929,6 +944,7 @@ module.exports = function(io, socket) {
         };
       }
 
+      console.debug(`[Message] ${user.username} fetched thread ${threadId} (${messages.length} replies)`);
       socket.emit('thread:messages', { channelId, threadId, parent, messages, threadName: parentMsg?.thread_name || null });
     } catch (err) {
       console.error('[Thread] Error fetching thread:', err.message);
@@ -966,6 +982,7 @@ module.exports = function(io, socket) {
           }
         } : null
       }));
+      console.debug(`[Message] ${user.username} listed ${threads.length} threads in ${channelId}`);
       socket.emit('thread:list-results', { channelId, threads });
     } catch (err) {
       console.error('[Thread] Error fetching thread list:', err.message);
@@ -982,6 +999,7 @@ module.exports = function(io, socket) {
 
     try {
       await db.saveBookmark(user.id, messageId, channelId, serverId);
+      console.log(`[Message] ${user.username} saved message ${messageId}`);
       socket.emit('message:saved', { messageId });
     } catch (err) {
       console.error('[Bookmark] Error saving bookmark:', err.message);
@@ -994,6 +1012,7 @@ module.exports = function(io, socket) {
 
     try {
       await db.removeBookmark(user.id, messageId);
+      console.log(`[Message] ${user.username} unsaved message ${messageId}`);
       socket.emit('message:unsaved', { messageId });
     } catch (err) {
       console.error('[Bookmark] Error removing bookmark:', err.message);

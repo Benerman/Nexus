@@ -25,6 +25,7 @@ module.exports = function(io, socket) {
           color: row.author_color || '#80848E'
         }
       }));
+      console.debug(`[Bookmarks] ${user.username} fetched ${bookmarks.length} bookmarks`);
       socket.emit('bookmarks:list', { bookmarks });
     } catch (err) {
       console.error('[Bookmark] Error fetching bookmarks:', err.message);
@@ -36,6 +37,7 @@ module.exports = function(io, socket) {
     if (!user) return;
 
     try {
+      console.debug(`[Bookmarks] ${user.username} fetched bookmark IDs`);
       const ids = await db.getUserBookmarkIds(user.id);
       socket.emit('bookmarks:ids', { ids });
     } catch (err) {

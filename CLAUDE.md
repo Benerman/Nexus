@@ -215,10 +215,12 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 ## TODO — Competitive Feature Gaps (High Priority)
 
 - [x] **AutoMod system** — Add `moderation_rules` table with keyword filter, spam detection, and invite filter. Process rules on `message:send` before broadcast. Configurable actions (warn, delete, timeout, ban). UI in server settings. Every competitor has content filtering; Nexus only has rate limiting.
-- [ ] **Two-factor authentication (2FA)** — TOTP support using `speakeasy` or `otpauth`. QR code setup flow in security settings. Backup codes for recovery. Table-stakes security feature missing from Nexus.
-- [ ] **Push-to-talk** — Spacebar hotkey (configurable) to transmit only when pressed. Mute mic track when PTT key released. Setting toggle in Audio Settings.
 - [ ] **Forum channels** — New channel type `forum` with post-based threads. Each post has a title + initial message. Tags for categorization. Sort by recent activity or creation date. Discord's most successful channel type for communities.
-- [ ] **Typing indicators** — Add `typing:start` / `typing:stop` socket events. Show "[user] is typing..." in chat footer. Debounce with 3-second timeout. Basic UX expectation in all messaging platforms.
+- [x] **Typing indicators** — Add `typing:start` / `typing:stop` socket events. Show "[user] is typing..." in chat footer. Debounce with 3-second timeout. Basic UX expectation in all messaging platforms.
+
+- [x] **Persist call state across reloads** — Save active voice channel ID and server ID to localStorage/sessionStorage on join, clear on leave. On page reload or app relaunch (web, Tauri, Electron — not mobile), automatically rejoin the voice channel the user was in. Handle edge cases: channel deleted while away, user kicked/banned, server removed. Do not apply to Capacitor mobile builds. **Needs testing:** auto-rejoin for DM calls, Tauri/Electron desktop apps, and verify PTT mode persists correctly on mobile (Capacitor should have no persistence).
+
+- [ ] **Context menu moderation actions** — Add moderation actions to the user right-click/context menu throughout the app (member list, voice tiles, chat messages). Actions gated by role permissions: **Kick from Voice** (disconnect user from current VC, requires `MOVE_MEMBERS`), **Server Mute** (force-mute in VC, requires `MUTE_MEMBERS`), **Server Deafen** (force-deafen in VC, requires `DEAFEN_MEMBERS`), **Move to Channel** (move user to a different VC, requires `MOVE_MEMBERS`), **Timeout** (temporarily restrict sending messages/joining VC, requires `MODERATE_MEMBERS`, with duration picker: 60s, 5m, 10m, 1h, 1d, 1w), **Kick from Server** (remove from server, can rejoin via invite, requires `KICK_MEMBERS`), **Ban from Server** (permanent removal with optional message purge duration, requires `BAN_MEMBERS`). Add corresponding permissions to role editor UI. Server owner bypasses all permission checks. Ensure all actions are enforced server-side with proper permission validation. Show only actions the current user has permission to perform.
 
 ## TODO — Competitive Feature Gaps (Medium Priority)
 
@@ -247,6 +249,10 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 - [ ] **Automated database backups** — Daily pg_dump via sidecar container or cron. Compress with 30-day retention.
 - [ ] **SSO/OAuth support** — Add OAuth2 login flow for Google/GitHub. Important for team/org deployments.
 - [ ] **Data retention policies** — Configurable per-server message retention. Auto-purge messages older than N days.
+
+## TODO — UI Bugs
+
+- [ ] **GIF picker positioning** — GIF popup should not displace the text input area. It currently centers over the GIF button and gets squashed against the right edge, pushing the input left. The popup should float above the input bar (absolutely positioned) without affecting layout, and stay within viewport bounds.
 
 ## TODO — Accessibility
 

@@ -12,10 +12,11 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user) return;
     if (typeof callback !== 'function') return;
-    const perms = getUserPerms(user.id, serverId);
-    if (!perms.admin && !perms.manageServer && !perms.manageMessages) return callback({ error: 'No permission' });
     const srv = state.servers[serverId];
     if (!srv) return callback({ error: 'Server not found' });
+    console.debug(`[AutoMod] ${user.username} fetched rules for ${srv.name}`);
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.admin && !perms.manageServer && !perms.manageMessages) return callback({ error: 'No permission' });
 
     callback({ rules: srv.automodRules || [] });
   });
@@ -53,6 +54,7 @@ module.exports = function(io, socket) {
       if (!srv.automodRules) srv.automodRules = [];
       srv.automodRules.push(rule);
 
+      console.log(`[AutoMod] ${user.username} created rule "${name.trim()}" (${ruleType}) in ${srv.name}`);
       try { await db.createAuditLog(serverId, 'automod_rule_create', user.id, null, { ruleName: name, ruleType }); } catch(e) {}
 
       callback({ rule });
@@ -85,6 +87,7 @@ module.exports = function(io, socket) {
         srv.automodRules[idx] = updated;
       }
 
+      console.log(`[AutoMod] ${user.username} updated rule ${ruleId} in ${srv.name}`);
       try { await db.createAuditLog(serverId, 'automod_rule_update', user.id, null, { ruleId, changes: Object.keys(updates) }); } catch(e) {}
 
       callback({ rule: updated });
@@ -107,6 +110,7 @@ module.exports = function(io, socket) {
       await db.deleteAutomodRule(ruleId);
       srv.automodRules = (srv.automodRules || []).filter(r => r.id !== ruleId);
 
+      console.log(`[AutoMod] ${user.username} deleted rule ${ruleId} from ${srv.name}`);
       try { await db.createAuditLog(serverId, 'automod_rule_delete', user.id, null, { ruleId }); } catch(e) {}
 
       callback({ success: true });
@@ -143,6 +147,7 @@ module.exports = function(io, socket) {
       rules: [testRule]
     });
 
+    console.debug(`[AutoMod] ${user.username} tested rule (${ruleType}) — ${result.blocked ? 'matched' : 'no match'}`);
     callback({
       matched: result.blocked,
       reason: result.reason,

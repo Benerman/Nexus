@@ -40,6 +40,8 @@ services:
 
   server:
     build: ./server
+    volumes:
+      - server-logs:/app/data/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,3 +75,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  server-logs:

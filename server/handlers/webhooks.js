@@ -31,6 +31,7 @@ module.exports = function(io, socket) {
     const webhook = { id: webhookId, name: webhookName, channelId, createdBy: user.id, createdAt: Date.now() };
     if (!ch.webhooks) ch.webhooks = [];
     ch.webhooks.push(webhook);
+    console.log(`[Webhook] ${user.username} created webhook "${webhookName}" in #${ch.name}`);
     const url = `${config.client.url}/api/webhooks/${webhookId}/${token}`;
     socket.emit('webhook:created', { webhook: { ...webhook, url } });
     io.emit('channel:updated', { serverId, channel: ch, channels: srv.channels, categories: srv.categories });
@@ -52,6 +53,7 @@ module.exports = function(io, socket) {
     }
 
     ch.webhooks = (ch.webhooks||[]).filter(w => w.id !== webhookId);
+    console.log(`[Webhook] ${user.username} deleted webhook ${webhookId}`);
     io.emit('channel:updated', { serverId, channel: ch, channels: srv.channels, categories: srv.categories });
   });
 
