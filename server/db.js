@@ -1245,7 +1245,7 @@ async function getOrphanedDataStats() {
   const result = await query(`
     SELECT
       (SELECT COUNT(*) FROM messages WHERE author_id IS NULL) AS null_author_messages,
-      (SELECT COUNT(*) FROM dm_channels WHERE id NOT IN (SELECT DISTINCT dm_channel_id FROM dm_participants)) AS empty_dm_channels,
+      (SELECT COUNT(*) FROM dm_channels WHERE id NOT IN (SELECT DISTINCT channel_id FROM dm_participants)) AS empty_dm_channels,
       (SELECT COUNT(*) FROM servers WHERE owner_id IS NULL OR owner_id NOT IN (SELECT id FROM accounts)) AS ownerless_servers
   `);
   return result.rows[0];
