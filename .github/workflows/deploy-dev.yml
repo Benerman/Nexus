@@ -25,19 +25,11 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Clean up root-owned artifacts
-        run: docker run --rm -v "${{ github.workspace }}:/workspace" alpine rm -rf /workspace/logs || true
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
           clean: true
-
-      - name: Ensure log directory exists
-        run: |
-          docker run --rm -v /opt/nexus-dev:/mnt alpine sh -c "mkdir -p /mnt/logs && chown $(id -u):$(id -g) /mnt/logs" || true
-          mkdir -p /opt/nexus-dev/logs 2>/dev/null || true
 
       - name: Symlink dev .env file
         run: |
