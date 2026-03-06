@@ -1,3 +1,4 @@
+require('./logger');
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
@@ -10,7 +11,7 @@ const utils = require('./utils');
 const { getDefaultSounds } = require('./default-sounds');
 
 // ─── Shared state & helpers ─────────────────────────────────────────────────
-const { state, DEFAULT_SERVER_ID, removeUser } = require('./state');
+const { state, DEFAULT_SERVER_ID, removeUser, indexServerChannels, unindexServerChannels } = require('./state');
 const {
   makeServer, serializeServer, getOnlineUsers, convertDbMessagesToRuntime,
   leaveVoice
@@ -135,6 +136,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', name: 'Nexus' });
 });
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
+// ─── Client log ingestion ──────────────────────────────────────────────────
+app.post('/api/client-logs', requireApiAuth, (req, res) => {
+  const { logs } = req.body;
+  if (!Array.isArray(logs)) return res.status(400).json({ error: 'logs must be an array' });
+  const entries = logs.slice(0, 50);
+  const { logger } = require('./logger');
+  for (const entry of entries) {
+    if (!entry || typeof entry.msg !== 'string') continue;
+    const level = ['error', 'warn', 'info', 'debug'].includes(entry.level) ? entry.level : 'info';
+    logger.log(level, entry.msg, { domain: 'Client', accountId: req.accountId, clientTs: entry.ts });
+  }
+  res.json({ ok: true });
+});
 
 // ─── Webhook HTTP endpoint ──────────────────────────────────────────────────
 app.post('/api/webhooks/:webhookId/:token', async (req, res) => {
@@ -403,6 +418,7 @@ app.delete('/api/auth/account', async (req, res) => {
       const memberIds = Object.keys(srv.members).filter(id => id !== accountId);
       if (memberIds.length === 0) {
         await db.deleteServer(serverId);
+        unindexServerChannels(serverId);
         delete state.servers[serverId];
         io.emit('server:deleted', { serverId });
         continue;
@@ -699,7 +715,7 @@ app.use((err, req, res, next) => {
 
 // ─── Socket.IO connection — wire handler modules ────────────────────────────
 io.on('connection', (socket) => {
-  console.log(`[+] Socket connected: ${socket.id}`);
+  console.log(`[Socket] Connected: ${socket.id}`);
 
   authHandlers(io, socket);
   serverHandlers(io, socket);
@@ -722,7 +738,7 @@ io.on('connection', (socket) => {
     removeUser(socket.id);
     if (user) {
       io.emit('user:left', { socketId: socket.id, onlineUsers: getOnlineUsers() });
-      console.log(`[-] ${user.username} disconnected`);
+      console.log(`[Socket] ${user.username} disconnected`);
     }
   });
 });
@@ -874,6 +890,7 @@ const PORT = process.env.PORT || 3001;
       }
 
       state.servers[serverId] = srv;
+      indexServerChannels(serverId, srv);
 
       for (const ch of [...srv.channels.text, ...srv.channels.voice]) {
         if (ch.type === 'voice') {

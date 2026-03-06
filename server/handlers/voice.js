@@ -1,5 +1,5 @@
 const db = require('../db');
-const { state, getSocketIdForUser, isUserOnline } = require('../state');
+const { state, getSocketIdForUser, isUserOnline, channelToServer } = require('../state');
 const { getUserPerms, buildIceServers, leaveVoice, soundboardLimiter, serializeServer } = require('../helpers');
 
 module.exports = function(io, socket) {
@@ -11,7 +11,8 @@ module.exports = function(io, socket) {
     const srv = state.servers[serverId];
     if (!srv || !srv.members[user.id]) return;
     try {
-      const sounds = await db.getSoundboardSoundsWithAudio(serverId);
+      console.debug(`[Voice] ${user.username} fetched soundboard sounds for ${srv.name}`);
+      const sounds = await db.getSoundboardSounds(serverId);
       if (typeof callback === 'function') callback({ sounds });
     } catch (err) {
       console.error('[Soundboard] Failed to get sounds:', err.message);
@@ -137,6 +138,7 @@ module.exports = function(io, socket) {
       return socket.emit('error', { message: 'Soundboard rate limited. Slow down!' });
     }
 
+    console.log(`[Voice] ${user.username} played soundboard ${soundId} in ${channelId}`);
     io.to(`voice:${channelId}`).emit('soundboard:played', {
       soundId,
       userId: user.id,
@@ -190,6 +192,7 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user) return;
     try {
+      console.debug(`[Voice] ${user.username} fetched soundboard sound ${soundId}`);
       const sound = await db.getSoundboardSound(soundId);
       if (typeof callback === 'function') callback({ sound });
     } catch (err) {
@@ -201,6 +204,7 @@ module.exports = function(io, socket) {
   socket.on('message:get-preview', async ({ serverId, channelId, messageId }, callback) => {
     const user = state.users[socket.id];
     if (!user || typeof callback !== 'function') return;
+    console.debug(`[Message] ${user.username} fetched message preview ${messageId}`);
 
     const srv = state.servers[serverId];
     if (!srv) return callback({ error: 'Server not found' });
@@ -242,6 +246,7 @@ module.exports = function(io, socket) {
   socket.on('voice:ice-config', ({ serverId }, callback) => {
     const user = state.users[socket.id];
     if (!user) return callback?.({ error: 'Not authenticated' });
+    console.debug(`[Voice] ${user.username} requested ICE config for ${serverId}`);
     const iceServers = buildIceServers(serverId, user.id);
     callback?.({ iceServers });
   });
@@ -252,6 +257,7 @@ module.exports = function(io, socket) {
     const srv = state.servers[serverId];
     if (!srv) return callback?.({ error: 'Server not found' });
     if (srv.ownerId !== user.id) return callback?.({ error: 'Owner only' });
+    console.debug(`[Voice] ${user.username} fetched ICE config for ${srv.name}`);
     const iceConfig = srv.iceConfig || null;
     callback?.({
       iceConfig: iceConfig ? {
@@ -303,6 +309,18 @@ module.exports = function(io, socket) {
     socket.to(`voice:${channelId}`).emit('peer:joined', { socketId: socket.id, user });
     io.emit('voice:channel:update', { channelId, channel: { ...ch, users: ch.users.map(s=>state.users[s]).filter(Boolean) } });
     io.to(`voice:${channelId}`).emit('voice:cue', { type: 'join', user, customSound: user.introSound || null, customSoundVolume: user.introSoundVolume ?? 100 });
+
+    // Log voice join with channel/server context
+    if (ch.isDMCall) {
+      console.log(`[Voice] ${user.username} joined DM call ${channelId}`);
+    } else {
+      const srvId = channelToServer.get(channelId);
+      const srv = srvId && state.servers[srvId];
+      const voiceCh = srv?.channels.voice.find(c => c.id === channelId);
+      if (voiceCh) {
+        console.log(`[Voice] ${user.username} joined ${voiceCh.name} in ${srv.name}`);
+      }
+    }
   });
 
   socket.on('voice:leave', () => leaveVoice(socket, io));
@@ -311,6 +329,7 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user) return;
     user.isMuted = isMuted;
+    console.log(`[Voice] ${user.username} ${isMuted ? 'muted' : 'unmuted'}`);
     socket.to(`voice:${channelId}`).emit('peer:mute:changed', { socketId: socket.id, isMuted });
   });
 
@@ -318,16 +337,21 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user) return;
     user.isDeafened = isDeafened;
+    console.log(`[Voice] ${user.username} ${isDeafened ? 'deafened' : 'undeafened'}`);
     socket.to(`voice:${channelId}`).emit('peer:deafen:changed', { socketId: socket.id, isDeafened });
   });
 
   // ─── WebRTC signaling ───────────────────────────────────────────────────────
   socket.on('webrtc:offer', ({ targetId, offer }) => {
-    if (!state.users[socket.id]) return;
+    const user = state.users[socket.id];
+    if (!user) return;
+    console.debug(`[Voice] ${user.username} sent WebRTC offer to ${targetId}`);
     io.to(targetId).emit('webrtc:offer', { from: socket.id, offer });
   });
   socket.on('webrtc:answer', ({ targetId, answer }) => {
-    if (!state.users[socket.id]) return;
+    const user = state.users[socket.id];
+    if (!user) return;
+    console.debug(`[Voice] ${user.username} sent WebRTC answer to ${targetId}`);
     io.to(targetId).emit('webrtc:answer', { from: socket.id, answer });
   });
   socket.on('webrtc:ice', ({ targetId, candidate }) => {
@@ -337,28 +361,36 @@ module.exports = function(io, socket) {
 
   // ─── Screen Share ───────────────────────────────────────────────────────────
   socket.on('screen:start', ({ channelId }) => {
+    const user = state.users[socket.id];
     const ch = state.voiceChannels[channelId];
     if (!ch) return;
     if (!ch.screenSharers.includes(socket.id)) ch.screenSharers.push(socket.id);
+    console.log(`[Voice] ${user?.username || 'Unknown'} started screen share in ${channelId}`);
     io.to(`voice:${channelId}`).emit('screen:started', { socketId: socket.id });
     io.emit('voice:channel:update', { channelId, channel: { ...ch, users: ch.users.map(s=>state.users[s]).filter(Boolean) } });
   });
 
   socket.on('screen:stop', ({ channelId }) => {
+    const user = state.users[socket.id];
     const ch = state.voiceChannels[channelId];
     if (!ch) return;
     const idx = ch.screenSharers.indexOf(socket.id);
     if (idx === -1) return;
     ch.screenSharers.splice(idx, 1);
+    console.log(`[Voice] ${user?.username || 'Unknown'} stopped screen share in ${channelId}`);
     io.to(`voice:${channelId}`).emit('screen:stopped', { socketId: socket.id });
     io.emit('voice:channel:update', { channelId, channel: { ...ch, users: ch.users.map(s=>state.users[s]).filter(Boolean) } });
   });
 
   socket.on('screen:watch', ({ sharerId }) => {
+    const user = state.users[socket.id];
+    console.debug(`[Voice] ${user?.username || 'Unknown'} started watching screen share from ${sharerId}`);
     io.to(sharerId).emit('screen:add-viewer', { viewerId: socket.id });
   });
 
   socket.on('screen:unwatch', ({ sharerId }) => {
+    const user = state.users[socket.id];
+    console.debug(`[Voice] ${user?.username || 'Unknown'} stopped watching screen share from ${sharerId}`);
     io.to(sharerId).emit('screen:remove-viewer', { viewerId: socket.id });
   });
 

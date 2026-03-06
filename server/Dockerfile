@@ -15,8 +15,8 @@ COPY . .
 # Make entrypoint script executable
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Create data directory
-RUN mkdir -p /app/data
+# Create data directories
+RUN mkdir -p /app/data /app/data/logs
 
 EXPOSE 3001
 

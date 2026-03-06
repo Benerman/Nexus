@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const config = require('../config');
-const { state, DEFAULT_SERVER_ID, getSocketIdForUser, isUserOnline } = require('../state');
+const { state, DEFAULT_SERVER_ID, getSocketIdForUser, isUserOnline, indexServerChannels, unindexServerChannels } = require('../state');
 const { makeServer, serializeServer, getUserPerms, getUserHighestRolePosition, checkSocketRate, socketRateLimiters, getOnlineUsers } = require('../helpers');
 const { getDefaultSounds } = require('../default-sounds');
 
@@ -65,6 +65,7 @@ module.exports = function(io, socket) {
 
       // Update in-memory state only after commit
       state.servers[serverId] = srv;
+      indexServerChannels(serverId, srv);
 
       // Initialize message stores and voice channels
       [...srv.channels.text, ...srv.channels.voice].forEach(ch => {
@@ -266,6 +267,7 @@ module.exports = function(io, socket) {
       await db.deleteServer(serverId);
 
       // Remove from in-memory
+      unindexServerChannels(serverId);
       delete state.servers[serverId];
 
       // Notify all users

@@ -10,6 +10,7 @@ module.exports = function(io, socket) {
     const srv = state.servers[serverId];
     if (!srv || !srv.members[user.id]) return callback?.({ error: 'Server not found or access denied' });
     try {
+      console.debug(`[Emoji] ${user.username} fetched emojis for ${srv.name}`);
       const emojis = await Promise.all(
         (srv.customEmojis || []).map(async (e) => {
           const full = await db.getCustomEmoji(e.id);
@@ -45,6 +46,7 @@ module.exports = function(io, socket) {
       const emoji = await db.createCustomEmoji({ serverId, name: name.slice(0, 32), imageData, contentType: contentType || 'image/png', animated: animated || false, createdBy: user.id });
       srv.customEmojis = srv.customEmojis || [];
       srv.customEmojis.push({ id: emoji.id, name: emoji.name, content_type: emoji.content_type, animated: emoji.animated, created_by: emoji.created_by });
+      console.log(`[Emoji] ${user.username} uploaded emoji :${emoji.name}: to ${srv.name}`);
       io.emit('server:updated', { server: serializeServer(serverId) });
       if (typeof callback === 'function') callback({ emoji: { id: emoji.id, name: emoji.name } });
     } catch (err) {
@@ -67,6 +69,7 @@ module.exports = function(io, socket) {
       if (srv) {
         const idx = (srv.customEmojis || []).findIndex(e => e.id === emojiId);
         if (idx !== -1) srv.customEmojis[idx].name = emoji.name;
+        console.log(`[Emoji] ${user.username} renamed emoji ${emojiId} to :${emoji.name}:`);
         io.emit('server:updated', { server: serializeServer(serverId) });
       }
       if (typeof callback === 'function') callback({ success: true });
@@ -86,6 +89,7 @@ module.exports = function(io, socket) {
       const srv = state.servers[serverId];
       if (srv) {
         srv.customEmojis = (srv.customEmojis || []).filter(e => e.id !== emojiId);
+        console.log(`[Emoji] ${user.username} deleted emoji ${emojiId} from ${srv.name}`);
         io.emit('server:updated', { server: serializeServer(serverId) });
       }
       if (typeof callback === 'function') callback({ success: true });
@@ -102,6 +106,7 @@ module.exports = function(io, socket) {
       if (srv && !srv.members[user.id]) return callback?.({ error: 'Access denied' });
     }
     try {
+      console.debug(`[Emoji] ${user.username} fetched emoji image ${emojiId}`);
       const emoji = await db.getCustomEmoji(emojiId);
       if (!emoji) return callback?.({ error: 'Not found' });
       callback?.({ imageData: emoji.image_data, contentType: emoji.content_type });

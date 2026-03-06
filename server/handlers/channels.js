@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { state } = require('../state');
+const { state, channelToServer } = require('../state');
 const { serializeServer, findServerByChannelId, getUserPerms, checkSocketRate, socketRateLimiters } = require('../helpers');
 const utils = require('../utils');
 
@@ -19,6 +19,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Moderation] ${user.username} fetched bans for ${srv.name}`);
       const bans = await db.getServerBans(serverId);
       if (typeof callback === 'function') callback({ bans });
     } catch (error) {
@@ -64,6 +65,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Moderation] ${user.username} fetched timeouts for ${srv.name}`);
       const timeouts = await db.getServerTimeouts(serverId);
       if (typeof callback === 'function') callback({ timeouts });
     } catch (error) {
@@ -110,6 +112,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Moderation] ${user.username} fetched reports for ${srv.name}`);
       const reports = await db.getReportsForServer(serverId);
       if (typeof callback === 'function') callback({ reports });
     } catch (error) {
@@ -176,6 +179,7 @@ module.exports = function(io, socket) {
       srv.channels.text.push(ch);
       state.messages[channelId] = [];
     }
+    channelToServer.set(channelId, serverId);
 
     // Add to category
     if (srv.categories[categoryId]) srv.categories[categoryId].channels.push(channelId);
@@ -192,6 +196,7 @@ module.exports = function(io, socket) {
       console.error('[Channel] Failed to persist channel to database:', err.message);
     }
 
+    console.log(`[Channel] ${user.username} created ${ch.type} channel #${ch.name} in ${srv.name}`);
     db.createAuditLog(serverId, 'channel_create', user.id, channelId, { name: ch.name, type: ch.type }).catch(() => {});
 
     io.emit('server:updated', { server: serializeServer(serverId) });
@@ -243,6 +248,7 @@ module.exports = function(io, socket) {
       console.error('[Channel] Failed to persist channel update to database:', err.message);
     }
 
+    console.log(`[Channel] ${user.username} updated channel #${ch.name} in ${srv.name}`);
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 
@@ -256,9 +262,12 @@ module.exports = function(io, socket) {
 
     srv.channels.text = srv.channels.text.filter(c => c.id !== channelId);
     srv.channels.voice = srv.channels.voice.filter(c => c.id !== channelId);
+    channelToServer.delete(channelId);
     Object.values(srv.categories).forEach(cat => {
       cat.channels = cat.channels.filter(cid => cid !== channelId);
     });
+
+    console.log(`[Channel] ${user.username} deleted channel ${channelId} from ${srv.name}`);
 
     // Delete channel from database
     db.query('DELETE FROM channels WHERE id = $1', [channelId]).catch(err => {
@@ -289,6 +298,7 @@ module.exports = function(io, socket) {
       }
     });
 
+    console.log(`[Channel] ${user.username} reordered channels in ${srv.name}`);
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 
@@ -307,8 +317,10 @@ module.exports = function(io, socket) {
 
     const catId = uuidv4();
     const position = Object.keys(srv.categories).length;
-    srv.categories[catId] = { id: catId, name: (name||'New Category').slice(0,32), position, channels: [] };
+    const catName = (name||'New Category').slice(0,32);
+    srv.categories[catId] = { id: catId, name: catName, position, channels: [] };
     srv.categoryOrder.push(catId);
+    console.log(`[Channel] ${user.username} created category "${catName}" in ${srv.name}`);
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 
@@ -321,6 +333,7 @@ module.exports = function(io, socket) {
     if (!srv || !srv.categories[categoryId]) return;
 
     if (name) srv.categories[categoryId].name = String(name).slice(0,32);
+    console.log(`[Channel] ${user.username} updated category "${srv.categories[categoryId].name}" in ${srv.name}`);
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 
@@ -344,6 +357,7 @@ module.exports = function(io, socket) {
       });
     }
 
+    console.log(`[Channel] ${user.username} deleted category ${categoryId} from ${srv.name}`);
     delete srv.categories[categoryId];
     // Remove from categoryOrder
     if (srv.categoryOrder) {
@@ -370,6 +384,7 @@ module.exports = function(io, socket) {
       }
     });
 
+    console.log(`[Channel] ${user.username} reordered categories in ${srv.name}`);
     io.emit('server:updated', { server: serializeServer(serverId) });
   });
 

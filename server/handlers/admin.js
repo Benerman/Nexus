@@ -1,5 +1,5 @@
 const db = require('../db');
-const { state, getSocketIdForUser, isUserOnline } = require('../state');
+const { state, getSocketIdForUser, isUserOnline, unindexServerChannels } = require('../state');
 const { serializeServer } = require('../helpers');
 const { hashPassword } = require('../utils');
 
@@ -9,6 +9,7 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user?.isPlatformAdmin) return callback?.({ error: 'Not authorized' });
     try {
+      console.debug(`[Admin] ${user.username} fetched server list`);
       const servers = Object.entries(state.servers)
         .filter(([, s]) => !s.isPersonal && !s.id.startsWith('personal:'))
         .map(([id, s]) => {
@@ -35,6 +36,7 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user?.isPlatformAdmin) return callback?.({ error: 'Not authorized' });
     try {
+      console.debug(`[Admin] ${user.username} fetched user list`);
       const accounts = await db.getAllAccounts();
       const onlineIds = new Set(Object.values(state.users).map(u => u.id));
       const users = accounts.map(a => ({
@@ -59,6 +61,7 @@ module.exports = function(io, socket) {
       if (!srv) return callback?.({ error: 'Server not found' });
       if (srv.isPersonal || serverId.startsWith('personal:')) return callback?.({ error: 'Cannot delete personal servers' });
       await db.deleteServer(serverId);
+      unindexServerChannels(serverId);
       delete state.servers[serverId];
       io.emit('server:deleted', { serverId });
       console.log(`[Admin] ${user.username} deleted server ${srv.name} (${serverId})`);
@@ -81,6 +84,7 @@ module.exports = function(io, socket) {
         const memberIds = Object.keys(srv.members).filter(id => id !== userId);
         if (memberIds.length === 0) {
           await db.deleteServer(serverId);
+          unindexServerChannels(serverId);
           delete state.servers[serverId];
           io.emit('server:deleted', { serverId });
           continue;
@@ -148,6 +152,7 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user?.isPlatformAdmin) return callback?.({ error: 'Not authorized' });
     try {
+      console.debug(`[Admin] ${user.username} fetched orphaned data stats`);
       const stats = await db.getOrphanedDataStats();
       callback?.({ stats });
     } catch (error) {

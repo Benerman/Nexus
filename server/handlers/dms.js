@@ -297,7 +297,7 @@ module.exports = function(io, socket) {
       });
 
       socket.emit('dm:list', { dms: dmList });
-      console.log(`[DM] ${user.username} requested DM list (${dmList.length} conversations)`);
+      console.debug(`[DM] ${user.username} requested DM list (${dmList.length} conversations)`);
     } catch (error) {
       console.error('[DM] Error fetching DM list:', error);
       socket.emit('error', { message: `Failed to fetch DM list: ${error.message}` });
@@ -359,6 +359,7 @@ module.exports = function(io, socket) {
     }
 
     try {
+      console.debug(`[DM] ${user.username} fetched unread counts`);
       const unreadCounts = await db.getUnreadCounts(user.id);
       socket.emit('dm:unread-counts', { counts: unreadCounts });
     } catch (error) {
@@ -439,6 +440,7 @@ module.exports = function(io, socket) {
     if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
 
     try {
+      console.debug(`[DM] ${user.username} fetched message requests`);
       const requests = await db.getMessageRequests(user.id);
       const formatted = requests.map(req => ({
         id: req.id,
@@ -599,6 +601,7 @@ module.exports = function(io, socket) {
   socket.on('typing:start', ({ channelId }) => {
     const user = state.users[socket.id];
     if (!user) return;
+    console.debug(`[DM] ${user.username} started typing in ${channelId}`);
     const userInfo = { id: user.id, username: user.username, avatar: user.avatar, color: user.color };
     socket.to(`text:${channelId}`).emit('typing:start', { channelId, user: userInfo });
     socket.to(`text:${channelId}`).emit('typing:update', { channelId, user: userInfo, typing: true });
@@ -607,6 +610,7 @@ module.exports = function(io, socket) {
   socket.on('typing:stop', ({ channelId }) => {
     const user = state.users[socket.id];
     if (!user) return;
+    console.debug(`[DM] ${user.username} stopped typing in ${channelId}`);
     const userInfo = { id: user.id, username: user.username, avatar: user.avatar, color: user.color };
     socket.to(`text:${channelId}`).emit('typing:stop', { channelId, userId: user.id });
     socket.to(`text:${channelId}`).emit('typing:update', { channelId, user: userInfo, typing: false });
@@ -910,6 +914,7 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user) return;
 
+    console.log(`[DM] ${user.username} declined call in ${channelId}`);
     // Notify caller that the call was declined
     const ch = state.voiceChannels[channelId];
     if (ch) {

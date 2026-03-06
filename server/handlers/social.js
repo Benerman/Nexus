@@ -143,6 +143,7 @@ module.exports = function(io, socket) {
         }
       }));
 
+      console.debug(`[Social] ${user.username} fetched friend list (${friends.length} friends, ${pending.length} pending)`);
       socket.emit('friend:list', { friends, pending });
     } catch (error) {
       console.error('[Friend] Error fetching friend list:', error);
@@ -184,6 +185,7 @@ module.exports = function(io, socket) {
     if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
 
     try {
+      console.debug(`[Social] ${user.username} fetched blocked users`);
       const blocked = await db.getBlockedUsers(user.id);
       socket.emit('blocked:list', { blocked });
     } catch (error) {
@@ -242,6 +244,7 @@ module.exports = function(io, socket) {
     if (!user) return;
 
     try {
+      console.debug(`[Social] ${user.username} peeked at invite ${inviteCode}`);
       const invite = await db.getInviteByCode(inviteCode);
       if (!invite) {
         return socket.emit('invite:peek:result', { inviteCode, error: 'Invalid invite' });
@@ -357,6 +360,7 @@ module.exports = function(io, socket) {
     }
 
     try {
+      console.debug(`[Social] ${user.username} listed invites for ${serverId}`);
       const invites = await db.getServerInvites(serverId);
       socket.emit('invite:list', { invites });
     } catch (error) {

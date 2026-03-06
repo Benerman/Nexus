@@ -39,6 +39,7 @@ module.exports = function(io, socket) {
         permissions: rolePerms
       };
 
+      console.log(`[Roles] ${user.username} created role "${roleName}" in ${srv.name}`);
       db.createAuditLog(serverId, 'role_create', user.id, roleId, { name: roleName }).catch(() => {});
 
       io.emit('server:updated', { server: serializeServer(serverId) });
@@ -82,6 +83,7 @@ module.exports = function(io, socket) {
       role.color = newColor;
       role.permissions = newPerms;
 
+      console.log(`[Roles] ${user.username} updated role "${newName}" in ${srv.name}`);
       io.emit('server:updated', { server: serializeServer(serverId) });
     } catch (err) {
       console.error('[Roles] Failed to update role in database:', err.message);
@@ -116,6 +118,7 @@ module.exports = function(io, socket) {
       });
       delete srv.roles[roleId];
 
+      console.log(`[Roles] ${user.username} deleted role "${role.name}" from ${srv.name}`);
       db.createAuditLog(serverId, 'role_delete', user.id, roleId, { name: role.name }).catch(() => {});
 
       io.emit('server:updated', { server: serializeServer(serverId) });
@@ -158,6 +161,8 @@ module.exports = function(io, socket) {
     try {
       await db.updateServerMemberRoles(serverId, targetUserId, newRoles);
       member.roles = newRoles;
+      const targetRole = srv.roles[roleId];
+      console.log(`[Roles] ${user.username} ${action === 'add' ? 'assigned' : 'removed'} role "${targetRole?.name || roleId}" ${action === 'add' ? 'to' : 'from'} ${targetUserId} in ${srv.name}`);
       io.emit('server:updated', { server: serializeServer(serverId) });
     } catch (err) {
       console.error('[Roles] Failed to persist member role change to database:', err.message);

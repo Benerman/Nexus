@@ -28,6 +28,7 @@ module.exports = function(io, socket) {
         changes: typeof log.changes === 'string' ? JSON.parse(log.changes) : (log.changes || {}),
         createdAt: new Date(log.created_at).getTime()
       }));
+      console.debug(`[Audit] ${user.username} fetched ${formatted.length} audit logs for ${srv.name}`);
       socket.emit('audit:logs', { serverId, logs: formatted });
     } catch (err) {
       console.error('[Audit] Error fetching audit logs:', err.message);

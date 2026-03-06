@@ -82,26 +82,34 @@ module.exports = function(io, socket) {
       // If user has regular servers, use the first one as active; otherwise use personal server
       const activeServer = regularServers.length > 0 ? regularServers[0] : personalServer;
 
+      const onlineUsers = getOnlineUsers();
+
       socket.emit('init', {
         user,
         serverId: activeServer.id,
         server: activeServer,
         servers: allServers,
-        onlineUsers: getOnlineUsers(),
+        onlineUsers,
         voiceChannels: regularServers.length > 0 ? getVoiceChannelState(activeServer.id) : {}
       });
 
-      socket.broadcast.emit('user:joined', { user, onlineUsers: getOnlineUsers() });
+      socket.broadcast.emit('user:joined', { user, onlineUsers });
 
-      // Broadcast updated server data for all servers this user is a member of
-      // so other clients see the new/updated member in their member lists
+      // Broadcast updated server data only to members of each server
       Object.entries(state.servers).forEach(([srvId, srvData]) => {
         if (!srvData.isPersonal && !srvId.startsWith('personal:') && srvData.members[user.id]) {
-          socket.broadcast.emit('server:updated', { server: serializeServer(srvId) });
+          const serialized = serializeServer(srvId);
+          Object.keys(srvData.members).forEach(memberId => {
+            if (memberId === user.id) return;
+            const memberSocketId = getSocketIdForUser(memberId);
+            if (memberSocketId) {
+              io.to(memberSocketId).emit('server:updated', { server: serialized });
+            }
+          });
         }
       });
 
-      console.log(`[~] ${user.username} joined`);
+      console.log(`[Auth] ${user.username} joined`);
     } catch (error) {
       console.error('[Socket] Join error:', error);
       socket.emit('error', { message: 'Failed to join server' });
@@ -138,7 +146,7 @@ module.exports = function(io, socket) {
         voiceChannels: allVoiceChannels
       });
 
-      console.log(`[~] ${user.username} refreshed data`);
+      console.debug(`[Heartbeat] ${user.username} refreshed data`);
     } catch (error) {
       console.error('[Socket] Data refresh error:', error);
     }
@@ -198,6 +206,7 @@ module.exports = function(io, socket) {
       });
     }
 
+    console.debug(`[Auth] ${user.username} updated profile`);
     io.emit('user:updated', { user, onlineUsers: getOnlineUsers() });
   });
 
@@ -210,6 +219,7 @@ module.exports = function(io, socket) {
     }
 
     try {
+      console.debug(`[Auth] ${user.username} updated settings`);
       const updated = await db.updateUserSettings(user.id, settings);
       if (callback) callback({ success: true, settings: updated });
     } catch (err) {
@@ -226,6 +236,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Auth] ${user.username} fetched voice sounds`);
       const sounds = await db.getAccountSounds(user.id);
       if (typeof callback === 'function') callback({ sounds: sounds || {} });
     } catch (err) {
@@ -255,6 +266,7 @@ module.exports = function(io, socket) {
       if (data.introSoundVolume !== undefined) updates.intro_sound_volume = data.introSoundVolume;
       if (data.exitSoundVolume !== undefined) updates.exit_sound_volume = data.exitSoundVolume;
 
+      console.debug(`[Auth] ${user.username} updated voice sounds`);
       await db.updateAccount(user.id, updates);
 
       // Update in-memory cache
@@ -282,6 +294,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Auth] ${user.username} searched users`);
       const results = await db.searchAccountsByUsername(query.trim(), 20);
       const filtered = results.filter(a => a.id !== user.id);
       if (typeof callback === 'function') callback({ users: filtered });
@@ -303,6 +316,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Auth] ${user.username} set encryption public key`);
       await db.setPublicKey(user.id, publicKey);
       if (typeof callback === 'function') callback({ success: true });
     } catch (err) {
@@ -322,6 +336,7 @@ module.exports = function(io, socket) {
       return;
     }
     try {
+      console.debug(`[Auth] ${user.username} fetched public key for ${userId}`);
       const publicKey = await db.getPublicKey(userId);
       if (typeof callback === 'function') callback({ publicKey });
     } catch (err) {
@@ -358,6 +373,7 @@ module.exports = function(io, socket) {
       }
       const newHash = await hashPassword(newPassword);
       await db.updateAccountPassword(account.id, newHash, 'bcrypt');
+      console.debug(`[Auth] ${user.username} changed password`);
       socket.emit('user:password-changed', { success: true });
     } catch (error) {
       console.error('[Auth] Password change error:', error);
