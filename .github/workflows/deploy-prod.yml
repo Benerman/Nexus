@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Clean up root-owned artifacts
-        run: sudo rm -rf logs/ || true
+        run: docker run --rm -v "${{ github.workspace }}:/workspace" alpine rm -rf /workspace/logs || true
 
       - name: Checkout latest code
         uses: actions/checkout@v4
@@ -26,7 +26,9 @@ jobs:
           clean: true
 
       - name: Ensure log directory exists
-        run: sudo mkdir -p /opt/nexus/logs && sudo chown "$(id -u):$(id -g)" /opt/nexus/logs
+        run: |
+          docker run --rm -v /opt/nexus:/mnt alpine sh -c "mkdir -p /mnt/logs && chown $(id -u):$(id -g) /mnt/logs" || true
+          mkdir -p /opt/nexus/logs 2>/dev/null || true
 
       - name: Symlink .env file
         run: |
