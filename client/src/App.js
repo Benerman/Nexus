@@ -22,6 +22,7 @@ import WelcomeTour from './components/WelcomeTour';
 import { getServerUrl, needsServerSetup, setServerUrl, isStandaloneApp, requestNotificationPermission, sendNotification } from './config';
 import { registerMenuUpdateCheck, autoCheckOnStartup } from './utils/updater';
 import { initSodium, decryptMessage, encryptMessage } from './utils/encryption';
+import clientLogger from './utils/logger';
 import './App.css';
 
 // Inject custom theme CSS from localStorage
@@ -532,6 +533,7 @@ export default function App() {
 
   const handleLogin = useCallback(({ token, username, e2eSecretKey }) => {
     console.log('[App]  handleLogin called with', { token: token?.slice(0, 10) + '...', username });
+    clientLogger.setToken(token);
 
     // Store E2E secret key in ref (never in state to avoid re-renders)
     if (e2eSecretKey) {
@@ -598,6 +600,7 @@ export default function App() {
       // If server kicked us (io server disconnect), don't try to reconnect with stale token
       if (reason === 'io server disconnect') {
         console.log('[App]  Server disconnected us - clearing tokens');
+        webrtcRef.current.clearVoiceState?.();
         localStorage.removeItem('nexus_token');
         localStorage.removeItem('nexus_username');
         if (heartbeatRef.current) clearInterval(heartbeatRef.current);
@@ -730,6 +733,37 @@ export default function App() {
         s.emit('dm:unread-counts');
         s.emit('dm:message-requests');
         s.emit('bookmarks:get-ids');
+      }
+
+      // Auto-rejoin voice channel after page reload
+      const savedVoice = webrtcRef.current.getSavedVoiceState?.();
+      if (savedVoice) {
+        const { channelId, serverId, isDMCall } = savedVoice;
+        webrtcRef.current.clearVoiceState?.(); // Clear so we don't retry if it fails
+
+        setTimeout(() => {
+          if (isDMCall) {
+            setDmCallActive(channelId);
+            webrtcRef.current.joinVoice(channelId, null, true);
+          } else {
+            // Verify channel still exists in server data
+            let channelExists = false;
+            for (const srv of servers) {
+              const voiceCh = srv.channels?.voice?.find(ch => ch.id === channelId);
+              if (voiceCh) {
+                channelExists = true;
+                if (srv.id !== activeServerId) {
+                  setActiveServerId(srv.id);
+                  localStorage.setItem('nexus_last_server', srv.id);
+                }
+                break;
+              }
+            }
+            if (channelExists) {
+              webrtcRef.current.joinVoice(channelId, serverId);
+            }
+          }
+        }, 1000); // Let init processing settle
       }
 
       // Handle pending invite from URL (e.g. /invite/abc123)
@@ -1636,6 +1670,7 @@ export default function App() {
 
   const handleSelectServer = useCallback((serverId) => {
     setActiveServerId(serverId);
+    setThreadPanel(null);
     localStorage.setItem('nexus_last_server', serverId);
 
     const srv = serverData[serverId];
@@ -1750,7 +1785,7 @@ export default function App() {
     socketRef.current.emit('dm:call-start', { channelId });
     setDmCallActive(channelId);
     // Join voice for this DM channel
-    webrtcRef.current.joinVoice(channelId);
+    webrtcRef.current.joinVoice(channelId, null, true);
   }, []);
 
   const handleAcceptDMCall = useCallback((channelId) => {
@@ -1767,7 +1802,7 @@ export default function App() {
       }
     }
     // Join voice
-    webrtcRef.current.joinVoice(channelId);
+    webrtcRef.current.joinVoice(channelId, null, true);
   }, [serverData]);
 
   const handleDeclineDMCall = useCallback((channelId) => {
@@ -2155,6 +2190,8 @@ export default function App() {
   }, [activeChannel?.id]);
 
   const handleLogout = useCallback(() => {
+    clientLogger.setToken(null);
+    webrtcRef.current.clearVoiceState?.();
     localStorage.removeItem('nexus_token');
     localStorage.removeItem('nexus_username');
     if (socketRef.current) {
@@ -2418,7 +2455,8 @@ export default function App() {
               isDeafened={webrtc.isDeafened} isSharingScreen={webrtc.isSharingScreen}
               isWatchingScreen={webrtc.isWatchingScreen}
               isScreenAudioMuted={webrtc.isScreenAudioMuted}
-              activeSpeakers={webrtc.activeSpeakers} screenSharerSocketId={screenSharerSocketId}
+              activeSpeakers={webrtc.activeSpeakers} audioLevels={webrtc.audioLevels}
+              screenSharerSocketId={screenSharerSocketId}
               remoteUserStates={webrtc.remoteUserStates}
               userVolumes={webrtc.userVolumes}
               localMutedUsers={webrtc.localMutedUsers}
@@ -2444,6 +2482,8 @@ export default function App() {
               voiceStatusMessage={webrtc.voiceStatusMessage}
               pttActive={webrtc.pttActive}
               isPttMode={localStorage.getItem('nexus_voice_input_mode') === 'push_to_talk'}
+              onPttActivate={webrtc.pttActivate}
+              onPttDeactivate={webrtc.pttDeactivate}
             />
           </div>
         )}
@@ -2456,7 +2496,8 @@ export default function App() {
             isDeafened={webrtc.isDeafened} isSharingScreen={webrtc.isSharingScreen}
             isWatchingScreen={webrtc.isWatchingScreen}
             isScreenAudioMuted={webrtc.isScreenAudioMuted}
-            activeSpeakers={webrtc.activeSpeakers} screenSharerSocketId={screenSharerSocketId}
+            activeSpeakers={webrtc.activeSpeakers} audioLevels={webrtc.audioLevels}
+            screenSharerSocketId={screenSharerSocketId}
             remoteUserStates={webrtc.remoteUserStates}
             userVolumes={webrtc.userVolumes}
             localMutedUsers={webrtc.localMutedUsers}
@@ -2482,6 +2523,8 @@ export default function App() {
             voiceStatusMessage={webrtc.voiceStatusMessage}
             pttActive={webrtc.pttActive}
             isPttMode={localStorage.getItem('nexus_voice_input_mode') === 'push_to_talk'}
+            onPttActivate={webrtc.pttActivate}
+            onPttDeactivate={webrtc.pttDeactivate}
           />
         ) : !activeChannel && !hasRegularServers ? (
           <div className="empty-state">

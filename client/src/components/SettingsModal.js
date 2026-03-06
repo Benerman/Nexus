@@ -5,6 +5,7 @@ import { emitWithTimeout, emitWithLoadingTimeout, TIMEOUT_MSG } from '../utils/s
 import { getServerUrl, isStandaloneApp, isTauriApp, isCapacitorApp, openExternalUrl } from '../config';
 import { checkForUpdates } from '../utils/updater';
 import { checkForCapacitorUpdate } from '../utils/capacitor-updater';
+import clientLogger from '../utils/logger';
 import './SettingsModal.css';
 import { UserIcon, SettingsIcon, HexagonIcon, LinkIcon, VolumeIcon, FriendsIcon, BellIcon, SoundboardIcon, EmojiIcon } from './icons';
 
@@ -2642,6 +2643,8 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                     setVoiceInputMode('voice_activity');
                     localStorage.setItem('nexus_voice_input_mode', 'voice_activity');
                     syncSettingsToServer();
+                    window.dispatchEvent(new Event('nexus-ptt-settings-changed'));
+                    updateAudioProcessing?.();
                   }}
                 >
                   Voice Activity
@@ -2652,6 +2655,8 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                     setVoiceInputMode('push_to_talk');
                     localStorage.setItem('nexus_voice_input_mode', 'push_to_talk');
                     syncSettingsToServer();
+                    window.dispatchEvent(new Event('nexus-ptt-settings-changed'));
+                    updateAudioProcessing?.();
                   }}
                 >
                   Push to Talk
@@ -5302,6 +5307,20 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   )}
                 </div>
               )}
+
+              <div style={{marginBottom: 20}}>
+                <h3 style={{fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8}}>Diagnostics</h3>
+                <button
+                  className="settings-btn"
+                  onClick={() => clientLogger.download()}
+                  style={{width: '100%', textAlign: 'left'}}
+                >
+                  Download Client Logs
+                  <span style={{marginLeft: 8, fontSize: 12, color: 'var(--text-muted)'}}>
+                    ({clientLogger.getEntries().length} entries)
+                  </span>
+                </button>
+              </div>
 
               <div style={{fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: 12}}>
                 <p style={{margin: '0 0 4px'}}>Made with care by the Nexus team.</p>

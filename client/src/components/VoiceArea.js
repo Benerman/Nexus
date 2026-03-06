@@ -100,13 +100,15 @@ const VideoPlayer = React.memo(function VideoPlayer({ stream, label, isSpeaking,
 const UserTile = React.memo(function UserTile({
   user,
   isSpeaking,
+  audioLevel,
   isMuted,
   isDeafened,
   stream,
   userVolume,
   isLocallyMuted,
   onSetVolume,
-  onToggleMute
+  onToggleMute,
+  onContextMenu
 }) {
   const [volumeOpen, setVolumeOpen] = React.useState(false);
   const popupRef = React.useRef(null);
@@ -126,7 +128,13 @@ const UserTile = React.memo(function UserTile({
   const displayVol = userVolume ?? 100;
 
   return (
-    <div className={`voice-user-tile ${isSpeaking ? 'speaking' : ''}`}>
+    <div
+      className={`voice-user-tile ${isSpeaking ? 'speaking' : ''}`}
+      style={isSpeaking && audioLevel > 0 ? {
+        boxShadow: `0 0 0 ${2 + (audioLevel || 0) * 6}px var(--green)`
+      } : undefined}
+      onContextMenu={onContextMenu}
+    >
       {stream && stream.getVideoTracks().length > 0 ? (
         <>
           <VideoPlayer stream={stream} label={user?.username || 'Unknown'} isSpeaking={isSpeaking} />
@@ -217,6 +225,7 @@ const VoiceArea = React.memo(function VoiceArea({
   isWatchingScreen,
   isScreenAudioMuted,
   activeSpeakers,
+  audioLevels,
   screenSharerSocketId,
   remoteUserStates,
   userVolumes,
@@ -243,7 +252,9 @@ const VoiceArea = React.memo(function VoiceArea({
   voiceQuality,
   voiceStatusMessage,
   pttActive,
-  isPttMode
+  isPttMode,
+  onPttActivate,
+  onPttDeactivate
 }) {
   console.log('[VoiceArea] RENDER - channel:', channel?.name, 'users:', voiceChannelData?.users?.length);
 
@@ -256,6 +267,12 @@ const VoiceArea = React.memo(function VoiceArea({
   const [targetPickerSoundId, setTargetPickerSoundId] = useState(null);
   const [selectedTargetUsers, setSelectedTargetUsers] = useState([]);
   const [soundboardVolume, setSoundboardVolume] = useState(() => parseInt(localStorage.getItem('nexus_soundboard_volume') || '100'));
+  const [soundboardSpeaking, setSoundboardSpeaking] = useState(new Set());
+  const [soundboardMutedUsers, setSoundboardMutedUsers] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nexus_soundboard_muted_users') || '{}'); }
+    catch { return {}; }
+  });
+  const [contextMenu, setContextMenu] = useState(null);
   const fullscreenContainerRef = useRef(null);
   const hideControlsTimeoutRef = useRef(null);
   const soundboardPopupRef = useRef(null);
@@ -264,6 +281,55 @@ const VoiceArea = React.memo(function VoiceArea({
   const soundboardActiveSourcesRef = useRef({}); // soundId -> { source, gain }
   const isDeafenedRef = useRef(isDeafened);
   isDeafenedRef.current = isDeafened;
+  const audioBaselinesRef = useRef({}); // socketId -> { peak, lastUpdate }
+
+  // Normalize audio level relative to each user's recent peak
+  const getNormalizedLevel = useCallback((socketId, rawLevel) => {
+    if (!rawLevel || rawLevel <= 0) return 0;
+    const now = Date.now();
+    const entry = audioBaselinesRef.current[socketId];
+    if (!entry) {
+      audioBaselinesRef.current[socketId] = { peak: rawLevel, lastUpdate: now };
+      return 0.5; // First sample — show mid-range
+    }
+    // Update peak: instant rise, slow decay (~3s half-life at 100ms updates)
+    if (rawLevel >= entry.peak) {
+      entry.peak = rawLevel;
+    } else {
+      const elapsed = now - entry.lastUpdate;
+      entry.peak = entry.peak * Math.pow(0.98, elapsed / 100);
+      // Floor so peak doesn't decay below a small minimum
+      if (entry.peak < 0.02) entry.peak = 0.02;
+    }
+    entry.lastUpdate = now;
+    // Normalize: raw / peak, clamped to [0, 1]
+    return Math.min(1, rawLevel / entry.peak);
+  }, []);
+
+  const toggleSoundboardMute = useCallback((userId) => {
+    setSoundboardMutedUsers(prev => {
+      const next = { ...prev };
+      if (next[userId]) delete next[userId];
+      else next[userId] = true;
+      localStorage.setItem('nexus_soundboard_muted_users', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const handleTileContextMenu = useCallback((e, userId, username) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, userId, username });
+  }, []);
+
+  // Close context menu on click-outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    const handleKey = (e) => { if (e.key === 'Escape') setContextMenu(null); };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => { document.removeEventListener('mousedown', handleClick); document.removeEventListener('keydown', handleKey); };
+  }, [contextMenu]);
 
   const users = voiceChannelData?.users || [];
   // Only consider screen share active if the sharer is still in the voice channel or is us
@@ -453,8 +519,10 @@ const VoiceArea = React.memo(function VoiceArea({
 
       // Track active source
       soundboardActiveSourcesRef.current[soundId] = { source, gain: gainNode };
+      return audioBuffer.duration;
     } catch (err) {
       console.error('[Soundboard] Playback error:', err);
+      return 0;
     }
   }, [stopSoundboardSource]);
 
@@ -465,6 +533,7 @@ const VoiceArea = React.memo(function VoiceArea({
     // Ignore stale sounds (e.g. from a previous call session)
     if (Date.now() - (soundboardPlayed._ts || 0) > 5000) return;
     if (isDeafenedRef.current) return; // Discard entirely when deafened
+    if (soundboardPlayed.userId && soundboardMutedUsers[soundboardPlayed.userId]) return;
 
     const { soundId } = soundboardPlayed;
     const cached = soundboardAudioCacheRef.current[soundId];
@@ -483,13 +552,35 @@ const VoiceArea = React.memo(function VoiceArea({
     }
     const audioData = cached.audio || cached;
     const clipVolume = cached.volume || 1.0;
-    playSoundboardClip(soundId, audioData, clipVolume);
-  }, [soundboardPlayed, socket, playSoundboardClip]); // eslint-disable-line react-hooks/exhaustive-deps
+    (async () => {
+      const duration = await playSoundboardClip(soundId, audioData, clipVolume);
+
+      // Show speaking indicator for the user who triggered the clip
+      const triggerUserId = soundboardPlayed.userId;
+      if (triggerUserId) {
+        const triggerSocketId = currentUser?.id === triggerUserId
+          ? 'local'
+          : users.find(u => u.id === triggerUserId)?.socketId;
+        if (triggerSocketId) {
+          setSoundboardSpeaking(prev => new Set(prev).add(triggerSocketId));
+          const timeout = Math.max(1000, (duration || 3) * 1000);
+          setTimeout(() => {
+            setSoundboardSpeaking(prev => {
+              const next = new Set(prev);
+              next.delete(triggerSocketId);
+              return next;
+            });
+          }, timeout);
+        }
+      }
+    })();
+  }, [soundboardPlayed, socket, playSoundboardClip, currentUser, users]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle queued playback (after on-demand fetch)
   useEffect(() => {
     if (!soundboardPlayQueued) return;
     if (isDeafenedRef.current) { setSoundboardPlayQueued(null); return; } // Discard when deafened
+    if (soundboardPlayQueued.userId && soundboardMutedUsers[soundboardPlayQueued.userId]) { setSoundboardPlayQueued(null); return; }
     const cached = soundboardAudioCacheRef.current[soundboardPlayQueued.soundId];
     if (!cached) return;
     const audioData = cached.audio || cached;
@@ -648,11 +739,16 @@ const VoiceArea = React.memo(function VoiceArea({
                 {/* Bottom call controls */}
                 <div className="fullscreen-bottom-controls">
                   <button
-                    className={`fullscreen-ctrl-btn ${isPttMode && pttActive ? 'ptt-active' : isMuted ? 'danger' : ''}`}
-                    onClick={onToggleMute}
-                    title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT') : (isMuted ? 'Unmute' : 'Mute')}
+                    className={`fullscreen-ctrl-btn ${isPttMode ? (pttActive ? 'ptt-active' : 'danger') : isMuted ? 'danger' : ''}`}
+                    onClick={isPttMode ? undefined : onToggleMute}
+                    onMouseDown={isPttMode && onPttActivate ? (e) => { e.preventDefault(); onPttActivate(); } : undefined}
+                    onMouseUp={isPttMode && onPttDeactivate ? () => onPttDeactivate() : undefined}
+                    onMouseLeave={isPttMode && pttActive && onPttDeactivate ? () => onPttDeactivate() : undefined}
+                    onTouchStart={isPttMode && onPttActivate ? (e) => { e.preventDefault(); onPttActivate(); } : undefined}
+                    onTouchEnd={isPttMode && onPttDeactivate ? () => onPttDeactivate() : undefined}
+                    title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT — Hold to talk') : (isMuted ? 'Unmute' : 'Mute')}
                   >
-                    <MicrophoneIcon size={20} muted={isMuted && !pttActive} />
+                    <MicrophoneIcon size={20} muted={isPttMode ? !pttActive : isMuted} />
                     <span>{isPttMode ? (pttActive ? 'Talking' : 'PTT') : (isMuted ? 'Unmute' : 'Mute')}</span>
                   </button>
                   <button
@@ -735,9 +831,11 @@ const VoiceArea = React.memo(function VoiceArea({
           {/* Local user */}
           <UserTile
             user={currentUser}
-            isSpeaking={activeSpeakers.has('local')}
+            isSpeaking={activeSpeakers.has('local') || soundboardSpeaking.has('local')}
+            audioLevel={soundboardSpeaking.has('local') ? 0.5 : getNormalizedLevel('local', audioLevels?.['local'] || 0)}
             isMuted={isMuted}
             isDeafened={isDeafened}
+            onContextMenu={(e) => handleTileContextMenu(e, currentUser.id, currentUser.username)}
           />
 
           {/* Remote users */}
@@ -749,13 +847,15 @@ const VoiceArea = React.memo(function VoiceArea({
                 <UserTile
                   key={u.socketId}
                   user={u}
-                  isSpeaking={activeSpeakers.has(u.socketId)}
+                  isSpeaking={activeSpeakers.has(u.socketId) || soundboardSpeaking.has(u.socketId)}
+                  audioLevel={soundboardSpeaking.has(u.socketId) ? 0.5 : getNormalizedLevel(u.socketId, audioLevels?.[u.socketId] || 0)}
                   isMuted={state.isMuted}
                   isDeafened={state.isDeafened}
                   userVolume={userVolumes[u.socketId] ?? 100}
                   isLocallyMuted={localMutedUsers[u.socketId] ?? false}
                   onSetVolume={(vol) => onSetUserVolume(u.socketId, vol)}
                   onToggleMute={() => onToggleUserMute(u.socketId)}
+                  onContextMenu={(e) => handleTileContextMenu(e, u.id, u.username)}
                 />
               );
             })
@@ -766,12 +866,17 @@ const VoiceArea = React.memo(function VoiceArea({
       {/* Controls */}
       <div className="voice-controls">
         <button
-          className={`voice-ctrl-btn ${isPttMode && pttActive ? 'ptt-active' : isMuted ? 'danger' : ''}`}
-          onClick={onToggleMute}
-          title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT — Hold key to talk') : (isMuted ? 'Unmute' : 'Mute')}
+          className={`voice-ctrl-btn ${isPttMode ? (pttActive ? 'ptt-active' : 'danger') : isMuted ? 'danger' : ''}`}
+          onClick={isPttMode ? undefined : onToggleMute}
+          onMouseDown={isPttMode && onPttActivate ? (e) => { e.preventDefault(); onPttActivate(); } : undefined}
+          onMouseUp={isPttMode && onPttDeactivate ? () => onPttDeactivate() : undefined}
+          onMouseLeave={isPttMode && pttActive && onPttDeactivate ? () => onPttDeactivate() : undefined}
+          onTouchStart={isPttMode && onPttActivate ? (e) => { e.preventDefault(); onPttActivate(); } : undefined}
+          onTouchEnd={isPttMode && onPttDeactivate ? () => onPttDeactivate() : undefined}
+          title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT — Hold to talk') : (isMuted ? 'Unmute' : 'Mute')}
         >
           <span className="voice-ctrl-icon">
-            <MicrophoneIcon size={20} muted={isMuted && !pttActive} />
+            <MicrophoneIcon size={20} muted={isPttMode ? !pttActive : isMuted} />
           </span>
           <span>{isPttMode ? (pttActive ? 'Talking' : 'PTT') : (isMuted ? 'Unmute' : 'Mute')}</span>
         </button>
@@ -943,6 +1048,31 @@ const VoiceArea = React.memo(function VoiceArea({
           <span>Leave</span>
         </button>
       </div>
+
+      {/* Soundboard mute context menu */}
+      {contextMenu && (
+        <div
+          className="voice-tile-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="voice-tile-context-item"
+            onClick={() => { toggleSoundboardMute(contextMenu.userId); setContextMenu(null); }}
+          >
+            {soundboardMutedUsers[contextMenu.userId] ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+              </svg>
+            )}
+            {soundboardMutedUsers[contextMenu.userId] ? 'Unmute Sound Clips' : 'Mute Sound Clips'}
+          </button>
+        </div>
+      )}
     </div>
   );
 });

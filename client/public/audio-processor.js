@@ -99,6 +99,9 @@ class NexusAudioProcessor extends AudioWorkletProcessor {
           this._levelerTarget = s.agcTarget;
         }
         if (s.inputVolume !== undefined) this._inputVolume = s.inputVolume;
+      } else if (e.data.type === 'reset-speaking') {
+        // Force re-report on next check cycle by invalidating cached state
+        this._isSpeaking = undefined;
       }
     };
   }
@@ -284,10 +287,17 @@ class NexusAudioProcessor extends AudioWorkletProcessor {
     this._speakingBlockCounter++;
     if (this._speakingBlockCounter >= this._speakingReportInterval) {
       this._speakingBlockCounter = 0;
-      const newSpeaking = gateIsOpen && envelopeDb > (this._gateThreshold - 3);
-      if (newSpeaking !== this._isSpeaking) {
+      // Use sidechain (speech band) directly — more responsive than gateIsOpen alone
+      const newSpeaking = gateIsOpen && sidechainDb > this._gateThreshold;
+      // Normalize level: threshold→0, 0dBFS→1
+      const level = newSpeaking
+        ? Math.min(1, Math.max(0, (envelopeDb - this._gateThreshold) / (-this._gateThreshold)))
+        : 0;
+      // When speaking: always post (for smooth level updates ~24fps)
+      // When not speaking: only post on state change
+      if (newSpeaking || newSpeaking !== this._isSpeaking) {
         this._isSpeaking = newSpeaking;
-        this.port.postMessage({ type: 'speaking', isSpeaking: newSpeaking });
+        this.port.postMessage({ type: 'speaking', isSpeaking: newSpeaking, level });
       }
     }
 

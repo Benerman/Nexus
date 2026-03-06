@@ -184,6 +184,49 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   const speakingIntervalsRef = useRef({}); // socketId -> intervalId
   const speakingSourcesRef = useRef({});  // socketId -> MediaStreamAudioSourceNode
   const activeSpeakersRef = useRef(new Set());
+  const [audioLevels, setAudioLevels] = useState({});
+  const audioLevelsRef = useRef({});
+
+  // --- Voice state persistence helpers (survive page reload / app relaunch) ---
+  const VOICE_STATE_KEY = 'nexus_voice_channel';
+  const VOICE_STATE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+  const getVoiceStorage = useCallback(() => {
+    if (isCapacitorApp()) return null; // No persistence on mobile
+    if (isTauriApp() || isElectronApp()) return localStorage;
+    return sessionStorage; // Web: survives refresh, cleared on tab close
+  }, []);
+
+  const saveVoiceState = useCallback((channelId, serverId, isDMCall) => {
+    const storage = getVoiceStorage();
+    if (!storage) return;
+    storage.setItem(VOICE_STATE_KEY, JSON.stringify({
+      channelId, serverId, isDMCall, timestamp: Date.now()
+    }));
+  }, [getVoiceStorage]);
+
+  const clearVoiceState = useCallback(() => {
+    // Clear from both storages to handle platform switching edge case
+    try { sessionStorage.removeItem(VOICE_STATE_KEY); } catch (_) {}
+    try { localStorage.removeItem(VOICE_STATE_KEY); } catch (_) {}
+  }, []);
+
+  const getSavedVoiceState = useCallback(() => {
+    const storage = getVoiceStorage();
+    if (!storage) return null;
+    try {
+      const raw = storage.getItem(VOICE_STATE_KEY);
+      if (!raw) return null;
+      const state = JSON.parse(raw);
+      if (Date.now() - state.timestamp > VOICE_STATE_EXPIRY_MS) {
+        clearVoiceState();
+        return null;
+      }
+      return state;
+    } catch (_) {
+      return null;
+    }
+  }, [getVoiceStorage, clearVoiceState]);
 
   const startSpeakingDetection = useCallback((stream, socketId) => {
     try {
@@ -218,13 +261,22 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         if (document.hidden) return; // Skip speaking detection when tab is backgrounded
         analyser.getByteFrequencyData(data);
         const avg = data.reduce((a, b) => a + b, 0) / data.length;
-        const isSpeaking = avg > 15;
+        const track = socketId === 'local' ? localStreamRef.current?.getAudioTracks()[0] : null;
+        const trackActive = socketId !== 'local' || (track?.enabled && (!pttModeRef.current || pttActiveRef.current));
+        const isSpeaking = avg > 15 && trackActive;
         const wasSpeaking = activeSpeakersRef.current.has(socketId);
         // Only update state if speaking status changed
         if (isSpeaking !== wasSpeaking) {
           if (isSpeaking) activeSpeakersRef.current.add(socketId);
           else activeSpeakersRef.current.delete(socketId);
           setActiveSpeakers(new Set(activeSpeakersRef.current));
+        }
+        // Update audio level for dynamic speaking indicator
+        const level = isSpeaking ? Math.min(1, Math.max(0, (avg - 15) / 100)) : 0;
+        const prevLevel = audioLevelsRef.current[socketId] || 0;
+        audioLevelsRef.current[socketId] = level;
+        if (Math.abs(prevLevel - level) > 0.05 || isSpeaking !== wasSpeaking) {
+          setAudioLevels(prev => ({ ...prev, [socketId]: level }));
         }
       }, 100);
       speakingIntervalsRef.current[socketId] = intervalId;
@@ -736,12 +788,21 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         // Listen for speaking state from worklet
         workletNode.port.onmessage = (e) => {
           if (e.data.type === 'speaking') {
+            const track = localStreamRef.current?.getAudioTracks()[0];
+            // In PTT mode, gate on pttActiveRef so indicator stops instantly on key release
+            // (track.enabled lags behind due to release delay)
+            const trackActive = track?.enabled && (!pttModeRef.current || pttActiveRef.current);
+            const isSpeaking = e.data.isSpeaking && trackActive;
+            const level = isSpeaking ? (e.data.level || 0) : 0;
             const wasSpeaking = activeSpeakersRef.current.has('local');
-            if (e.data.isSpeaking !== wasSpeaking) {
-              if (e.data.isSpeaking) activeSpeakersRef.current.add('local');
+            if (isSpeaking !== wasSpeaking) {
+              if (isSpeaking) activeSpeakersRef.current.add('local');
               else activeSpeakersRef.current.delete('local');
               setActiveSpeakers(new Set(activeSpeakersRef.current));
             }
+            // Update audio level for dynamic speaking indicator
+            audioLevelsRef.current['local'] = level;
+            setAudioLevels(prev => prev['local'] !== level ? { ...prev, local: level } : prev);
           }
         };
 
@@ -924,7 +985,129 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     return true;
   }, []);
 
-  const joinVoice = useCallback(async (channelId, serverId) => {
+  // Reset worklet speaking state to force re-report on next check cycle.
+  // Fixes desync where worklet's cached _isSpeaking matches the new state
+  // so no message is posted after mute→unmute or PTT toggle.
+  const resetWorkletSpeaking = useCallback(() => {
+    if (audioProcessingRef.current?.workletNode) {
+      audioProcessingRef.current.workletNode.port.postMessage({ type: 'reset-speaking' });
+    }
+  }, []);
+
+  // ── PTT (Push-to-Talk) helpers ──
+
+  const getPttConfig = useCallback(() => ({
+    mode: localStorage.getItem('nexus_voice_input_mode') || 'voice_activity',
+    key: localStorage.getItem('nexus_ptt_key') || 'Space',
+    delay: parseInt(localStorage.getItem('nexus_ptt_delay') || '200', 10),
+  }), []);
+
+  const pttActivate = useCallback(() => {
+    if (isDeafenedRef.current || manualMuteOverrideRef.current || !currentVoiceChannelRef.current) return;
+    if (pttDelayTimerRef.current) { clearTimeout(pttDelayTimerRef.current); pttDelayTimerRef.current = null; }
+    pttActiveRef.current = true;
+    setPttActive(true);
+    const track = localStreamRef.current?.getAudioTracks()[0];
+    if (track) track.enabled = true;
+    setIsMuted(false);
+    resetWorkletSpeaking();
+    if (socket && currentVoiceChannelRef.current) {
+      socket.emit('voice:mute', { isMuted: false, channelId: currentVoiceChannelRef.current });
+    }
+  }, [socket, resetWorkletSpeaking]);
+
+  const pttDeactivate = useCallback(() => {
+    if (!pttActiveRef.current) return;
+    pttActiveRef.current = false;
+    setPttActive(false);
+    resetWorkletSpeaking();
+    // Immediately clear local speaking indicator — the worklet won't send
+    // a new message since its internal state hasn't changed
+    if (activeSpeakersRef.current.has('local')) {
+      activeSpeakersRef.current.delete('local');
+      setActiveSpeakers(new Set(activeSpeakersRef.current));
+    }
+    const { delay } = getPttConfig();
+    if (pttDelayTimerRef.current) clearTimeout(pttDelayTimerRef.current);
+    pttDelayTimerRef.current = setTimeout(() => {
+      pttDelayTimerRef.current = null;
+      const track = localStreamRef.current?.getAudioTracks()[0];
+      if (track) track.enabled = false;
+      setIsMuted(true);
+      if (socket && currentVoiceChannelRef.current) {
+        socket.emit('voice:mute', { isMuted: true, channelId: currentVoiceChannelRef.current });
+      }
+    }, delay);
+  }, [socket, getPttConfig, resetWorkletSpeaking]);
+
+  // Map DOM e.code to Tauri shortcut string
+  const codeToTauriShortcut = useCallback((code) => {
+    if (code.startsWith('Key')) return code.slice(3);
+    if (code.startsWith('Digit')) return code.slice(5);
+    const map = {
+      Space: 'Space', Backquote: '`', Minus: '-', Equal: '=',
+      BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';',
+      Quote: "'", Comma: ',', Period: '.', Slash: '/',
+      Tab: 'Tab', CapsLock: 'CapsLock',
+      ShiftLeft: 'Shift', ShiftRight: 'Shift',
+      ControlLeft: 'Control', ControlRight: 'Control',
+      AltLeft: 'Alt', AltRight: 'Alt',
+      MetaLeft: 'Super', MetaRight: 'Super',
+      ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+      Enter: 'Return', Backspace: 'Backspace', Delete: 'Delete',
+      Escape: 'Escape', Home: 'Home', End: 'End',
+      PageUp: 'PageUp', PageDown: 'PageDown',
+      Insert: 'Insert', NumLock: 'NumLock', ScrollLock: 'ScrollLock',
+    };
+    if (map[code]) return map[code];
+    if (code.startsWith('F') && !isNaN(code.slice(1))) return code; // F1-F24
+    if (code.startsWith('Numpad')) {
+      const key = code.slice(6);
+      const numpadMap = { '0':'Num0','1':'Num1','2':'Num2','3':'Num3','4':'Num4','5':'Num5','6':'Num6','7':'Num7','8':'Num8','9':'Num9',
+        'Add':'NumAdd','Subtract':'NumSubtract','Multiply':'NumMultiply','Divide':'NumDivide','Decimal':'NumDecimal','Enter':'NumEnter' };
+      return numpadMap[key] || code;
+    }
+    return null; // Unsupported key
+  }, []);
+
+  const registerPttGlobalShortcut = useCallback(async () => {
+    if (!isTauriApp()) return;
+    try {
+      const { register, unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      // Unregister previous shortcut
+      if (tauriShortcutRegisteredRef.current) {
+        try { await unregister(tauriShortcutRegisteredRef.current); } catch {}
+        tauriShortcutRegisteredRef.current = null;
+      }
+      const { key } = getPttConfig();
+      const tauriKey = codeToTauriShortcut(key);
+      if (!tauriKey) return;
+      await register(tauriKey, (event) => {
+        if (!pttModeRef.current || !currentVoiceChannelRef.current) return;
+        if (event.state === 'Pressed') {
+          pttActivate();
+        } else if (event.state === 'Released') {
+          pttDeactivate();
+        }
+      });
+      tauriShortcutRegisteredRef.current = tauriKey;
+    } catch (err) {
+      console.warn('[PTT] Failed to register Tauri global shortcut:', err);
+    }
+  }, [getPttConfig, codeToTauriShortcut, pttActivate, pttDeactivate]);
+
+  const unregisterPttGlobalShortcut = useCallback(async () => {
+    if (!isTauriApp() || !tauriShortcutRegisteredRef.current) return;
+    try {
+      const { unregister } = await import('@tauri-apps/plugin-global-shortcut');
+      await unregister(tauriShortcutRegisteredRef.current);
+      tauriShortcutRegisteredRef.current = null;
+    } catch (err) {
+      console.warn('[PTT] Failed to unregister Tauri global shortcut:', err);
+    }
+  }, []);
+
+  const joinVoice = useCallback(async (channelId, serverId, isDMCall = false) => {
     try {
       setMediaError(null);
       setVoiceStatus(VOICE_STATUS.CONNECTING);
@@ -1006,6 +1189,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       setCurrentVoiceChannel(channelId);
       currentVoiceChannelRef.current = channelId;
       socket.emit('voice:join', { channelId });
+      saveVoiceState(channelId, serverId || activeServerId, isDMCall);
 
       // Register Tauri global shortcut for PTT
       if (isPttMode && isTauriApp()) {
@@ -1018,7 +1202,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       const info = getMediaErrorInfo(err, 'microphone');
       setMediaError({ ...info, mediaType: 'microphone', channelId, serverId: serverId || activeServerId });
     }
-  }, [socket, startSpeakingDetection, isMuted, setupAudioProcessing, activeServerId, getPttConfig, registerPttGlobalShortcut]);
+  }, [socket, startSpeakingDetection, isMuted, setupAudioProcessing, activeServerId, getPttConfig, registerPttGlobalShortcut, saveVoiceState]);
 
   const clearMediaError = useCallback(() => setMediaError(null), []);
 
@@ -1060,6 +1244,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     screenStreamIdsRef.current.clear();
     setCurrentVoiceChannel(null);
     currentVoiceChannelRef.current = null;
+    clearVoiceState();
     setActiveSpeakers(new Set());
     activeSpeakersRef.current = new Set();
     setVoiceStatus(VOICE_STATUS.DISCONNECTED);
@@ -1096,7 +1281,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     unregisterPttGlobalShortcut();
 
     if (socket) socket.emit('voice:leave');
-  }, [socket, cleanupAudioProcessing, unregisterPttGlobalShortcut]);
+  }, [socket, cleanupAudioProcessing, unregisterPttGlobalShortcut, clearVoiceState]);
 
   const reconnectVoice = useCallback(async () => {
     const channelId = currentVoiceChannel;
@@ -1224,108 +1409,10 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     }
   }, [socket, currentVoiceChannel, isMuted, cleanupAudioProcessing, setupAudioProcessing, startSpeakingDetection, activeServerId]);
 
-  // ── PTT (Push-to-Talk) helpers ──
-
-  const getPttConfig = useCallback(() => ({
-    mode: localStorage.getItem('nexus_voice_input_mode') || 'voice_activity',
-    key: localStorage.getItem('nexus_ptt_key') || 'Space',
-    delay: parseInt(localStorage.getItem('nexus_ptt_delay') || '200', 10),
-  }), []);
-
-  const pttActivate = useCallback(() => {
-    if (isDeafenedRef.current || manualMuteOverrideRef.current || !currentVoiceChannelRef.current) return;
-    if (pttDelayTimerRef.current) { clearTimeout(pttDelayTimerRef.current); pttDelayTimerRef.current = null; }
-    pttActiveRef.current = true;
-    setPttActive(true);
-    const track = localStreamRef.current?.getAudioTracks()[0];
-    if (track) track.enabled = true;
-    setIsMuted(false);
-    if (socket && currentVoiceChannelRef.current) {
-      socket.emit('voice:mute', { isMuted: false, channelId: currentVoiceChannelRef.current });
-    }
-  }, [socket]);
-
-  const pttDeactivate = useCallback(() => {
-    if (!pttActiveRef.current) return;
-    pttActiveRef.current = false;
-    setPttActive(false);
-    const { delay } = getPttConfig();
-    if (pttDelayTimerRef.current) clearTimeout(pttDelayTimerRef.current);
-    pttDelayTimerRef.current = setTimeout(() => {
-      pttDelayTimerRef.current = null;
-      const track = localStreamRef.current?.getAudioTracks()[0];
-      if (track) track.enabled = false;
-      setIsMuted(true);
-      if (socket && currentVoiceChannelRef.current) {
-        socket.emit('voice:mute', { isMuted: true, channelId: currentVoiceChannelRef.current });
-      }
-    }, delay);
-  }, [socket, getPttConfig]);
-
-  // Map DOM e.code to Tauri shortcut string
-  const codeToTauriShortcut = useCallback((code) => {
-    if (code.startsWith('Key')) return code.slice(3);
-    if (code.startsWith('Digit')) return code.slice(5);
-    const map = {
-      Space: 'Space', Backquote: '`', Minus: '-', Equal: '=',
-      BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';',
-      Quote: "'", Comma: ',', Period: '.', Slash: '/',
-      Tab: 'Tab', CapsLock: 'CapsLock',
-      ShiftLeft: 'Shift', ShiftRight: 'Shift',
-      ControlLeft: 'Control', ControlRight: 'Control',
-      AltLeft: 'Alt', AltRight: 'Alt',
-      MetaLeft: 'Super', MetaRight: 'Super',
-      ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
-      Enter: 'Return', Backspace: 'Backspace', Delete: 'Delete',
-      Escape: 'Escape', Home: 'Home', End: 'End',
-      PageUp: 'PageUp', PageDown: 'PageDown',
-      Insert: 'Insert', NumLock: 'NumLock', ScrollLock: 'ScrollLock',
-    };
-    if (map[code]) return map[code];
-    if (code.startsWith('F') && !isNaN(code.slice(1))) return code; // F1-F24
-    if (code.startsWith('Numpad')) {
-      const key = code.slice(6);
-      const numpadMap = { '0':'Num0','1':'Num1','2':'Num2','3':'Num3','4':'Num4','5':'Num5','6':'Num6','7':'Num7','8':'Num8','9':'Num9',
-        'Add':'NumAdd','Subtract':'NumSubtract','Multiply':'NumMultiply','Divide':'NumDivide','Decimal':'NumDecimal','Enter':'NumEnter' };
-      return numpadMap[key] || code;
-    }
-    return null; // Unsupported key
-  }, []);
-
-  const registerPttGlobalShortcut = useCallback(async () => {
-    if (!isTauriApp()) return;
-    try {
-      const { register, unregister } = await import('@tauri-apps/plugin-global-shortcut');
-      // Unregister previous shortcut
-      if (tauriShortcutRegisteredRef.current) {
-        try { await unregister(tauriShortcutRegisteredRef.current); } catch {}
-        tauriShortcutRegisteredRef.current = null;
-      }
-      const { key } = getPttConfig();
-      const tauriKey = codeToTauriShortcut(key);
-      if (!tauriKey) return;
-      await register(tauriKey, (event) => {
-        if (!pttModeRef.current || !currentVoiceChannelRef.current) return;
-        if (event.state === 'Pressed') {
-          pttActivate();
-        } else if (event.state === 'Released') {
-          pttDeactivate();
-        }
-      });
-      tauriShortcutRegisteredRef.current = tauriKey;
-    } catch (err) {
-      console.warn('[PTT] Failed to register Tauri global shortcut:', err);
-    }
-  }, [getPttConfig, codeToTauriShortcut, pttActivate, pttDeactivate]);
-
-  const unregisterPttGlobalShortcut = useCallback(async () => {
-    if (!isTauriApp() || !tauriShortcutRegisteredRef.current) return;
-    try {
-      const { unregister } = await import('@tauri-apps/plugin-global-shortcut');
-      await unregister(tauriShortcutRegisteredRef.current);
-      tauriShortcutRegisteredRef.current = null;
-    } catch (err) {
-      console.warn('[PTT] Failed to unregister Tauri global shortcut:', err);
+  const clearLocalSpeaking = useCallback(() => {
+    if (activeSpeakersRef.current.has('local')) {
+      activeSpeakersRef.current.delete('local');
+      setActiveSpeakers(new Set(activeSpeakersRef.current));
     }
   }, []);
 
@@ -1343,6 +1430,8 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         pttActiveRef.current = false;
         setPttActive(false);
         setIsMuted(true);
+        clearLocalSpeaking();
+        resetWorkletSpeaking();
         if (pttDelayTimerRef.current) { clearTimeout(pttDelayTimerRef.current); pttDelayTimerRef.current = null; }
         if (socket && currentVoiceChannel) {
           socket.emit('voice:mute', { isMuted: true, channelId: currentVoiceChannel });
@@ -1352,6 +1441,8 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         const track = localStreamRef.current?.getAudioTracks()[0];
         if (track) track.enabled = false;
         setIsMuted(true);
+        clearLocalSpeaking();
+        resetWorkletSpeaking();
         if (socket && currentVoiceChannel) {
           socket.emit('voice:mute', { isMuted: true, channelId: currentVoiceChannel });
         }
@@ -1364,13 +1455,15 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       track.enabled = !track.enabled;
       const newMutedState = !track.enabled;
       setIsMuted(newMutedState);
+      if (newMutedState) clearLocalSpeaking();
+      resetWorkletSpeaking();
 
       // Broadcast mute state to other users in voice channel
       if (socket && currentVoiceChannel) {
         socket.emit('voice:mute', { isMuted: newMutedState, channelId: currentVoiceChannel });
       }
     }
-  }, [isDeafened, socket, currentVoiceChannel]);
+  }, [isDeafened, socket, currentVoiceChannel, clearLocalSpeaking, resetWorkletSpeaking]);
 
   const toggleDeafen = useCallback(() => {
     const willBeDeafened = !isDeafened;
@@ -1384,6 +1477,8 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       }
       setIsMuted(true);
       setIsDeafened(true);
+      clearLocalSpeaking();
+      resetWorkletSpeaking();
 
       // Broadcast deafen and mute states
       if (socket && currentVoiceChannel) {
@@ -1398,6 +1493,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       }
       setIsMuted(shouldBeMuted);
       setIsDeafened(false);
+      resetWorkletSpeaking();
 
       // Broadcast undeafen and restored mute state
       if (socket && currentVoiceChannel) {
@@ -1405,7 +1501,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         socket.emit('voice:mute', { isMuted: shouldBeMuted, channelId: currentVoiceChannel });
       }
     }
-  }, [isDeafened, isMuted, socket, currentVoiceChannel]);
+  }, [isDeafened, isMuted, socket, currentVoiceChannel, clearLocalSpeaking, resetWorkletSpeaking]);
 
   const startScreenShare = useCallback(async (channelId) => {
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -1644,14 +1740,16 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   }, [userVolumes, localMutedUsers, isDeafened, applyVolume]);
 
   // ── PTT DOM keydown/keyup listeners (web + Electron, not Tauri) ──
+  // Always attached; guards check pttModeRef inside handlers so mode
+  // changes mid-session take effect without re-mounting the effect.
   useEffect(() => {
-    if (!pttModeRef.current || isTauriApp()) return;
-    const { key } = getPttConfig();
+    if (isTauriApp()) return;
 
     const handleKeyDown = (e) => {
+      if (!pttModeRef.current || !currentVoiceChannelRef.current) return;
+      const { key } = getPttConfig();
       if (e.repeat) return;
       if (e.code !== key) return;
-      // Skip if typing in an input field
       const tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
       e.preventDefault();
@@ -1659,12 +1757,13 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     };
 
     const handleKeyUp = (e) => {
+      if (!pttModeRef.current) return;
+      const { key } = getPttConfig();
       if (e.code !== key) return;
       pttDeactivate();
     };
 
     const handleBlur = () => {
-      // Auto-deactivate on window blur since keyup won't fire
       if (pttActiveRef.current) pttDeactivate();
     };
 
@@ -1679,68 +1778,100 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   }, [pttActivate, pttDeactivate, getPttConfig]);
 
   // ── Listen for PTT settings changes (mode switch while in voice) ──
+  // Handles both cross-tab (storage event) and same-tab (custom event) changes
   useEffect(() => {
+    const syncPttMode = () => {
+      const newMode = localStorage.getItem('nexus_voice_input_mode') || 'voice_activity';
+      const isPtt = newMode === 'push_to_talk';
+      const wasPtt = pttModeRef.current;
+      pttModeRef.current = isPtt;
+
+      if (!currentVoiceChannelRef.current || isPtt === wasPtt) return;
+
+      if (isPtt) {
+        // Switching to PTT: mute, register global shortcut
+        const track = localStreamRef.current?.getAudioTracks()[0];
+        if (track) track.enabled = false;
+        setIsMuted(true);
+        manualMuteOverrideRef.current = false;
+        pttActiveRef.current = false;
+        setPttActive(false);
+        // Clear speaking indicator immediately since we're muting
+        if (activeSpeakersRef.current.has('local')) {
+          activeSpeakersRef.current.delete('local');
+          setActiveSpeakers(new Set(activeSpeakersRef.current));
+        }
+        // Reset worklet so it re-reports on next PTT activate
+        if (audioProcessingRef.current?.workletNode) {
+          audioProcessingRef.current.workletNode.port.postMessage({ type: 'reset-speaking' });
+        }
+        if (socket) socket.emit('voice:mute', { isMuted: true, channelId: currentVoiceChannelRef.current });
+        if (isTauriApp()) registerPttGlobalShortcut();
+      } else {
+        // Switching to VA: unregister global shortcut, unmute, clear override
+        unregisterPttGlobalShortcut();
+        manualMuteOverrideRef.current = false;
+        pttActiveRef.current = false;
+        setPttActive(false);
+        if (pttDelayTimerRef.current) { clearTimeout(pttDelayTimerRef.current); pttDelayTimerRef.current = null; }
+        // Unmute when switching back to VA so user isn't stuck muted
+        const track = localStreamRef.current?.getAudioTracks()[0];
+        if (track) track.enabled = true;
+        setIsMuted(false);
+        // Reset worklet so it re-reports speaking state for VA mode
+        if (audioProcessingRef.current?.workletNode) {
+          audioProcessingRef.current.workletNode.port.postMessage({ type: 'reset-speaking' });
+        }
+        if (socket) socket.emit('voice:mute', { isMuted: false, channelId: currentVoiceChannelRef.current });
+      }
+    };
+
     const handleStorage = (e) => {
       if (e.key === 'nexus_voice_input_mode') {
-        const newMode = e.newValue || 'voice_activity';
-        const isPtt = newMode === 'push_to_talk';
-        pttModeRef.current = isPtt;
-
-        if (!currentVoiceChannelRef.current) return;
-
-        if (isPtt) {
-          // Switching to PTT: mute, register global shortcut
-          const track = localStreamRef.current?.getAudioTracks()[0];
-          if (track) track.enabled = false;
-          setIsMuted(true);
-          manualMuteOverrideRef.current = false;
-          pttActiveRef.current = false;
-          setPttActive(false);
-          if (socket) socket.emit('voice:mute', { isMuted: true, channelId: currentVoiceChannelRef.current });
-          if (isTauriApp()) registerPttGlobalShortcut();
-        } else {
-          // Switching to VA: unregister global shortcut, clear override
-          unregisterPttGlobalShortcut();
-          manualMuteOverrideRef.current = false;
-          pttActiveRef.current = false;
-          setPttActive(false);
-          if (pttDelayTimerRef.current) { clearTimeout(pttDelayTimerRef.current); pttDelayTimerRef.current = null; }
-        }
+        syncPttMode();
       } else if (e.key === 'nexus_ptt_key' && pttModeRef.current && isTauriApp() && currentVoiceChannelRef.current) {
-        // PTT key changed — re-register Tauri shortcut
         registerPttGlobalShortcut();
       }
     };
+
+    const handlePttSettingsChange = () => syncPttMode();
+
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('nexus-ptt-settings-changed', handlePttSettingsChange);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('nexus-ptt-settings-changed', handlePttSettingsChange);
+    };
   }, [socket, registerPttGlobalShortcut, unregisterPttGlobalShortcut]);
 
   // Memoize the return object to prevent creating new object on every render
   return useMemo(() => ({
     localStream, screenStream, remoteStreams, remoteScreenStreams,
     isMuted, isDeafened, isSharingScreen, isWatchingScreen, isScreenAudioMuted,
-    currentVoiceChannel, activeSpeakers, pttActive,
+    currentVoiceChannel, activeSpeakers, audioLevels, pttActive,
     voiceStatus, voiceQuality, voiceStatusMessage,
     mediaError, clearMediaError, retryJoinVoice,
     remoteUserStates, userVolumes, localMutedUsers,
     initExistingPeers, joinVoice, leaveVoice, reconnectVoice,
-    toggleMute, toggleDeafen,
+    toggleMute, toggleDeafen, pttActivate, pttDeactivate,
     startScreenShare, stopScreenShare,
     watchScreen, unwatchScreen, toggleScreenAudioMute,
     setUserVolume, toggleUserMute, registerAudioElement,
-    updateAudioProcessing
+    updateAudioProcessing,
+    getSavedVoiceState, clearVoiceState
   }), [
     localStream, screenStream, remoteStreams, remoteScreenStreams,
     isMuted, isDeafened, isSharingScreen, isWatchingScreen, isScreenAudioMuted,
-    currentVoiceChannel, activeSpeakers, pttActive,
+    currentVoiceChannel, activeSpeakers, audioLevels, pttActive,
     voiceStatus, voiceQuality, voiceStatusMessage,
     mediaError, clearMediaError, retryJoinVoice,
     remoteUserStates, userVolumes, localMutedUsers,
     initExistingPeers, joinVoice, leaveVoice, reconnectVoice,
-    toggleMute, toggleDeafen,
+    toggleMute, toggleDeafen, pttActivate, pttDeactivate,
     startScreenShare, stopScreenShare,
     watchScreen, unwatchScreen, toggleScreenAudioMute,
     setUserVolume, toggleUserMute, registerAudioElement,
-    updateAudioProcessing
+    updateAudioProcessing,
+    getSavedVoiceState, clearVoiceState
   ]);
 }
