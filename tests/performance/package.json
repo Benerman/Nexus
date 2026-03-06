@@ -1,0 +1,9 @@
+{
+  "name": "nexus-performance-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Performance and stress tests for Nexus server",
+  "dependencies": {
+    "socket.io-client": "^4.6.1"
+  }
+}
