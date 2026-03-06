@@ -17,10 +17,16 @@ jobs:
       COMPOSE_CMD: ""
 
     steps:
+      - name: Clean up root-owned artifacts
+        run: sudo rm -rf logs/ || true
+
       - name: Checkout latest code
         uses: actions/checkout@v4
         with:
           clean: true
+
+      - name: Ensure log directory exists
+        run: sudo mkdir -p /opt/nexus/logs && sudo chown "$(id -u):$(id -g)" /opt/nexus/logs
 
       - name: Symlink .env file
         run: |

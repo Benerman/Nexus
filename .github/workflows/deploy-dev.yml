@@ -25,11 +25,17 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Clean up root-owned artifacts
+        run: sudo rm -rf logs/ || true
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
           clean: true
+
+      - name: Ensure log directory exists
+        run: sudo mkdir -p /opt/nexus-dev/logs && sudo chown "$(id -u):$(id -g)" /opt/nexus-dev/logs
 
       - name: Symlink dev .env file
         run: |

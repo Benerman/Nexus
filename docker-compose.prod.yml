@@ -25,7 +25,7 @@ services:
   server:
     container_name: nexus-server
     volumes:
-      - ./logs/prod:/app/data/logs
+      - /opt/nexus/logs:/app/data/logs
     ports:
       - "3001:3001"
     environment:
