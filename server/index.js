@@ -12,6 +12,7 @@ const { getDefaultSounds } = require('./default-sounds');
 
 // ─── Shared state & helpers ─────────────────────────────────────────────────
 const { state, DEFAULT_SERVER_ID, removeUser, indexServerChannels, unindexServerChannels } = require('./state');
+const metrics = require('./metrics');
 const {
   makeServer, serializeServer, getOnlineUsers, convertDbMessagesToRuntime,
   leaveVoice
@@ -104,6 +105,7 @@ const rateLimitMiddleware = async (req, res, next) => {
   }
 };
 app.use('/api', rateLimitMiddleware);
+app.use('/api', (req, res, next) => { metrics.recordApiRequest(); next(); });
 
 const requireApiAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -136,6 +138,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', name: 'Nexus' });
 });
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
+// ─── Metrics endpoint ──────────────────────────────────────────────────────
+app.get('/api/metrics', requireApiAuth, async (req, res) => {
+  const account = await db.getAccountById(req.accountId);
+  if (!account || account.username !== config.admin.platformAdminUsername) {
+    return res.status(403).json({ error: 'Platform admin access required' });
+  }
+  res.json(metrics.getMetrics());
+});
 
 // ─── Client log ingestion ──────────────────────────────────────────────────
 app.post('/api/client-logs', requireApiAuth, (req, res) => {
@@ -707,6 +718,7 @@ app.get('/api/og', requireApiAuth, async (req, res) => {
 
 // ─── Global Error Handler ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  metrics.recordError(err.name || 'UnknownError');
   console.error('[Error]', err);
   if (err.name === 'ValidationError') return res.status(400).json({ error: 'Invalid request' });
   if (err.name === 'UnauthorizedError') return res.status(401).json({ error: 'Unauthorized' });
@@ -715,7 +727,10 @@ app.use((err, req, res, next) => {
 
 // ─── Socket.IO connection — wire handler modules ────────────────────────────
 io.on('connection', (socket) => {
+  metrics.recordConnection();
   console.log(`[Socket] Connected: ${socket.id}`);
+
+  socket.on('message:send', () => { metrics.recordMessage(); });
 
   authHandlers(io, socket);
   serverHandlers(io, socket);
@@ -733,6 +748,7 @@ io.on('connection', (socket) => {
   automodHandlers(io, socket);
 
   socket.on('disconnect', () => {
+    metrics.recordDisconnection();
     const user = state.users[socket.id];
     leaveVoice(socket, io);
     removeUser(socket.id);

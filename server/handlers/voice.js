@@ -1,6 +1,6 @@
 const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline, channelToServer } = require('../state');
-const { getUserPerms, buildIceServers, leaveVoice, soundboardLimiter, serializeServer } = require('../helpers');
+const { getUserPerms, getUserHighestRolePosition, buildIceServers, leaveVoice, soundboardLimiter, serializeServer } = require('../helpers');
 
 module.exports = function(io, socket) {
 
@@ -339,6 +339,229 @@ module.exports = function(io, socket) {
     user.isDeafened = isDeafened;
     console.log(`[Voice] ${user.username} ${isDeafened ? 'deafened' : 'undeafened'}`);
     socket.to(`voice:${channelId}`).emit('peer:deafen:changed', { socketId: socket.id, isDeafened });
+  });
+
+  // ─── Voice Moderation ──────────────────────────────────────────────────────
+
+  socket.on('voice:kick', ({ serverId, userId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return;
+
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.moveMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Move Members permission' });
+    }
+    if (userId === srv.ownerId) {
+      return socket.emit('error', { message: 'Cannot kick the server owner from voice' });
+    }
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
+    }
+
+    const targetSocketId = getSocketIdForUser(userId);
+    if (!targetSocketId) return;
+
+    // Find and remove from voice channel
+    for (const [chId, chData] of Object.entries(state.voiceChannels)) {
+      const srvId = channelToServer.get(chId);
+      if (srvId !== serverId) continue;
+      const idx = chData.users.indexOf(targetSocketId);
+      if (idx !== -1) {
+        chData.users.splice(idx, 1);
+        const ssIdx = chData.screenSharers ? chData.screenSharers.indexOf(targetSocketId) : -1;
+        if (ssIdx !== -1) {
+          chData.screenSharers.splice(ssIdx, 1);
+          io.to(`voice:${chId}`).emit('screen:stopped', { socketId: targetSocketId });
+        }
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) {
+          targetSocket.leave(`voice:${chId}`);
+          targetSocket.emit('voice:kicked', { channelId: chId, kickedBy: user.username });
+        }
+        io.to(`voice:${chId}`).emit('peer:left', { socketId: targetSocketId });
+        io.emit('voice:channel:update', { channelId: chId, channel: { ...chData, users: chData.users.map(s => state.users[s]).filter(Boolean) } });
+        console.log(`[Moderation] ${user.username} kicked ${userId} from voice channel ${chId}`);
+        db.createAuditLog(serverId, 'voice_kick', user.id, userId, { channelId: chId }).catch(() => {});
+        break;
+      }
+    }
+  });
+
+  socket.on('voice:force-mute', ({ serverId, userId, muted }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return;
+
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.muteMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Mute Members permission' });
+    }
+    if (userId === srv.ownerId) {
+      return socket.emit('error', { message: 'Cannot server-mute the server owner' });
+    }
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
+    }
+
+    const targetSocketId = getSocketIdForUser(userId);
+    if (!targetSocketId) return;
+    const targetUser = state.users[targetSocketId];
+    if (!targetUser) return;
+
+    targetUser.isServerMuted = !!muted;
+    const targetSocket = io.sockets.sockets.get(targetSocketId);
+    if (targetSocket) {
+      targetSocket.emit('voice:server-muted', { muted: !!muted, mutedBy: user.username });
+    }
+
+    // Notify voice channel peers
+    for (const [chId, chData] of Object.entries(state.voiceChannels)) {
+      if (channelToServer.get(chId) !== serverId) continue;
+      if (chData.users.includes(targetSocketId)) {
+        io.to(`voice:${chId}`).emit('peer:server-mute:changed', { socketId: targetSocketId, isMuted: !!muted });
+        break;
+      }
+    }
+
+    console.log(`[Moderation] ${user.username} ${muted ? 'server-muted' : 'server-unmuted'} ${userId}`);
+    db.createAuditLog(serverId, 'voice_server_mute', user.id, userId, { muted: !!muted }).catch(() => {});
+  });
+
+  socket.on('voice:force-deafen', ({ serverId, userId, deafened }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return;
+
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.deafenMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Deafen Members permission' });
+    }
+    if (userId === srv.ownerId) {
+      return socket.emit('error', { message: 'Cannot server-deafen the server owner' });
+    }
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
+    }
+
+    const targetSocketId = getSocketIdForUser(userId);
+    if (!targetSocketId) return;
+    const targetUser = state.users[targetSocketId];
+    if (!targetUser) return;
+
+    targetUser.isServerDeafened = !!deafened;
+    const targetSocket = io.sockets.sockets.get(targetSocketId);
+    if (targetSocket) {
+      targetSocket.emit('voice:server-deafened', { deafened: !!deafened, deafenedBy: user.username });
+    }
+
+    // Notify voice channel peers
+    for (const [chId, chData] of Object.entries(state.voiceChannels)) {
+      if (channelToServer.get(chId) !== serverId) continue;
+      if (chData.users.includes(targetSocketId)) {
+        io.to(`voice:${chId}`).emit('peer:server-deafen:changed', { socketId: targetSocketId, isDeafened: !!deafened });
+        break;
+      }
+    }
+
+    console.log(`[Moderation] ${user.username} ${deafened ? 'server-deafened' : 'server-undeafened'} ${userId}`);
+    db.createAuditLog(serverId, 'voice_server_deafen', user.id, userId, { deafened: !!deafened }).catch(() => {});
+  });
+
+  socket.on('voice:move', ({ serverId, userId, targetChannelId }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return;
+
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.moveMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Move Members permission' });
+    }
+    if (userId === srv.ownerId && srv.ownerId !== user.id) {
+      return socket.emit('error', { message: 'Cannot move the server owner' });
+    }
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
+    }
+
+    // Validate target channel exists in server
+    const targetCh = srv.channels.voice.find(c => c.id === targetChannelId);
+    if (!targetCh) {
+      return socket.emit('error', { message: 'Target voice channel not found' });
+    }
+
+    const targetSocketId = getSocketIdForUser(userId);
+    if (!targetSocketId) return;
+
+    // Remove from current voice channel
+    let oldChannelId = null;
+    for (const [chId, chData] of Object.entries(state.voiceChannels)) {
+      if (channelToServer.get(chId) !== serverId) continue;
+      const idx = chData.users.indexOf(targetSocketId);
+      if (idx !== -1) {
+        oldChannelId = chId;
+        chData.users.splice(idx, 1);
+        const ssIdx = chData.screenSharers ? chData.screenSharers.indexOf(targetSocketId) : -1;
+        if (ssIdx !== -1) {
+          chData.screenSharers.splice(ssIdx, 1);
+          io.to(`voice:${chId}`).emit('screen:stopped', { socketId: targetSocketId });
+        }
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) targetSocket.leave(`voice:${chId}`);
+        io.to(`voice:${chId}`).emit('peer:left', { socketId: targetSocketId });
+        io.emit('voice:channel:update', { channelId: chId, channel: { ...chData, users: chData.users.map(s => state.users[s]).filter(Boolean) } });
+        break;
+      }
+    }
+
+    if (!oldChannelId) return; // User wasn't in a voice channel
+
+    // Add to target voice channel
+    const newCh = state.voiceChannels[targetChannelId];
+    if (!newCh) return;
+    if (newCh.endTimer) { clearTimeout(newCh.endTimer); delete newCh.endTimer; }
+
+    const existingPeers = [...newCh.users];
+    newCh.users.push(targetSocketId);
+    const targetSocket = io.sockets.sockets.get(targetSocketId);
+    if (targetSocket) {
+      targetSocket.join(`voice:${targetChannelId}`);
+      targetSocket.emit('voice:moved', {
+        oldChannelId,
+        newChannelId: targetChannelId,
+        movedBy: user.username,
+        peers: existingPeers.map(s => {
+          const u = state.users[s];
+          return u ? { socketId: s, user: u, isMuted: u.isMuted || false, isDeafened: u.isDeafened || false } : null;
+        }).filter(Boolean)
+      });
+    }
+    const movedUser = state.users[targetSocketId];
+    io.to(`voice:${targetChannelId}`).emit('peer:joined', { socketId: targetSocketId, user: movedUser });
+    io.emit('voice:channel:update', { channelId: targetChannelId, channel: { ...newCh, users: newCh.users.map(s => state.users[s]).filter(Boolean) } });
+
+    console.log(`[Moderation] ${user.username} moved ${userId} from ${oldChannelId} to ${targetChannelId}`);
+    db.createAuditLog(serverId, 'voice_move', user.id, userId, { from: oldChannelId, to: targetChannelId }).catch(() => {});
   });
 
   // ─── WebRTC signaling ───────────────────────────────────────────────────────

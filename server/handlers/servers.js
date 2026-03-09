@@ -336,10 +336,10 @@ module.exports = function(io, socket) {
     const srv = state.servers[serverId];
     if (!srv) return socket.emit('error', { message: 'Server not found' });
 
-    // Check if user has admin permissions
+    // Check if user has kick permission
     const perms = getUserPerms(user.id, serverId);
-    if (!perms.admin) {
-      return socket.emit('error', { message: 'Admin permission required to kick users' });
+    if (!perms.kickMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Kick Members permission' });
     }
 
     // Can't kick yourself
@@ -350,6 +350,15 @@ module.exports = function(io, socket) {
     // Can't kick the owner
     if (userId === srv.ownerId) {
       return socket.emit('error', { message: 'Cannot kick the server owner' });
+    }
+
+    // Role hierarchy check
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
     }
 
     try {
@@ -391,10 +400,10 @@ module.exports = function(io, socket) {
     const srv = state.servers[serverId];
     if (!srv) return socket.emit('error', { message: 'Server not found' });
 
-    // Check if user has admin permissions
+    // Check if user has ban permission
     const perms = getUserPerms(user.id, serverId);
-    if (!perms.admin) {
-      return socket.emit('error', { message: 'Admin permission required to ban users' });
+    if (!perms.banMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Ban Members permission' });
     }
 
     // Can't ban yourself
@@ -405,6 +414,15 @@ module.exports = function(io, socket) {
     // Can't ban the owner
     if (userId === srv.ownerId) {
       return socket.emit('error', { message: 'Cannot ban the server owner' });
+    }
+
+    // Role hierarchy check
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
     }
 
     try {
@@ -448,10 +466,10 @@ module.exports = function(io, socket) {
     const srv = state.servers[serverId];
     if (!srv) return socket.emit('error', { message: 'Server not found' });
 
-    // Check if user has admin permissions
+    // Check if user has timeout permission
     const perms = getUserPerms(user.id, serverId);
-    if (!perms.admin) {
-      return socket.emit('error', { message: 'Admin permission required to timeout users' });
+    if (!perms.moderateMembers && !perms.admin) {
+      return socket.emit('error', { message: 'You need the Timeout Members permission' });
     }
 
     // Can't timeout yourself
@@ -462,6 +480,15 @@ module.exports = function(io, socket) {
     // Can't timeout the owner
     if (userId === srv.ownerId) {
       return socket.emit('error', { message: 'Cannot timeout the server owner' });
+    }
+
+    // Role hierarchy check
+    if (srv.ownerId !== user.id) {
+      const actorPos = getUserHighestRolePosition(user.id, serverId);
+      const targetPos = getUserHighestRolePosition(userId, serverId);
+      if (targetPos >= actorPos) {
+        return socket.emit('error', { message: 'Cannot moderate a member with equal or higher role' });
+      }
     }
 
     // Validate duration

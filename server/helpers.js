@@ -63,7 +63,9 @@ function makeServer(id, name, icon, ownerId, customIcon=null) {
         viewChannel:true, sendMessages:true, attachFiles:true, joinVoice:true,
         readHistory:true, addReactions:true, mentionEveryone:true, manageMessages:true,
         manageChannels:true, manageRoles:true, manageServer:true, admin:true,
-        createInvite:true, sendTargetedSounds:true, manageEmojis:true
+        createInvite:true, sendTargetedSounds:true, manageEmojis:true,
+        kickMembers:true, banMembers:true, muteMembers:true,
+        deafenMembers:true, moveMembers:true, moderateMembers:true
       }}
     },
     members: {},

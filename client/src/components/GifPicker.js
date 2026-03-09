@@ -110,12 +110,13 @@ export default function GifPicker({ onSelect, onClose }) {
   }, [onSelect, onClose]);
 
   return (
-    <div className="gif-picker" ref={pickerRef}>
+    <div className="gif-picker" ref={pickerRef} role="dialog" aria-label="GIF picker">
       <div className="gif-picker-header">
         <input
           className="gif-picker-search"
           type="text"
           placeholder="Search GIFs..."
+          aria-label="Search GIFs"
           value={query}
           onChange={e => setQuery(e.target.value)}
           autoFocus

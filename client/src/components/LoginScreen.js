@@ -197,7 +197,7 @@ export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) 
 
   return (
     <div className="login-screen">
-      <div className="login-card">
+      <div className="login-card" role="main" aria-label="Authentication">
         <div className="login-logo">
           <div className="login-logo-icon">
             <HexagonIcon size={48} color="#ed4245" />
@@ -213,28 +213,28 @@ export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) 
           </div>
         )}
 
-        {error && <div className="login-error">{error}</div>}
+        {error && <div className="login-error" role="alert">{error}</div>}
 
         {mode === 'recover' ? (
           <form onSubmit={handleRecover} className="login-form">
             <div className="login-field">
-              <label className="login-label">USERNAME</label>
-              <input type="text" className="login-input" placeholder="Enter your username"
+              <label className="login-label" htmlFor="recover-username">USERNAME</label>
+              <input id="recover-username" type="text" className="login-input" placeholder="Enter your username"
                 value={username} onChange={e => setUsername(e.target.value)} maxLength={32} disabled={loading} />
             </div>
             <div className="login-field">
-              <label className="login-label">RECOVERY CODE</label>
-              <input type="text" className="login-input" placeholder="Enter recovery code"
+              <label className="login-label" htmlFor="recover-code">RECOVERY CODE</label>
+              <input id="recover-code" type="text" className="login-input" placeholder="Enter recovery code"
                 value={recoveryCode} onChange={e => setRecoveryCode(e.target.value)} disabled={loading} />
             </div>
             <div className="login-field">
-              <label className="login-label">NEW PASSWORD</label>
-              <input type="password" className="login-input" placeholder="Enter new password"
+              <label className="login-label" htmlFor="recover-password">NEW PASSWORD</label>
+              <input id="recover-password" type="password" className="login-input" placeholder="Enter new password"
                 value={password} onChange={e => setPassword(e.target.value)} disabled={loading} />
             </div>
             <div className="login-field">
-              <label className="login-label">CONFIRM NEW PASSWORD</label>
-              <input type="password" className="login-input" placeholder="Confirm new password"
+              <label className="login-label" htmlFor="recover-confirm-password">CONFIRM NEW PASSWORD</label>
+              <input id="recover-confirm-password" type="password" className="login-input" placeholder="Confirm new password"
                 value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} disabled={loading} />
             </div>
             <button type="submit" className="login-btn"
@@ -245,13 +245,13 @@ export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) 
         ) : (
           <form onSubmit={handleSubmit} className="login-form">
             <div className="login-field">
-              <label className="login-label">USERNAME</label>
-              <input type="text" className="login-input" placeholder="Enter your username"
+              <label className="login-label" htmlFor="login-username">USERNAME</label>
+              <input id="login-username" type="text" className="login-input" placeholder="Enter your username"
                 value={username} onChange={e => setUsername(e.target.value)} maxLength={32} disabled={loading} />
             </div>
             <div className="login-field">
-              <label className="login-label">PASSWORD</label>
-              <input type="password" className="login-input" placeholder="Enter password"
+              <label className="login-label" htmlFor="login-password">PASSWORD</label>
+              <input id="login-password" type="password" className="login-input" placeholder="Enter password"
                 value={password} onChange={e => setPassword(e.target.value)} disabled={loading} />
               {mode === 'login' && (
                 <button type="button" className="login-forgot" onClick={() => { setMode('recover'); setError(''); setPassword(''); setConfirmPassword(''); }}>
@@ -261,8 +261,8 @@ export default function LoginScreen({ onLogin, pendingInvite, onChangeServer }) 
             </div>
             {mode === 'register' && (
               <div className="login-field">
-                <label className="login-label">CONFIRM PASSWORD</label>
-                <input type="password" className="login-input" placeholder="Confirm password"
+                <label className="login-label" htmlFor="login-confirm-password">CONFIRM PASSWORD</label>
+                <input id="login-confirm-password" type="password" className="login-input" placeholder="Confirm password"
                   value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} disabled={loading} />
               </div>
             )}

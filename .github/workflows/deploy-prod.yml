@@ -116,6 +116,21 @@ jobs:
             sleep 3
           done
 
+      - name: Verify metrics endpoint
+        run: |
+          # Metrics endpoint requires auth, so just verify it returns a response (401/403 = endpoint exists)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/metrics)
+          if [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ] || [ "$STATUS" = "200" ]; then
+            echo "Metrics endpoint is active (HTTP $STATUS)."
+          else
+            echo "WARNING: Metrics endpoint returned unexpected status $STATUS"
+          fi
+
+      - name: Log deployment event
+        run: |
+          DEPLOY_LOG="/opt/nexus/deploy.log"
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] PROD deployed commit=${{ github.sha }} branch=${{ github.ref_name }}" >> "$DEPLOY_LOG" || true
+
       - name: Clean up old Docker images
         run: |
           docker image prune -f || true

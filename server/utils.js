@@ -36,7 +36,9 @@ function makeToken() {
 const DEFAULT_PERMS = {
   viewChannel: true, sendMessages: true, attachFiles: true, joinVoice: true,
   readHistory: true, addReactions: true, mentionEveryone: false, manageMessages: false,
-  createInvite: true, sendTargetedSounds: false, manageEmojis: false
+  createInvite: true, sendTargetedSounds: false, manageEmojis: false,
+  kickMembers: false, banMembers: false, muteMembers: false,
+  deafenMembers: false, moveMembers: false, moderateMembers: false
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
