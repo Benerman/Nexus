@@ -636,6 +636,7 @@
   padding: 6px 6px 6px 16px;
   border: 1px solid transparent;
   transition: border-color var(--transition-speed) var(--transition-fn);
+  position: relative;
 }
 
 .chat-input-box:focus-within {
@@ -880,7 +881,7 @@
 
 /* ── Lightbox ─────────────────────────────────────── */
 .lightbox-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000;
+  position: fixed; inset: 0; background: var(--overlay-bg); z-index: 2000;
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn 0.15s ease; cursor: zoom-out;
 }
@@ -1233,8 +1234,8 @@
   color: #fff;
 }
 .mention-everyone {
-  background: rgba(250, 166, 26, 0.25);
-  color: #faa61a;
+  background: var(--mention-bg);
+  color: var(--mention-color);
 }
 .mention-everyone:hover {
   background: rgba(250, 166, 26, 0.4);
@@ -1613,7 +1614,7 @@
 }
 
 .message-request-btn.accept {
-  background: #3ba55d;
+  background: var(--green);
   color: #fff;
 }
 
@@ -1623,7 +1624,7 @@
 }
 
 .message-request-btn.block {
-  background: #ed4245;
+  background: var(--red);
   color: #fff;
 }
 
@@ -1692,7 +1693,7 @@
   width: 22px;
   height: 22px;
   border: 3px solid rgba(255,255,255,0.15);
-  border-top-color: #ed4245;
+  border-top-color: var(--red);
   border-radius: 50%;
 }
 

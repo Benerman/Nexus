@@ -169,6 +169,27 @@ Requires `sharp` (listed as a devDependency). On macOS, `iconutil` (bundled with
 - **`dev.yml`** — Manual trigger for pre-release builds (Tauri, Electron, Capacitor)
 - **`release.yml`** — Manual trigger for versioned releases (reads version from `client/package.json`)
 
+## Development Cycle (ASC)
+
+Nexus follows the Autonomous Software Creation (ASC) framework with 8 phases. All artifacts live in `asc/`:
+
+| Phase | Directory | Purpose |
+|-------|-----------|---------|
+| 00 | `asc/00_intent_extraction/` | Problem statement, assumptions, stakeholders, priorities |
+| 01 | `asc/01_intent_and_constraints/` | Intent statement, constraints, acceptance contract |
+| 02 | `asc/02_design_generation/` | Architecture, technical contracts, design decisions |
+| 03 | `asc/03_parallel_implementation/` | Component map, build verification |
+| 04 | `asc/04_continuous_verification/` | Test strategy, security, performance |
+| 05 | `asc/05_zero_touch_deployment/` | Pipeline docs, rollback procedures, post-deploy checks |
+| 06 | `asc/06_autonomous_operations/` | Observability, incident playbooks, capacity management |
+| 07 | `asc/07_feedback_synthesis/` | Signal sources, development cycle process |
+
+**Gate validation** is enforced in CI:
+- `unit-tests.yml`: npm audit (`--audit-level=high`, blocking) + coverage threshold (90%)
+- `deploy-prod.yml` / `deploy-dev.yml`: Post-deploy metrics verification + deployment event logging
+
+**Metrics endpoint**: `GET /api/metrics` (admin-only) returns connection counts, message/API rates, error counts, and system stats. See `server/metrics.js`.
+
 ## TODO — Audio Processing Improvements
 
 Current state: AudioWorklet processor (`client/public/audio-processor.js`) handles noise gate, AGC, and output gain on the audio thread. The items below bring the pipeline closer to industry standard (Discord/Teams/Zoom level).
@@ -201,16 +222,16 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 
 ## TODO — Theme Visual Polish
 
-- [ ] **Improve theme contrast** — Audit all 7 themes for sufficient contrast ratios on text/background combinations. Ensure readability meets WCAG AA standards especially for muted text and interactive elements.
-- [ ] **More drastic style differentiation between themes** — Current themes only swap CSS variables (colors). Explore WinAmp-level visual differentiation: unique border-radius per theme (sharp corners for retro, rounded for light), distinct shadow styles, different spacing/padding, custom scrollbar styles per theme, unique button shapes. Terminal theme should feel like a real terminal (scanlines, blinking cursor). Retro should have beveled 3D borders throughout, not just in elevation vars.
+- [x] **Improve theme contrast** — Audited all 12 themes for WCAG AA contrast. Fixed `--text-muted` and `--interactive-muted` across all theme blocks to meet 4.5:1 (normal text) and 3:1 (UI components) contrast ratios.
+- [x] **More drastic style differentiation between themes** — Added beveled 3D borders throughout retro (channel items, modals, panels), monospace font extension and dashed borders for terminal, animated neon glow pulse on active channels for neon, shadow-based depth for light theme, warm-tinted shadows for cherry. Each theme now has distinct visual identity beyond color swaps.
 
 ## TODO — Theme System Preparation
 
-- [ ] **Audit CSS naming consistency** — Review all CSS files across every component. Identify inconsistent naming conventions (camelCase vs kebab-case, abbreviations vs full names) and standardize to a single convention. Document the chosen convention.
-- [ ] **Consolidate CSS custom properties** — Audit all hardcoded color values (`#hex`, `rgb()`, `rgba()`) across all stylesheets. Replace with CSS custom properties (`var(--name)`). Ensure every color, spacing, shadow, and border used in the app flows through a centralized set of variables.
-- [ ] **Normalize variable naming scheme** — Review existing `--bg-*`, `--text-*`, `--brand-*` variables for completeness and consistency. Establish a semantic naming convention (e.g. `--color-surface-primary`, `--color-text-secondary`, `--color-accent`) that can map to different themes.
-- [ ] **Extract root variable definitions** — Move all CSS custom property definitions into a single dedicated file/section (e.g. `:root` block or `theme.css`) so theme switching only needs to swap one set of values.
-- [ ] **Identify component-specific overrides** — Find components that define their own colors outside the variable system (inline styles, component-scoped hardcoded values) and refactor them to use the centralized variables.
+- [x] **Audit CSS naming consistency** — All CSS files use kebab-case consistently. No changes needed.
+- [x] **Consolidate CSS custom properties** — Replaced ~200 hardcoded color values across 15+ component files with semantic CSS variables (`--status-online/idle/dnd/offline`, `--voice-good/fair/poor`, `--badge-danger`, `--overlay-bg/dim`, `--mention-bg/color`, `--code-bg`). Status colors, overlay backgrounds, danger/success indicators now flow through theme-aware variables.
+- [x] **Normalize variable naming scheme** — Added semantic naming layer (`--status-*`, `--voice-*`, `--overlay-*`, `--badge-*`, `--mention-*`, `--code-*`) on top of existing `--bg-*`/`--text-*`/`--brand-*` variables. Each theme block overrides semantic vars where needed (e.g., terminal uses green status colors, light theme uses lighter overlays).
+- [x] **Extract root variable definitions** — Already centralized in `:root` and `[data-theme]` blocks in `index.css`. Semantic variables added to same location.
+- [x] **Identify component-specific overrides** — Refactored StatusDot.js to read CSS variables via getComputedStyle. Replaced inline style hardcoded colors in ChatArea.js and SettingsModal.js with `var()` references. MemberList.css was already using variables (good pattern).
 
 ## TODO — Competitive Feature Gaps (High Priority)
 
@@ -220,7 +241,7 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 
 - [x] **Persist call state across reloads** — Save active voice channel ID and server ID to localStorage/sessionStorage on join, clear on leave. On page reload or app relaunch (web, Tauri, Electron — not mobile), automatically rejoin the voice channel the user was in. Handle edge cases: channel deleted while away, user kicked/banned, server removed. Do not apply to Capacitor mobile builds. **Needs testing:** auto-rejoin for DM calls, Tauri/Electron desktop apps, and verify PTT mode persists correctly on mobile (Capacitor should have no persistence).
 
-- [ ] **Context menu moderation actions** — Add moderation actions to the user right-click/context menu throughout the app (member list, voice tiles, chat messages). Actions gated by role permissions: **Kick from Voice** (disconnect user from current VC, requires `MOVE_MEMBERS`), **Server Mute** (force-mute in VC, requires `MUTE_MEMBERS`), **Server Deafen** (force-deafen in VC, requires `DEAFEN_MEMBERS`), **Move to Channel** (move user to a different VC, requires `MOVE_MEMBERS`), **Timeout** (temporarily restrict sending messages/joining VC, requires `MODERATE_MEMBERS`, with duration picker: 60s, 5m, 10m, 1h, 1d, 1w), **Kick from Server** (remove from server, can rejoin via invite, requires `KICK_MEMBERS`), **Ban from Server** (permanent removal with optional message purge duration, requires `BAN_MEMBERS`). Add corresponding permissions to role editor UI. Server owner bypasses all permission checks. Ensure all actions are enforced server-side with proper permission validation. Show only actions the current user has permission to perform.
+- [x] **Context menu moderation actions** — Add moderation actions to the user right-click/context menu throughout the app (member list, voice tiles, chat messages). Actions gated by role permissions: **Kick from Voice** (disconnect user from current VC, requires `MOVE_MEMBERS`), **Server Mute** (force-mute in VC, requires `MUTE_MEMBERS`), **Server Deafen** (force-deafen in VC, requires `DEAFEN_MEMBERS`), **Move to Channel** (move user to a different VC, requires `MOVE_MEMBERS`), **Timeout** (temporarily restrict sending messages/joining VC, requires `MODERATE_MEMBERS`, with duration picker: 60s, 5m, 10m, 1h, 1d, 1w), **Kick from Server** (remove from server, can rejoin via invite, requires `KICK_MEMBERS`), **Ban from Server** (permanent removal with optional message purge duration, requires `BAN_MEMBERS`). Add corresponding permissions to role editor UI. Server owner bypasses all permission checks. Ensure all actions are enforced server-side with proper permission validation. Show only actions the current user has permission to perform.
 
 ## TODO — Competitive Feature Gaps (Medium Priority)
 
@@ -252,7 +273,11 @@ Current state: AudioWorklet processor (`client/public/audio-processor.js`) handl
 
 ## TODO — UI Bugs
 
-- [ ] **GIF picker positioning** — GIF popup should not displace the text input area. It currently centers over the GIF button and gets squashed against the right edge, pushing the input left. The popup should float above the input bar (absolutely positioned) without affecting layout, and stay within viewport bounds.
+- [x] **GIF picker positioning** — GIF popup now renders inside `.chat-input-box` (the positioning context) instead of inside the small button wrapper. Floats above the input bar without displacing layout. Stays within viewport bounds via `max-width: min(420px, calc(100vw - 32px))`.
+
+## TODO — Voice & Audio UX Testing
+
+- [ ] **Manual voice UX test pass** — Execute all 55 test cases in `tests/manual/05-voice-and-soundboard.md` (TC-025 through TC-079). Covers: voice join/leave/presence, mute/deafen state broadcasting, push-to-talk (all platforms), noise gate (attack smoothing, threshold, sidechain filtering, inter-word pauses), AI noise cancellation (RNNoise aggressiveness levels, WASM fallback), AGC (leveler, limiter, VAD-gating, noise floor tracking), audio device selection, per-user volume, mic test meter, screen sharing & stream viewing (start/stop, fullscreen, system audio, late joiners, sharer leaves), voice persistence & auto-rejoin (web/desktop/mobile, expiry, edge cases), DM calls (initiate, decline, persistence), soundboard (playback, targeting, rate limits), speaking indicators, connection quality & reconnection, and combined processing pipeline validation. Requires 2-3 browser windows with different accounts.
 
 ## TODO — Accessibility
 

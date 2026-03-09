@@ -1,8 +1,9 @@
 .gif-picker {
   position: absolute;
   bottom: calc(100% + 8px);
-  left: 0;
+  right: 0;
   width: 420px;
+  max-width: min(420px, calc(100vw - 32px));
   max-height: 500px;
   background: var(--bg-secondary);
   border-radius: 8px;

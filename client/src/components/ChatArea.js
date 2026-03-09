@@ -309,6 +309,7 @@ const ChatArea = React.memo(function ChatArea({
   showThreadsListPanel, onToggleThreadsListPanel, channelThreads,
   screenShareActive,
   e2eSecretKey, publicKeyCache,
+  onAuthorRightClick,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -1116,7 +1117,7 @@ const ChatArea = React.memo(function ChatArea({
       <div className="chat-header">
         {threadPanel ? (
           <>
-            <button onClick={onCloseThread} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', marginRight: '4px', borderRadius: '4px' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+            <button onClick={onCloseThread} style={{ background: 'none', border: 'none', color: 'var(--header-secondary)', cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center', marginRight: '4px', borderRadius: '4px' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
             <div className="chat-header-icon">
@@ -1159,51 +1160,53 @@ const ChatArea = React.memo(function ChatArea({
                 className={`header-action-btn ${dmCallActive === channel.id ? 'active-call' : ''}`}
                 onClick={() => !dmCallActive && onStartDMCall(channel.id)}
                 title={dmCallActive === channel.id ? 'In call' : 'Start Voice Call'}
+                aria-label={dmCallActive === channel.id ? 'In call' : 'Start Voice Call'}
                 disabled={!!dmCallActive}
               >
                 <PhoneIcon size={18} color={dmCallActive === channel.id ? 'var(--text-positive)' : 'var(--text-muted)'} />
               </button>
             )}
             {channel.isDM && (
-              <button className="header-action-btn" onClick={() => setShowAddMember(prev => !prev)} title="Add people">
+              <button className="header-action-btn" onClick={() => setShowAddMember(prev => !prev)} title="Add people" aria-label="Add people">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
                 </svg>
               </button>
             )}
             {onOpenSettings && !channel.isDM && (
-              <button className="header-action-btn" onClick={()=>onOpenSettings('channels')} title="Channel settings">
+              <button className="header-action-btn" onClick={()=>onOpenSettings('channels')} title="Channel settings" aria-label="Channel settings">
                 <SettingsIcon size={18} color="var(--text-muted)" />
               </button>
             )}
             {onOpenSettings && !channel.isDM && (
-              <button className="header-action-btn" onClick={()=>onOpenSettings('webhooks')} title="Webhooks">
+              <button className="header-action-btn" onClick={()=>onOpenSettings('webhooks')} title="Webhooks" aria-label="Webhooks">
                 <LinkIcon size={18} color="var(--text-muted)" />
               </button>
             )}
             {onTogglePinnedPanel && (
-              <button className="header-icon-btn" onClick={onTogglePinnedPanel} title="Pinned Messages" style={{ background: showPinnedPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showPinnedPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              <button className="header-icon-btn" onClick={onTogglePinnedPanel} title="Pinned Messages" aria-label="Pinned Messages" style={{ background: showPinnedPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showPinnedPanel ? 'var(--text-danger)' : 'var(--header-secondary)', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
               </button>
             )}
             {onToggleThreadsListPanel && !channel.isDM && (
-              <button className="header-icon-btn" onClick={onToggleThreadsListPanel} title="Threads" style={{ background: showThreadsListPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showThreadsListPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              <button className="header-icon-btn" onClick={onToggleThreadsListPanel} title="Threads" aria-label="Threads" style={{ background: showThreadsListPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showThreadsListPanel ? 'var(--text-danger)' : 'var(--header-secondary)', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                 <ThreadIcon size={16} />
               </button>
             )}
             {onToggleSearchPanel && (
-              <button className="header-icon-btn" onClick={onToggleSearchPanel} title="Search" style={{ background: showSearchPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showSearchPanel ? '#ed4245' : '#b5bac1', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              <button className="header-icon-btn" onClick={onToggleSearchPanel} title="Search" aria-label="Search" style={{ background: showSearchPanel ? 'rgba(237, 66, 69, 0.2)' : 'transparent', border: 'none', color: showSearchPanel ? 'var(--text-danger)' : 'var(--header-secondary)', cursor: 'pointer', padding: '6px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
               </button>
             )}
             {!channel.isDM && (
               <button className="header-action-btn" onClick={onToggleMemberSidebar}
-                title={memberSidebarVisible ? 'Hide member list' : 'Show member list'}>
+                title={memberSidebarVisible ? 'Hide member list' : 'Show member list'}
+                aria-label={memberSidebarVisible ? 'Hide member list' : 'Show member list'}>
                 <UserIcon size={18} color="var(--text-muted)" />
               </button>
             )}
             {onRefreshData && (
-              <button className="header-action-btn refresh-btn" onClick={onRefreshData} title="Refresh data">
+              <button className="header-action-btn refresh-btn" onClick={onRefreshData} title="Refresh data" aria-label="Refresh data">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -1298,7 +1301,7 @@ const ChatArea = React.memo(function ChatArea({
           </div>
 
           {/* Thread messages */}
-          <div className="messages-container" style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="messages-container" style={{ flex: 1, overflowY: 'auto' }} role="log" aria-live="polite">
             {(threadPanel.messages || []).length === 0 && (
               <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No replies yet. Start the conversation!</div>
             )}
@@ -1321,7 +1324,7 @@ const ChatArea = React.memo(function ChatArea({
                     <div className="message-content-wrap">
                       {!isGrouped && (
                         <div className="message-header">
-                          <span className="message-author" style={{ color: msg.author?.color }}>{msg.author?.username}</span>
+                          <span className="message-author" style={{ color: msg.author?.color, cursor: 'pointer' }} onContextMenu={(e) => { if (onAuthorRightClick && msg.author) { e.preventDefault(); e.stopPropagation(); onAuthorRightClick(msg.author, e); } }}>{msg.author?.username}</span>
                           <span className="message-time">{formatTime(msg.timestamp)}</span>
                         </div>
                       )}
@@ -1372,6 +1375,7 @@ const ChatArea = React.memo(function ChatArea({
       {/* Messages */}
       <div className={`messages-container${pullDistance > 0 || isRefreshing ? ' pulling' : ''}`} ref={messagesContainerRef} onScroll={handleScroll}
         onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}
+        role="log" aria-live="polite"
         style={(pullDistance > 0 || isRefreshing) ? { transform: `translateY(${pullDistance}px)`, transition: isPullingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' } : { transition: 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' }}
       >
         {loadingOlder && (
@@ -1456,10 +1460,10 @@ const ChatArea = React.memo(function ChatArea({
                 <div className="message-content-wrap">
                   {!msg.isGrouped && (
                     <div className="message-header">
-                      <span className="message-author" style={{color:msg.author.color}}>{msg.author.username}</span>
+                      <span className="message-author" style={{color:msg.author.color, cursor: 'pointer'}} onContextMenu={(e) => { if (onAuthorRightClick && msg.author) { e.preventDefault(); e.stopPropagation(); onAuthorRightClick(msg.author, e); } }}>{msg.author.username}</span>
                       {msg.isWebhook && <span className="webhook-badge">BOT</span>}
                       <span className="message-time">{formatTime(msg.timestamp)}</span>
-                      {msg.pinned && <span style={{ color: '#ed4245', marginLeft: '4px', display: 'inline-flex', verticalAlign: 'middle' }} title="Pinned"><PinIcon size={12} /></span>}
+                      {msg.pinned && <span style={{ color: 'var(--text-danger)', marginLeft: '4px', display: 'inline-flex', verticalAlign: 'middle' }} title="Pinned"><PinIcon size={12} /></span>}
                       {msg.editedAt && <span className="edited-badge">(edited)</span>}
                       {isUnencryptedInEncryptedDM && <span className="not-encrypted-badge" title="This message is not encrypted">🔓</span>}
                     </div>
@@ -1614,8 +1618,8 @@ const ChatArea = React.memo(function ChatArea({
                     <button className="reply-action-btn"
                       onClick={e=>{e.stopPropagation();handleReplyToMessage(msg);}}
                       title="Reply">↩</button>
-                    <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (msg.pinned) { socket.emit('message:unpin', { channelId: channel.id, messageId: msg.id }); } else { socket.emit('message:pin', { channelId: channel.id, messageId: msg.id }); } }} title={msg.pinned ? "Unpin" : "Pin"} style={{ color: msg.pinned ? '#ed4245' : undefined }}><PinIcon size={16} /></button>
-                    {onSaveMessage && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (savedMessageIds?.has(msg.id)) { onUnsaveMessage(msg.id); } else { onSaveMessage(msg.id, channel.id); } }} title={savedMessageIds?.has(msg.id) ? "Remove Bookmark" : "Bookmark"} style={{ color: savedMessageIds?.has(msg.id) ? '#f0b132' : undefined }}><BookmarkIcon size={16} /></button>}
+                    <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (msg.pinned) { socket.emit('message:unpin', { channelId: channel.id, messageId: msg.id }); } else { socket.emit('message:pin', { channelId: channel.id, messageId: msg.id }); } }} title={msg.pinned ? "Unpin" : "Pin"} style={{ color: msg.pinned ? 'var(--text-danger)' : undefined }}><PinIcon size={16} /></button>
+                    {onSaveMessage && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); if (savedMessageIds?.has(msg.id)) { onUnsaveMessage(msg.id); } else { onSaveMessage(msg.id, channel.id); } }} title={savedMessageIds?.has(msg.id) ? "Remove Bookmark" : "Bookmark"} style={{ color: savedMessageIds?.has(msg.id) ? 'var(--text-warning)' : undefined }}><BookmarkIcon size={16} /></button>}
                     {onOpenThread && !msg.threadId && <button className="reply-action-btn" onClick={e => { e.stopPropagation(); onOpenThread(channel.id, msg.id); }} title={(msg.threadReplyCount > 0 || msg.threadName) ? "Open Thread" : "Start Thread"}><ThreadIcon size={16} /></button>}
                     <button className="reaction-btn"
                       onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
@@ -1640,7 +1644,7 @@ const ChatArea = React.memo(function ChatArea({
         <div ref={messagesEndRef}/>
       </div>
 
-      <div className="typing-bar">
+      <div className="typing-bar" aria-live="polite" aria-atomic="true">
         {typingUsers.length>0 && (
           <div className="typing-indicator">
             <div className="typing-dots"><span/><span/><span/></div>
@@ -1750,7 +1754,7 @@ const ChatArea = React.memo(function ChatArea({
                   <div className="mention-role-color" style={{ background: s.color || '#99aab5' }} />
                 )}
                 {s.type === 'special' && (
-                  <div className="mention-avatar" style={{ background: '#faa61a' }}>@</div>
+                  <div className="mention-avatar" style={{ background: 'var(--mention-color)' }}>@</div>
                 )}
                 <span className="mention-name" style={s.type === 'role' ? { color: s.color || '#99aab5' } : undefined}>
                   {s.type === 'special' ? s.label : `@${s.name}`}
@@ -1784,21 +1788,16 @@ const ChatArea = React.memo(function ChatArea({
             onPaste={handlePaste} rows={1} maxLength={2000}
             disabled={channel.messageRequest === 'received'}/>
           <div className="chat-input-actions">
-            <button className="attach-btn" onClick={()=>fileInputRef.current?.click()} title="Attach image">
+            <button className="attach-btn" onClick={()=>fileInputRef.current?.click()} title="Attach image" aria-label="Attach image">
               <AttachmentIcon size={18} color="currentColor" />
             </button>
             {!server?.lanMode && (
-              <div style={{ position: 'relative' }}>
-                <button className={`attach-btn ${gifPickerOpen ? 'active' : ''}`} onClick={() => setGifPickerOpen(!gifPickerOpen)} title="GIF">
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>GIF</span>
-                </button>
-                {gifPickerOpen && (
-                  <GifPicker onSelect={handleGifSelect} onClose={() => setGifPickerOpen(false)} />
-                )}
-              </div>
+              <button className={`attach-btn ${gifPickerOpen ? 'active' : ''}`} onClick={() => setGifPickerOpen(!gifPickerOpen)} title="GIF" aria-label="GIF picker">
+                <span style={{ fontSize: 12, fontWeight: 700 }}>GIF</span>
+              </button>
             )}
             <div style={{ position: 'relative' }}>
-              <button className={`attach-btn ${inputEmojiOpen ? 'active' : ''}`} onClick={() => setInputEmojiOpen(!inputEmojiOpen)} title="Emoji">
+              <button className={`attach-btn ${inputEmojiOpen ? 'active' : ''}`} onClick={() => setInputEmojiOpen(!inputEmojiOpen)} title="Emoji" aria-label="Emoji picker">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
@@ -1828,10 +1827,13 @@ const ChatArea = React.memo(function ChatArea({
               )}
             </div>
             <button className="send-btn" onClick={handleSend}
-              disabled={!input.trim() && !pendingAttachments.length} title="Send">
+              disabled={!input.trim() && !pendingAttachments.length} title="Send" aria-label="Send message">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
           </div>
+          {gifPickerOpen && !server?.lanMode && (
+            <GifPicker onSelect={handleGifSelect} onClose={() => setGifPickerOpen(false)} />
+          )}
         </div>
       </div>
       </>
@@ -1841,7 +1843,7 @@ const ChatArea = React.memo(function ChatArea({
         <div className="chat-side-panel mobile-pinned-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Pinned Messages</h3>
-            <button onClick={onTogglePinnedPanel} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            <button onClick={onTogglePinnedPanel} style={{ background: 'none', border: 'none', color: 'var(--header-secondary)', cursor: 'pointer', fontSize: '18px' }}>✕</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
             {(pinnedMessages || []).length === 0 ? (
@@ -1861,9 +1863,9 @@ const ChatArea = React.memo(function ChatArea({
                     {msg.attachments.slice(0, 2).map((att, i) => (
                       att.type?.startsWith('image/') || att.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
                         ? <img key={i} src={att.url} alt="" style={{ maxWidth: '100px', maxHeight: '60px', borderRadius: '4px', objectFit: 'cover' }} />
-                        : <div key={i} style={{ background: '#2b2d31', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', color: '#b5bac1' }}>📎 {att.name || 'file'}</div>
+                        : <div key={i} style={{ background: 'var(--bg-tertiary)', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', color: 'var(--header-secondary)' }}>📎 {att.name || 'file'}</div>
                     ))}
-                    {msg.attachments.length > 2 && <span style={{ fontSize: '11px', color: '#72767d', alignSelf: 'center' }}>+{msg.attachments.length - 2} more</span>}
+                    {msg.attachments.length > 2 && <span style={{ fontSize: '11px', color: 'var(--text-muted)', alignSelf: 'center' }}>+{msg.attachments.length - 2} more</span>}
                   </div>
                 )}
                 {(msg.threadReplyCount > 0 || msg.threadName) && (
@@ -1899,7 +1901,7 @@ const ChatArea = React.memo(function ChatArea({
         <div className="chat-side-panel mobile-thread-list-panel" style={{ position: 'absolute', top: 0, right: 0, width: '340px', height: '100%', background: '#2b2d31', borderLeft: '1px solid #3a3a3e', zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, color: '#fff', fontSize: '16px' }}>Threads</h3>
-            <button onClick={onToggleThreadsListPanel} style={{ background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            <button onClick={onToggleThreadsListPanel} style={{ background: 'none', border: 'none', color: 'var(--header-secondary)', cursor: 'pointer', fontSize: '18px' }}>✕</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
             {(channelThreads || []).length === 0 ? (
@@ -1944,12 +1946,12 @@ const ChatArea = React.memo(function ChatArea({
           <div style={{ padding: '16px', borderBottom: '1px solid #3a3a3e' }}>
             <h3 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '16px' }}>Search Messages</h3>
             <input type="text" placeholder="Search... try from: in: has: before:" value={searchQuery} onChange={e => onSearch(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#1e1f22', border: '1px solid #3a3a3e', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
-            <button onClick={onToggleSearchPanel} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: '#b5bac1', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            <button onClick={onToggleSearchPanel} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--header-secondary)', cursor: 'pointer', fontSize: '18px' }}>✕</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
             {!searchResults ? (
               <div style={{ padding: '20px 16px' }}>
-                <div style={{ color: '#b5bac1', fontSize: '13px', marginBottom: '12px' }}>Search filters</div>
+                <div style={{ color: 'var(--header-secondary)', fontSize: '13px', marginBottom: '12px' }}>Search filters</div>
                 <div style={{ background: '#1e1f22', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
                   {[
                     ['from:', 'username', 'Messages from a user'],
@@ -1960,12 +1962,12 @@ const ChatArea = React.memo(function ChatArea({
                     ['is:', 'pinned', 'Pinned messages'],
                   ].map(([op, val, desc]) => (
                     <div key={op} style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                      <code style={{ color: '#b5bac1', background: '#2b2d31', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px' }}>{op}{val}</code>
-                      <span style={{ color: '#72767d', fontSize: '12px' }}>{desc}</span>
+                      <code style={{ color: 'var(--header-secondary)', background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '12px' }}>{op}{val}</code>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{desc}</span>
                     </div>
                   ))}
                 </div>
-                <div style={{ color: '#72767d', fontSize: '12px', marginTop: '10px' }}>Combine filters: <span style={{ color: '#b5bac1' }}>hello from:alice in:general</span></div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '10px' }}>Combine filters: <span style={{ color: 'var(--header-secondary)' }}>hello from:alice in:general</span></div>
               </div>
             ) : searchResults.length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No results found</div>

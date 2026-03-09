@@ -238,7 +238,9 @@ const PERM_LABELS = {
   mentionEveryone:'Mention @everyone', manageMessages:'Manage Messages',
   manageChannels:'Manage Channels', manageServer:'Manage Server',
   manageWebhooks:'Manage Webhooks', manageEmojis:'Manage Emojis',
-  kickMembers:'Kick Members',
+  kickMembers:'Kick Members', banMembers:'Ban Members',
+  muteMembers:'Mute Members', deafenMembers:'Deafen Members',
+  moveMembers:'Move Members', moderateMembers:'Timeout Members',
   createInvite:'Create Invites', sendTargetedSounds:'Send Targeted Sounds',
   admin:'Administrator'
 };
@@ -452,13 +454,13 @@ function SettingsSidebar({ tabs, tab, setTab }) {
 
   return (
     <div ref={wrapRef} className={`settings-sidebar-wrap ${scrollClass}`}>
-      <div className="settings-sidebar" ref={sidebarRef}>
+      <div className="settings-sidebar" ref={sidebarRef} role="tablist">
         <div className="settings-sidebar-title">
           <SettingsIcon size={16} color="currentColor" style={{marginRight: '8px', display: 'inline-block', verticalAlign: 'middle'}} />
           SETTINGS
         </div>
         {tabs.map(t=>(
-          <button key={t.id} className={`settings-tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
+          <button key={t.id} className={`settings-tab ${tab===t.id?'active':''}`} role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)}>
             {t.icon && <span className="tab-icon">{t.icon}</span>}
             {t.label}
           </button>
@@ -2099,12 +2101,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   }, [tab, tabs]);
 
   return (
-    <div className="settings-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div className="settings-overlay" role="dialog" aria-modal="true" aria-label="Settings" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="settings-modal">
         <SettingsSidebar tabs={tabs} tab={tab} setTab={setTab} />
 
-        <div className="settings-content">
-          <button className="settings-close-btn" onClick={onClose} title="Close Settings">
+        <div className="settings-content" role="tabpanel">
+          <button className="settings-close-btn" onClick={onClose} title="Close Settings" aria-label="Close settings">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
           </button>
           {actionError && (
@@ -3117,7 +3119,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
 
               <h3 style={{marginTop: 24}}>Do Not Disturb</h3>
               <p style={{fontSize: 13, color: 'var(--text-muted)'}}>
-                Setting your status to <strong style={{color: '#f04747'}}>Do Not Disturb</strong> will silence all message sounds and desktop notifications, including @mentions.
+                Setting your status to <strong style={{color: 'var(--text-danger)'}}>Do Not Disturb</strong> will silence all message sounds and desktop notifications, including @mentions.
                 You can change your status in the Profile tab.
               </p>
             </div>
@@ -4905,7 +4907,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                         {automodTestResult && (
                           <div style={{fontSize:12,marginTop:6,padding:'4px 8px',borderRadius:4,
                             background: automodTestResult.matched ? 'rgba(237,66,69,0.15)' : 'rgba(87,242,135,0.15)',
-                            color: automodTestResult.matched ? '#ed4245' : '#57f287'
+                            color: automodTestResult.matched ? 'var(--text-danger)' : 'var(--text-positive)'
                           }}>
                             {automodTestResult.matched ? `Blocked: ${automodTestResult.reason}` : 'Not blocked'}
                             {automodTestResult.normalized && <div style={{color:'var(--text-muted)',marginTop:2}}>Normalized: "{automodTestResult.normalized}"</div>}
@@ -5027,13 +5029,13 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                             {usr.customAvatar
                               ? <img src={usr.customAvatar} alt="" className="avatar-upload-img"/>
                               : (usr.avatar || 'U')}
-                            {usr.online && <div style={{position:'absolute',bottom:-1,right:-1,width:8,height:8,borderRadius:'50%',background:'#3ba55c',border:'2px solid var(--bg-secondary)'}}/>}
+                            {usr.online && <div style={{position:'absolute',bottom:-1,right:-1,width:8,height:8,borderRadius:'50%',background:'var(--status-online)',border:'2px solid var(--bg-secondary)'}}/>}
                           </div>
                           <div className="member-manage-info">
                             <span className="member-manage-username">{usr.username}</span>
                             <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
                               {usr.serverCount} servers · Joined {new Date(usr.createdAt).toLocaleDateString()}
-                              {usr.online && <span style={{color:'#3ba55c'}}> · Online</span>}
+                              {usr.online && <span style={{color:'var(--status-online)'}}> · Online</span>}
                             </div>
                           </div>
                           {usr.id !== currentUser.id && (
@@ -5091,11 +5093,11 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
           {tab==='audit-log' && (userPerms.admin || isOwner) && (
             <div className="settings-section">
               <h2>Audit Log</h2>
-              <p style={{ color: '#b5bac1', fontSize: '14px', marginBottom: '16px' }}>Review recent actions taken in this server.</p>
+              <p style={{ color: 'var(--header-secondary)', fontSize: '14px', marginBottom: '16px' }}>Review recent actions taken in this server.</p>
 
               <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {['all', 'member_kick', 'member_ban', 'member_timeout', 'channel_create', 'channel_delete', 'role_create', 'role_delete', 'message_pin', 'message_unpin'].map(filter => (
-                  <button key={filter} onClick={() => { setAuditFilter(filter); setAuditLoading(true); socket.emit('audit:get-logs', { serverId: server.id, action: filter === 'all' ? undefined : filter }); }} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid ' + (auditFilter === filter ? '#ed4245' : '#3a3a3e'), background: auditFilter === filter ? 'rgba(237, 66, 69, 0.15)' : 'transparent', color: auditFilter === filter ? '#ed4245' : '#b5bac1', cursor: 'pointer', fontSize: '12px', textTransform: 'capitalize' }}>
+                  <button key={filter} onClick={() => { setAuditFilter(filter); setAuditLoading(true); socket.emit('audit:get-logs', { serverId: server.id, action: filter === 'all' ? undefined : filter }); }} style={{ padding: '4px 12px', borderRadius: '4px', border: '1px solid ' + (auditFilter === filter ? 'var(--red)' : 'var(--interactive-muted)'), background: auditFilter === filter ? 'rgba(237, 66, 69, 0.15)' : 'transparent', color: auditFilter === filter ? 'var(--text-danger)' : 'var(--header-secondary)', cursor: 'pointer', fontSize: '12px', textTransform: 'capitalize' }}>
                     {filter === 'all' ? 'All' : filter.replace(/_/g, ' ')}
                   </button>
                 ))}
@@ -5112,12 +5114,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
                           <span style={{ color: '#fff', fontWeight: 600, fontSize: '14px' }}>{log.actorUsername}</span>
-                          <span style={{ color: '#b5bac1', fontSize: '13px' }}>{log.action.replace(/_/g, ' ')}</span>
-                          {log.changes?.username && <span style={{ color: '#ed4245', fontSize: '13px' }}>{log.changes.username}</span>}
-                          {log.changes?.name && <span style={{ color: '#00a8fc', fontSize: '13px' }}>{log.changes.name}</span>}
-                          {log.changes?.duration && <span style={{ color: '#f0b132', fontSize: '13px' }}>({log.changes.duration} min)</span>}
+                          <span style={{ color: 'var(--header-secondary)', fontSize: '13px' }}>{log.action.replace(/_/g, ' ')}</span>
+                          {log.changes?.username && <span style={{ color: 'var(--text-danger)', fontSize: '13px' }}>{log.changes.username}</span>}
+                          {log.changes?.name && <span style={{ color: 'var(--text-link)', fontSize: '13px' }}>{log.changes.name}</span>}
+                          {log.changes?.duration && <span style={{ color: 'var(--text-warning)', fontSize: '13px' }}>({log.changes.duration} min)</span>}
                         </div>
-                        <div style={{ color: '#72767d', fontSize: '12px' }}>{new Date(log.createdAt).toLocaleString()}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{new Date(log.createdAt).toLocaleString()}</div>
                       </div>
                     </div>
                   ))}

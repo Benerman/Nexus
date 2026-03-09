@@ -266,7 +266,7 @@
   }
   .mobile-nav-action-btn.active {
     background: rgba(237, 66, 69, 0.2);
-    color: #ed4245;
+    color: var(--text-danger);
   }
   .mobile-nav-activity {
     position: relative;
@@ -562,7 +562,7 @@
 
 .media-error-icon {
   font-size: 18px;
-  color: #f04747;
+  color: var(--text-danger);
   flex-shrink: 0;
 }
 
@@ -577,12 +577,12 @@
 .media-error-title {
   font-weight: 600;
   font-size: 13px;
-  color: #f04747;
+  color: var(--text-danger);
 }
 
 .media-error-message {
   font-size: 12px;
-  color: #b9bbbe;
+  color: var(--header-secondary);
 }
 
 .media-error-actions {
@@ -596,7 +596,7 @@
   padding: 4px 12px;
   border-radius: 3px;
   border: none;
-  background: #f04747;
+  background: var(--badge-danger);
   color: #fff;
   font-size: 12px;
   font-weight: 500;
@@ -605,13 +605,13 @@
 }
 
 .media-error-retry:hover {
-  background: #d84040;
+  background: var(--red);
 }
 
 .media-error-dismiss {
   background: none;
   border: none;
-  color: #b9bbbe;
+  color: var(--header-secondary);
   font-size: 18px;
   cursor: pointer;
   padding: 2px 6px;

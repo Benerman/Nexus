@@ -344,19 +344,19 @@
 }
 
 .dm-status-dot.status-online {
-  background: #43b581;
+  background: var(--status-online);
 }
 
 .dm-status-dot.status-idle {
-  background: #faa61a;
+  background: var(--status-idle);
 }
 
 .dm-status-dot.status-dnd {
-  background: #f04747;
+  background: var(--status-dnd);
 }
 
 .dm-status-dot.status-offline {
-  background: #747f8d;
+  background: var(--status-offline);
 }
 
 /* DM Channel Info */
@@ -405,7 +405,7 @@
 }
 
 .dm-unread-badge {
-  background: #f04747;
+  background: var(--badge-danger);
   color: white;
   font-size: 11px;
   font-weight: 700;
@@ -605,7 +605,7 @@
 
 /* Channel unread badge */
 .channel-unread-badge {
-  background: #f04747;
+  background: var(--badge-danger);
   color: white;
   font-size: 10px;
   font-weight: 700;

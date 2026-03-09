@@ -143,12 +143,12 @@
 }
 .login-error {
   background: rgba(237,66,69,0.15); border: 1px solid rgba(237,66,69,0.4);
-  color: #ed4245; border-radius: var(--radius-sm); padding: 8px 12px;
+  color: var(--text-danger); border-radius: var(--radius-sm); padding: 8px 12px;
   font-size: 13px; margin-bottom: 12px; text-align: center;
 }
 .login-invite-notice {
   background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4);
-  color: #3B82F6; border-radius: 4px; padding: 10px 14px;
+  color: var(--brand-500); border-radius: 4px; padding: 10px 14px;
   font-size: 13px; font-weight: 600; margin-bottom: 12px; text-align: center;
 }
 .login-divider {

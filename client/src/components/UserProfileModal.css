@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-dim);
   z-index: 10000;
   display: flex;
   align-items: center;
@@ -78,11 +78,11 @@
   border: 3px solid var(--bg-secondary, #2b2d31);
 }
 
-.user-profile-status-dot.status-online { background: #3ba55c; }
-.user-profile-status-dot.status-idle { background: #faa61a; }
-.user-profile-status-dot.status-dnd { background: #ed4245; }
+.user-profile-status-dot.status-online { background: var(--status-online); }
+.user-profile-status-dot.status-idle { background: var(--status-idle); }
+.user-profile-status-dot.status-dnd { background: var(--status-dnd); }
 .user-profile-status-dot.status-offline,
-.user-profile-status-dot.status-invisible { background: #747f8d; }
+.user-profile-status-dot.status-invisible { background: var(--status-offline); }
 
 .user-profile-body {
   padding: 12px 16px 16px;
