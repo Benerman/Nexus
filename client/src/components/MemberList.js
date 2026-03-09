@@ -69,6 +69,7 @@ const MemberList = React.memo(function MemberList({ onlineUsers, currentUser, se
     return (
       <div
         key={user.id}
+        role="listitem"
         className={`member-item ${user.id === currentUser?.id ? 'self' : ''} ${isOffline ? 'offline' : ''}`}
         onClick={(e) => {
           if (longPress.firedRef.current) { e.stopPropagation(); return; }
@@ -87,7 +88,7 @@ const MemberList = React.memo(function MemberList({ onlineUsers, currentUser, se
           {user.customAvatar
             ? <img src={user.customAvatar} alt="" className="member-custom-avatar" />
             : user.avatar}
-          <div className={`member-status-dot status-${user.status || 'online'}`} />
+          <div className={`member-status-dot status-${user.status || 'online'}`} aria-label={user.status || 'online'} />
         </div>
         <div className="member-info">
           <div className="member-name" style={{ color: nameColor }}>
@@ -109,7 +110,7 @@ const MemberList = React.memo(function MemberList({ onlineUsers, currentUser, se
   };
 
   return (
-    <div className={`member-list ${className || ''}`}>
+    <div className={`member-list ${className || ''}`} role="list" aria-label="Server members">
       <div className="member-list-header">
         <span>ONLINE — {actuallyOnlineUsers.length}</span>
       </div>

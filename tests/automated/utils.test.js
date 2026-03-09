@@ -167,16 +167,18 @@ describe('getRandomRoast', () => {
 
 // ─── DEFAULT_PERMS ────────────────────────────────────────────────────────────
 describe('DEFAULT_PERMS', () => {
-  test('has all 11 expected keys', () => {
+  test('has all 17 expected keys', () => {
     const expectedKeys = [
       'viewChannel', 'sendMessages', 'attachFiles', 'joinVoice',
       'readHistory', 'addReactions', 'mentionEveryone', 'manageMessages',
-      'createInvite', 'sendTargetedSounds', 'manageEmojis'
+      'createInvite', 'sendTargetedSounds', 'manageEmojis',
+      'kickMembers', 'banMembers', 'muteMembers',
+      'deafenMembers', 'moveMembers', 'moderateMembers'
     ];
     expectedKeys.forEach(key => {
       expect(DEFAULT_PERMS).toHaveProperty(key);
     });
-    expect(Object.keys(DEFAULT_PERMS).length).toBe(11);
+    expect(Object.keys(DEFAULT_PERMS).length).toBe(17);
   });
 
   test('defaults: viewChannel=true, manageMessages=false', () => {

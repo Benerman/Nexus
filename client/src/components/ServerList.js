@@ -165,11 +165,13 @@ const ServerList = React.memo(function ServerList({
   };
 
   return (
-    <div className="server-list">
+    <div className="server-list" role="navigation" aria-label="Server list">
       {/* Home (DM) icon */}
       <div
         className={`server-list-home ${activeServerId === personalServer?.id ? 'active' : ''}`}
         title="Direct Messages"
+        role="button"
+        aria-label="Direct Messages"
         onClick={() => { if (personalServer) onSelectServer(personalServer.id); }}
         style={{ cursor: 'pointer' }}
       >
@@ -229,7 +231,7 @@ const ServerList = React.memo(function ServerList({
         </div>
       ))}
 
-      <div className="server-item add-server-btn" title="Create a Server" onClick={onCreateServer}>
+      <div className="server-item add-server-btn" title="Create a Server" role="button" aria-label="Create a server" onClick={onCreateServer}>
         <span className="add-icon">+</span>
       </div>
 

@@ -69,7 +69,7 @@ export default function UserProfileModal({ user, server, servers = [], currentUs
 
   return ReactDOM.createPortal(
     <div className="user-profile-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="user-profile-modal">
+      <div className="user-profile-modal" role="dialog" aria-modal="true" aria-label="User profile">
         {/* Banner */}
         <div className="user-profile-banner" style={{ background: user.color || '#3B82F6' }} />
 

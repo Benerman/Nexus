@@ -204,6 +204,7 @@ const UserTile = React.memo(function UserTile({
             value={displayVol}
             onChange={(e) => onSetVolume(parseInt(e.target.value))}
             className="user-volume-slider"
+            aria-label="User volume"
           />
           <span className="volume-label">{displayVol}%</span>
         </div>
@@ -254,7 +255,8 @@ const VoiceArea = React.memo(function VoiceArea({
   pttActive,
   isPttMode,
   onPttActivate,
-  onPttDeactivate
+  onPttDeactivate,
+  onUserRightClick
 }) {
   console.log('[VoiceArea] RENDER - channel:', channel?.name, 'users:', voiceChannelData?.users?.length);
 
@@ -316,10 +318,14 @@ const VoiceArea = React.memo(function VoiceArea({
     });
   }, []);
 
-  const handleTileContextMenu = useCallback((e, userId, username) => {
+  const handleTileContextMenu = useCallback((e, userId, username, user) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, userId, username });
-  }, []);
+    if (onUserRightClick && user) {
+      onUserRightClick(user, e);
+    } else {
+      setContextMenu({ x: e.clientX, y: e.clientY, userId, username });
+    }
+  }, [onUserRightClick]);
 
   // Close context menu on click-outside or Escape
   useEffect(() => {
@@ -835,7 +841,7 @@ const VoiceArea = React.memo(function VoiceArea({
             audioLevel={soundboardSpeaking.has('local') ? 0.5 : getNormalizedLevel('local', audioLevels?.['local'] || 0)}
             isMuted={isMuted}
             isDeafened={isDeafened}
-            onContextMenu={(e) => handleTileContextMenu(e, currentUser.id, currentUser.username)}
+            onContextMenu={(e) => handleTileContextMenu(e, currentUser.id, currentUser.username, currentUser)}
           />
 
           {/* Remote users */}
@@ -855,7 +861,7 @@ const VoiceArea = React.memo(function VoiceArea({
                   isLocallyMuted={localMutedUsers[u.socketId] ?? false}
                   onSetVolume={(vol) => onSetUserVolume(u.socketId, vol)}
                   onToggleMute={() => onToggleUserMute(u.socketId)}
-                  onContextMenu={(e) => handleTileContextMenu(e, u.id, u.username)}
+                  onContextMenu={(e) => handleTileContextMenu(e, u.id, u.username, u)}
                 />
               );
             })
@@ -874,6 +880,7 @@ const VoiceArea = React.memo(function VoiceArea({
           onTouchStart={isPttMode && onPttActivate ? (e) => { e.preventDefault(); onPttActivate(); } : undefined}
           onTouchEnd={isPttMode && onPttDeactivate ? () => onPttDeactivate() : undefined}
           title={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT — Hold to talk') : (isMuted ? 'Unmute' : 'Mute')}
+          aria-label={isPttMode ? (pttActive ? 'Talking (PTT)' : 'PTT — Hold to talk') : (isMuted ? 'Unmute' : 'Mute')}
         >
           <span className="voice-ctrl-icon">
             <MicrophoneIcon size={20} muted={isPttMode ? !pttActive : isMuted} />
@@ -885,6 +892,7 @@ const VoiceArea = React.memo(function VoiceArea({
           className={`voice-ctrl-btn ${isDeafened ? 'danger' : ''}`}
           onClick={onToggleDeafen}
           title={isDeafened ? 'Undeafen' : 'Deafen'}
+          aria-label={isDeafened ? 'Undeafen' : 'Deafen'}
         >
           <span className="voice-ctrl-icon">
             <HeadphoneIcon size={20} deafened={isDeafened} />
@@ -1009,14 +1017,14 @@ const VoiceArea = React.memo(function VoiceArea({
         )}
 
         {!isCapacitorApp() && (isSharingScreen ? (
-          <button className="voice-ctrl-btn danger screen-share-btn" onClick={onStopScreenShare} title="Stop sharing">
+          <button className="voice-ctrl-btn danger screen-share-btn" onClick={onStopScreenShare} title="Stop sharing" aria-label="Stop sharing">
             <span className="voice-ctrl-icon">
               <ScreenShareIcon size={20} />
             </span>
             <span>Stop Share</span>
           </button>
         ) : (
-          <button className="voice-ctrl-btn screen-share-btn" onClick={onStartScreenShare} title="Share screen">
+          <button className="voice-ctrl-btn screen-share-btn" onClick={onStartScreenShare} title="Share screen" aria-label="Share screen">
             <span className="voice-ctrl-icon">
               <ScreenShareIcon size={20} />
             </span>
@@ -1025,7 +1033,7 @@ const VoiceArea = React.memo(function VoiceArea({
         ))}
 
         {onOpenSettings && (
-          <button className="voice-ctrl-btn audio-settings-btn" onClick={() => onOpenSettings('audio')} title="Audio Settings">
+          <button className="voice-ctrl-btn audio-settings-btn" onClick={() => onOpenSettings('audio')} title="Audio Settings" aria-label="Audio Settings">
             <span className="voice-ctrl-icon">
               <SettingsIcon size={20} />
             </span>
@@ -1041,7 +1049,7 @@ const VoiceArea = React.memo(function VoiceArea({
           </div>
         )}
 
-        <button className="voice-ctrl-btn leave" onClick={() => { stopAllSoundboardSources(); onLeave(); }} title="Leave voice">
+        <button className="voice-ctrl-btn leave" onClick={() => { stopAllSoundboardSources(); onLeave(); }} title="Leave voice" aria-label="Leave voice channel">
           <span className="voice-ctrl-icon">
             <PhoneIcon size={20} />
           </span>

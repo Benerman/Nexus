@@ -38,14 +38,14 @@ jobs:
 
       - name: Audit server dependencies
         working-directory: server
-        run: npm audit --audit-level=critical || true
+        run: npm audit --audit-level=high
 
       - name: Audit client dependencies
         working-directory: client
-        run: npm audit --audit-level=critical || true
+        run: npm audit --audit-level=high
 
       - name: Run unit tests with coverage
-        run: npx jest --config tests/jest.config.js --coverage --ci --forceExit
+        run: npx jest --config tests/jest.config.js --coverage --ci --forceExit --coverageThreshold='{"global":{"lines":90,"branches":80,"functions":90,"statements":90}}'
         env:
           NODE_ENV: test
 

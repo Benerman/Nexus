@@ -37,7 +37,7 @@ const ReportModal = ({ target, onSubmit, onClose }) => {
 
   return ReactDOM.createPortal(
     <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+      <div style={modalStyle} role="dialog" aria-modal="true" aria-label="Report user" onClick={e => e.stopPropagation()}>
         <h2 style={{ margin: '0 0 4px', fontSize: 20, color: 'var(--text-primary)' }}>{title}</h2>
         {target?.messagePreview && (
           <div style={{

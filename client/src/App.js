@@ -1175,6 +1175,35 @@ export default function App() {
       }
     });
 
+    // Voice moderation events
+    s.on('voice:kicked', ({ channelId, kickedBy }) => {
+      webrtcRef.current.leaveVoice();
+      setScreenSharerSocketId(null);
+      console.log(`[Voice] Kicked from voice by ${kickedBy}`);
+    });
+    s.on('voice:moved', ({ oldChannelId, newChannelId, movedBy, peers }) => {
+      // Re-establish connections in the new channel
+      setScreenSharerSocketId(null);
+      webrtcRef.current.leaveVoice();
+      // Small delay to allow cleanup, then rejoin new channel
+      setTimeout(() => {
+        webrtcRef.current.joinVoice(newChannelId);
+      }, 500);
+      console.log(`[Voice] Moved to ${newChannelId} by ${movedBy}`);
+    });
+    s.on('voice:server-muted', ({ muted, mutedBy }) => {
+      if (muted && !webrtcRef.current.isMuted) {
+        webrtcRef.current.toggleMute();
+      }
+      console.log(`[Voice] Server-${muted ? 'muted' : 'unmuted'} by ${mutedBy}`);
+    });
+    s.on('voice:server-deafened', ({ deafened, deafenedBy }) => {
+      if (deafened && !webrtcRef.current.isDeafened) {
+        webrtcRef.current.toggleDeafen();
+      }
+      console.log(`[Voice] Server-${deafened ? 'deafened' : 'undeafened'} by ${deafenedBy}`);
+    });
+
     s.on('soundboard:played', (data) => {
       setSoundboardPlayed({ ...data, _ts: Date.now() });
     });
@@ -1895,7 +1924,7 @@ export default function App() {
     setContextMenu({ user, position: { x: event.clientX, y: event.clientY } });
   }, [currentUser]);
 
-  const handleContextMenuAction = useCallback(async (action, user) => {
+  const handleContextMenuAction = useCallback(async (action, user, data) => {
     setContextMenu(null);
 
     if (action === 'send-dm' && socketRef.current) {
@@ -1927,14 +1956,22 @@ export default function App() {
         socketRef.current.emit('server:ban-user', { serverId: activeServerId, userId: user.id });
       }
     } else if (action === 'timeout' && socketRef.current) {
-      const duration = prompt('Timeout duration in minutes:', '10');
-      if (duration && !isNaN(duration) && parseInt(duration) > 0) {
+      const duration = data?.duration;
+      if (duration && duration > 0) {
         socketRef.current.emit('server:timeout-user', {
           serverId: activeServerId,
           userId: user.id,
-          duration: parseInt(duration)
+          duration
         });
       }
+    } else if (action === 'voice-kick' && socketRef.current) {
+      socketRef.current.emit('voice:kick', { serverId: activeServerId, userId: user.id });
+    } else if (action === 'voice-mute' && socketRef.current) {
+      socketRef.current.emit('voice:force-mute', { serverId: activeServerId, userId: user.id, muted: true });
+    } else if (action === 'voice-deafen' && socketRef.current) {
+      socketRef.current.emit('voice:force-deafen', { serverId: activeServerId, userId: user.id, deafened: true });
+    } else if (action === 'voice-move' && socketRef.current && data?.targetChannelId) {
+      socketRef.current.emit('voice:move', { serverId: activeServerId, userId: user.id, targetChannelId: data.targetChannelId });
     }
   }, [activeServerId, showConfirm]);
 
@@ -2296,17 +2333,17 @@ export default function App() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {errorMsg && <div className="global-error">{errorMsg}</div>}
+      {errorMsg && <div className="global-error" role="alert" aria-live="assertive">{errorMsg}</div>}
       {showConnectionBanner && connectionState !== 'connected' && (
-        <div className="connection-banner">
+        <div className="connection-banner" role="alert" aria-live="assertive">
           <span>{connectionState === 'connecting' ? 'Reconnecting...' : 'Disconnected — waiting to reconnect'}</span>
-          <button className="banner-close" onClick={() => setShowConnectionBanner(false)}>&times;</button>
+          <button className="banner-close" onClick={() => setShowConnectionBanner(false)} aria-label="Dismiss connection banner">&times;</button>
         </div>
       )}
       {showReconnectedBanner && (
-        <div className="connection-banner reconnected">
+        <div className="connection-banner reconnected" role="status" aria-live="polite">
           <span>Reconnected</span>
-          <button className="banner-close" onClick={() => setShowReconnectedBanner(false)}>&times;</button>
+          <button className="banner-close" onClick={() => setShowReconnectedBanner(false)} aria-label="Dismiss reconnected banner">&times;</button>
         </div>
       )}
       {updateAvailable && (
@@ -2381,10 +2418,10 @@ export default function App() {
         }}
       />
       {/* Mobile sub-nav bar */}
-      <div className="mobile-nav-bar">
+      <div className="mobile-nav-bar" role="navigation" aria-label="Channel navigation">
         {threadPanel ? (
           <>
-            <button className="mobile-nav-left" onClick={() => setThreadPanel(null)}>
+            <button className="mobile-nav-left" onClick={() => setThreadPanel(null)} aria-label="Back to channel">
               <span className="mobile-nav-arrow">‹</span>
               <span className="mobile-nav-channel" style={{ opacity: 0.7 }}># {activeChannel?.name || 'channel'}</span>
               <span style={{ color: 'var(--text-muted)', margin: '0 2px' }}>|</span>
@@ -2394,29 +2431,29 @@ export default function App() {
           </>
         ) : (
           <>
-            <button className="mobile-nav-left" onClick={() => { setMobileSidebarOpen(o => !o); setMobileMemberListOpen(false); }}>
+            <button className="mobile-nav-left" onClick={() => { setMobileSidebarOpen(o => !o); setMobileMemberListOpen(false); }} aria-label={mobileSidebarOpen ? 'Close sidebar' : 'Open sidebar'}>
               <span className="mobile-nav-arrow">{mobileSidebarOpen ? '‹' : '›'}</span>
               <span className="mobile-nav-channel">{activeChannel?.isDM ? activeChannel?.name : `# ${activeChannel?.name || 'general'}`}</span>
             </button>
             <div className="mobile-nav-actions">
               {activeChannel?.isDM && (
-                <button className="mobile-nav-action-btn" onClick={() => !dmCallActive && handleStartDMCall(activeChannel.id)} title="Start Voice Call">
+                <button className="mobile-nav-action-btn" onClick={() => !dmCallActive && handleStartDMCall(activeChannel.id)} title="Start Voice Call" aria-label="Start Voice Call">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
                 </button>
               )}
-              <button className={`mobile-nav-action-btn${showPinnedPanel ? ' active' : ''}`} onClick={() => { setShowPinnedPanel(p => !p); if (!showPinnedPanel && activeChannel) socketRef.current?.emit('messages:get-pinned', { channelId: activeChannel.id }); }} title="Pinned Messages">
+              <button className={`mobile-nav-action-btn${showPinnedPanel ? ' active' : ''}`} onClick={() => { setShowPinnedPanel(p => !p); if (!showPinnedPanel && activeChannel) socketRef.current?.emit('messages:get-pinned', { channelId: activeChannel.id }); }} title="Pinned Messages" aria-label="Pinned Messages">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>
               </button>
               {!activeChannel?.isDM && (
-                <button className={`mobile-nav-action-btn${showThreadsListPanel ? ' active' : ''}`} onClick={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }} title="Threads">
+                <button className={`mobile-nav-action-btn${showThreadsListPanel ? ' active' : ''}`} onClick={() => { setShowThreadsListPanel(p => !p); if (!showThreadsListPanel && activeChannel) socketRef.current?.emit('thread:list', { channelId: activeChannel.id }); }} title="Threads" aria-label="Threads">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                 </button>
               )}
-              <button className={`mobile-nav-action-btn${showSearchPanel ? ' active' : ''}`} onClick={() => setShowSearchPanel(p => !p)} title="Search">
+              <button className={`mobile-nav-action-btn${showSearchPanel ? ' active' : ''}`} onClick={() => setShowSearchPanel(p => !p)} title="Search" aria-label="Search">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
               </button>
               {!activeServer?.isPersonal && (
-                <button className={`mobile-nav-action-btn${mobileMemberListOpen ? ' active' : ''}`} onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }} title="Members">
+                <button className={`mobile-nav-action-btn${mobileMemberListOpen ? ' active' : ''}`} onClick={() => { setMobileMemberListOpen(o => !o); setMobileSidebarOpen(false); }} title="Members" aria-label="Members">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                 </button>
               )}
@@ -2424,10 +2461,10 @@ export default function App() {
           </>
         )}
       </div>
-      <div className="main-content">
+      <div className="main-content" role="main">
         {/* Media error banner */}
         {webrtc.mediaError && (
-          <div className="media-error-banner">
+          <div className="media-error-banner" role="alert">
             <div className="media-error-icon">&#9888;</div>
             <div className="media-error-text">
               <span className="media-error-title">{webrtc.mediaError.title}</span>
@@ -2440,7 +2477,7 @@ export default function App() {
                   Retry
                 </button>
               )}
-              <button className="media-error-dismiss" onClick={webrtc.clearMediaError}>&times;</button>
+              <button className="media-error-dismiss" onClick={webrtc.clearMediaError} aria-label="Dismiss media error">&times;</button>
             </div>
           </div>
         )}
@@ -2484,6 +2521,7 @@ export default function App() {
               isPttMode={localStorage.getItem('nexus_voice_input_mode') === 'push_to_talk'}
               onPttActivate={webrtc.pttActivate}
               onPttDeactivate={webrtc.pttDeactivate}
+              onUserRightClick={(user, e) => setContextMenu({ user, position: { x: e.clientX, y: e.clientY } })}
             />
           </div>
         )}
@@ -2525,6 +2563,7 @@ export default function App() {
             isPttMode={localStorage.getItem('nexus_voice_input_mode') === 'push_to_talk'}
             onPttActivate={webrtc.pttActivate}
             onPttDeactivate={webrtc.pttDeactivate}
+            onUserRightClick={(user, e) => setContextMenu({ user, position: { x: e.clientX, y: e.clientY } })}
           />
         ) : !activeChannel && !hasRegularServers ? (
           <div className="empty-state">
@@ -2585,6 +2624,7 @@ export default function App() {
             screenShareActive={webrtc.isSharingScreen || Object.keys(webrtc.remoteScreenStreams).length > 0}
             e2eSecretKey={e2eSecretKeyRef.current}
             publicKeyCache={publicKeyCacheRef.current}
+            onAuthorRightClick={(author, e) => setContextMenu({ user: author, position: { x: e.clientX, y: e.clientY } })}
           />
         )}
       </div>
@@ -2633,15 +2673,56 @@ export default function App() {
           onSkip={() => { localStorage.setItem('nexus_onboarding_completed', 'true'); setShowTour(false); }}
         />
       )}
-      {contextMenu && (
-        <UserContextMenu
-          user={contextMenu.user}
-          position={contextMenu.position}
-          currentUser={currentUser}
-          onAction={handleContextMenuAction}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
+      {contextMenu && (() => {
+        // Compute permissions for context menu target
+        const srv = activeServer;
+        let contextMenuPerms = {};
+        if (srv && currentUser && !srv.isPersonal) {
+          if (srv.ownerId === currentUser.id) {
+            contextMenuPerms = { admin: true, kickMembers: true, banMembers: true, moderateMembers: true, muteMembers: true, deafenMembers: true, moveMembers: true };
+          } else {
+            const member = srv.members?.[currentUser.id];
+            if (member) {
+              const everyonePerms = srv.roles?.['everyone']?.permissions || {};
+              const merged = { ...everyonePerms };
+              (member.roles || [])
+                .map(rid => srv.roles?.[rid])
+                .filter(Boolean)
+                .sort((a, b) => (a.position || 0) - (b.position || 0))
+                .forEach(role => Object.assign(merged, role.permissions));
+              if (merged.admin) {
+                Object.keys(merged).forEach(k => merged[k] = true);
+              }
+              contextMenuPerms = merged;
+            }
+          }
+        }
+        // Determine if target user is in a voice channel of the active server
+        let targetInVoice = false;
+        if (contextMenu.user && srv && !srv.isPersonal) {
+          const voiceChans = srv.channels?.voice || [];
+          for (const vc of voiceChans) {
+            const vcData = voiceChannelState[vc.id];
+            if (vcData?.users?.some(u => u.id === contextMenu.user.id)) {
+              targetInVoice = true;
+              break;
+            }
+          }
+        }
+        return (
+          <UserContextMenu
+            user={contextMenu.user}
+            position={contextMenu.position}
+            currentUser={currentUser}
+            onAction={handleContextMenuAction}
+            onClose={() => setContextMenu(null)}
+            permissions={contextMenuPerms}
+            isInVoice={targetInVoice}
+            voiceChannels={activeServer?.channels?.voice || []}
+            serverId={activeServer?.isPersonal ? null : activeServerId}
+          />
+        );
+      })()}
       {profileUser && (
         <UserProfileModal
           user={profileUser}

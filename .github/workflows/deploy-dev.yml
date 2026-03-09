@@ -157,6 +157,20 @@ jobs:
             sleep 3
           done
 
+      - name: Verify dev metrics endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3003/api/metrics)
+          if [ "$STATUS" = "401" ] || [ "$STATUS" = "403" ] || [ "$STATUS" = "200" ]; then
+            echo "Dev metrics endpoint is active (HTTP $STATUS)."
+          else
+            echo "WARNING: Dev metrics endpoint returned unexpected status $STATUS"
+          fi
+
+      - name: Log deployment event
+        run: |
+          DEPLOY_LOG="/opt/nexus-dev/deploy.log"
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DEV deployed commit=${{ github.sha }} branch=${{ github.ref_name }}" >> "$DEPLOY_LOG" || true
+
       - name: Verify production is still healthy
         run: |
           if docker ps --format '{{.Names}}' | grep -q '^nexus-server$'; then

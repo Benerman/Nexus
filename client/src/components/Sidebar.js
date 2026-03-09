@@ -412,7 +412,7 @@ const Sidebar = React.memo(function Sidebar({
     });
 
     return (
-      <div ref={sidebarRef} className={`sidebar sidebar-dm ${className || ''}`} style={{ width }}>
+      <div ref={sidebarRef} className={`sidebar sidebar-dm ${className || ''}`} style={{ width }} role="navigation" aria-label="Channel sidebar">
         <div className="sidebar-resize-handle"
           ref={resizeHandleRef}
           onMouseDown={handleResizeStart}
@@ -422,10 +422,10 @@ const Sidebar = React.memo(function Sidebar({
         <div className="sidebar-header">
           <div className={`sidebar-server-icon ${server?.customIcon ? 'has-custom-icon' : ''}`}>{serverIcon}</div>
           <span className="sidebar-server-name">{server?.name || 'Direct Messages'}</span>
-          <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('profile')} title="Settings">
+          <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('profile')} title="Settings" aria-label="Settings">
             <SettingsIcon size={16} color="currentColor" />
           </button>
-          <button className="sidebar-new-dm-btn" onClick={() => setShowNewMessage(p => !p)} title="New Message">
+          <button className="sidebar-new-dm-btn" onClick={() => setShowNewMessage(p => !p)} title="New Message" aria-label="New Message">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
@@ -437,7 +437,7 @@ const Sidebar = React.memo(function Sidebar({
           <div className="new-message-view">
             <div className="new-msg-header">
               <span>New Message</span>
-              <button className="new-msg-close" onClick={() => { setShowNewMessage(false); setNewMsgSearch(''); setNewMsgResults([]); setNewMsgSelected([]); setNewMsgGroupName(''); }}>×</button>
+              <button className="new-msg-close" onClick={() => { setShowNewMessage(false); setNewMsgSearch(''); setNewMsgResults([]); setNewMsgSelected([]); setNewMsgGroupName(''); }} aria-label="Close new message">×</button>
             </div>
             {newMsgSelected.length > 1 || newMsgGroupName ? (
               <div className="new-msg-field">
@@ -510,6 +510,7 @@ const Sidebar = React.memo(function Sidebar({
                   className="dm-search-clear"
                   onClick={() => setDMSearch('')}
                   title="Clear search"
+                  aria-label="Clear search"
                 >
                   ×
                 </button>
@@ -546,6 +547,7 @@ const Sidebar = React.memo(function Sidebar({
                     <button
                       className="dm-fr-btn accept"
                       title="Accept"
+                      aria-label="Accept friend request"
                       onClick={(e) => { e.stopPropagation(); onFriendAction?.('accept', req.id); }}
                     >
                       ✓
@@ -553,6 +555,7 @@ const Sidebar = React.memo(function Sidebar({
                     <button
                       className="dm-fr-btn ignore"
                       title="Ignore"
+                      aria-label="Ignore friend request"
                       onClick={(e) => { e.stopPropagation(); onFriendAction?.('reject', req.id); }}
                     >
                       ✕
@@ -560,6 +563,7 @@ const Sidebar = React.memo(function Sidebar({
                     <button
                       className="dm-fr-btn block"
                       title="Block"
+                      aria-label="Block user"
                       onClick={(e) => { e.stopPropagation(); onFriendAction?.('block', req.id, from.id); }}
                     >
                       🚫
@@ -598,6 +602,7 @@ const Sidebar = React.memo(function Sidebar({
                     <button
                       className="dm-fr-btn accept"
                       title="Accept"
+                      aria-label="Accept message request"
                       onClick={(e) => { e.stopPropagation(); socket?.emit('dm:message-request:accept', { channelId: req.id }); }}
                     >
                       ✓
@@ -605,6 +610,7 @@ const Sidebar = React.memo(function Sidebar({
                     <button
                       className="dm-fr-btn ignore"
                       title="Ignore"
+                      aria-label="Ignore message request"
                       onClick={(e) => { e.stopPropagation(); socket?.emit('dm:message-request:reject', { channelId: req.id }); }}
                     >
                       ✕
@@ -612,6 +618,7 @@ const Sidebar = React.memo(function Sidebar({
                     <button
                       className="dm-fr-btn block"
                       title="Block"
+                      aria-label="Block user"
                       onClick={(e) => { e.stopPropagation(); socket?.emit('dm:message-request:block', { channelId: req.id }); }}
                     >
                       🚫
@@ -759,7 +766,7 @@ const Sidebar = React.memo(function Sidebar({
 
   // Regular server layout
   return (
-    <div ref={sidebarRef} className={`sidebar ${className || ''}`} style={{ width }}>
+    <div ref={sidebarRef} className={`sidebar ${className || ''}`} style={{ width }} role="navigation" aria-label="Channel sidebar">
       <div className="sidebar-resize-handle"
         ref={resizeHandleRef}
         onMouseDown={handleResizeStart}
@@ -769,7 +776,7 @@ const Sidebar = React.memo(function Sidebar({
       <div className="sidebar-header">
         <div className={`sidebar-server-icon ${server?.customIcon ? 'has-custom-icon' : ''}`}>{serverIcon}</div>
         <span className="sidebar-server-name">{server?.name || 'Nexus'}</span>
-        <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('server-settings')} title="Server settings">
+        <button className="sidebar-settings-btn" onClick={() => onOpenSettings?.('server-settings')} title="Server settings" aria-label="Server settings">
           <SettingsIcon size={16} color="currentColor" />
         </button>
       </div>

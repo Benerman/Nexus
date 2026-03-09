@@ -16,8 +16,8 @@ const ThreadNameModal = ({ onSubmit, onCancel }) => {
 
   return ReactDOM.createPortal(
     <div className="confirm-modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="confirm-modal" onClick={e => e.stopPropagation()}>
-        <h2 className="confirm-modal-title">Start Thread</h2>
+      <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="thread-modal-title" onClick={e => e.stopPropagation()}>
+        <h2 className="confirm-modal-title" id="thread-modal-title">Start Thread</h2>
         <p className="confirm-modal-message">Give this thread a name so others know what it's about.</p>
         <input
           ref={inputRef}
