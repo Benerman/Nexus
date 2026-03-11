@@ -296,7 +296,7 @@ function EmojiPicker({ onSelect, onClose, servers, currentServerId, socket }) {
 }
 
 const ChatArea = React.memo(function ChatArea({
-  channel, messages, typingUsers, currentUser, socket,
+  channel, messages, typingUsers, currentUser, socket, connectionState,
   server, servers, onOpenSettings, memberSidebarVisible, onToggleMemberSidebar,
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
@@ -1354,7 +1354,7 @@ const ChatArea = React.memo(function ChatArea({
           {/* Thread input */}
           <div style={{ padding: '0 16px 16px' }}>
             <div className="chat-input-box">
-              <textarea className="chat-input" placeholder="Reply to thread..." value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && threadInput.trim() && onThreadReply) { e.preventDefault(); onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} rows={1} maxLength={2000} />
+              <textarea className="chat-input" placeholder={connectionState !== 'connected' ? 'Waiting for connection...' : 'Reply to thread...'} value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && threadInput.trim() && onThreadReply) { e.preventDefault(); onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} rows={1} maxLength={2000} disabled={connectionState !== 'connected'} />
               <div className="chat-input-actions">
                 <button className="send-btn" onClick={() => { if (threadInput.trim() && onThreadReply) { onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} disabled={!threadInput.trim()} title="Send">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -1783,10 +1783,10 @@ const ChatArea = React.memo(function ChatArea({
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:'none'}}
             onChange={e=>addFiles(e.target.files)}/>
           <textarea ref={inputRef} className="chat-input"
-            placeholder={channel.messageRequest === 'received' ? 'Accept the message request to reply' : channel.isDM ? `Message @${channel.participant?.username || channel.name}` : 'Start typing...'}
+            placeholder={connectionState !== 'connected' ? 'Waiting for connection...' : channel.messageRequest === 'received' ? 'Accept the message request to reply' : channel.isDM ? `Message @${channel.participant?.username || channel.name}` : 'Start typing...'}
             value={input} onChange={handleInput} onKeyDown={handleKeyDown}
             onPaste={handlePaste} rows={1} maxLength={2000}
-            disabled={channel.messageRequest === 'received'}/>
+            disabled={connectionState !== 'connected' || channel.messageRequest === 'received'}/>
           <div className="chat-input-actions">
             <button className="attach-btn" onClick={()=>fileInputRef.current?.click()} title="Attach image" aria-label="Attach image">
               <AttachmentIcon size={18} color="currentColor" />
