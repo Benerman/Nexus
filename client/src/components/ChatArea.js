@@ -310,6 +310,7 @@ const ChatArea = React.memo(function ChatArea({
   screenShareActive,
   e2eSecretKey, publicKeyCache,
   onAuthorRightClick,
+  unreadDividerMessageId,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -386,21 +387,36 @@ const ChatArea = React.memo(function ChatArea({
         if (savedPos !== undefined) {
           container.scrollTop = savedPos;
           isNearBottomRef.current = checkNearBottom();
+        } else if (unreadDividerMessageId) {
+          // Scroll to the NEW messages divider
+          const dividerEl = container.querySelector('[data-unread-divider]');
+          if (dividerEl) {
+            dividerEl.scrollIntoView({ block: 'center' });
+          } else {
+            container.scrollTop = container.scrollHeight;
+          }
         } else {
           container.scrollTop = container.scrollHeight;
         }
       });
     } else if (pendingScrollRef.current && messages.length > 0) {
-      // Messages arrived after channel switch - force scroll to bottom
+      // Messages arrived after channel switch - scroll to divider or bottom
       pendingScrollRef.current = false;
       requestAnimationFrame(() => {
+        if (unreadDividerMessageId) {
+          const dividerEl = container.querySelector('[data-unread-divider]');
+          if (dividerEl) {
+            dividerEl.scrollIntoView({ block: 'center' });
+            return;
+          }
+        }
         container.scrollTop = container.scrollHeight;
       });
     } else if (isNearBottomRef.current) {
       // Same channel, new message, user was near bottom - smooth scroll
       container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, channel?.id]);
+  }, [messages, channel?.id, unreadDividerMessageId]);
 
   // Auto-focus the message input when switching to a DM channel
   useEffect(() => {
@@ -1418,9 +1434,12 @@ const ChatArea = React.memo(function ChatArea({
           const isEncryptedDM = channel.isDM && channel.type === 'dm' && e2eSecretKey && publicKeyCache?.get(channel.participant?.id);
           const isUnencryptedInEncryptedDM = isEncryptedDM && !msg.encrypted && !msg._encrypted && !msg.isSystem;
 
+          const showUnreadDivider = unreadDividerMessageId && i > 0 && grouped[i-1].id === unreadDividerMessageId;
+
           return (
             <React.Fragment key={msg.id}>
               {showDate && <div className="message-date-divider"><span>{formatDate(msg.timestamp)}</span></div>}
+              {showUnreadDivider && <div className="new-messages-divider" data-unread-divider><span>NEW</span></div>}
               <div
                 ref={el => messageRefs.current[msg.id] = el}
                 data-message-id={msg.id}

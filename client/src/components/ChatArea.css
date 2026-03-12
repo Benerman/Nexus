@@ -140,6 +140,24 @@
   background: var(--bg-modifier-hover);
 }
 
+.new-messages-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 16px;
+  color: var(--badge-danger, #f23f43);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.new-messages-divider::before,
+.new-messages-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--badge-danger, #f23f43);
+}
+
 .message {
   display: flex;
   align-items: flex-start;

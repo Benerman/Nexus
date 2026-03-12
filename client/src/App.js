@@ -117,6 +117,8 @@ export default function App() {
   const [pinnedDMs, setPinnedDMs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nexus_pinned_dms') || '[]'); } catch { return []; }
   });
+  const [unreadDividerMessageId, setUnreadDividerMessageId] = useState(null);
+  const unreadDividerTimerRef = useRef(null);
   const [connectionState, setConnectionState] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
   const [serverUnreachable, setServerUnreachable] = useState(false);
   const [showConnectionBanner, setShowConnectionBanner] = useState(false);
@@ -901,6 +903,12 @@ export default function App() {
           localStorage.setItem('nexus_channel_last_read', JSON.stringify(next));
           return next;
         });
+        // Clear NEW divider when user sends a message in the active channel
+        const cu = currentUserRef.current;
+        if (cu && (msg.author?.id === cu.id || msg.userId === cu.id)) {
+          setUnreadDividerMessageId(null);
+          clearTimeout(unreadDividerTimerRef.current);
+        }
       }
       // Message sound & notifications
       const cu = currentUserRef.current;
@@ -1775,11 +1783,23 @@ export default function App() {
         });
       }
 
-      // Mark server channel as read
+      // Snapshot last-read position for NEW messages divider, then mark as read
+      clearTimeout(unreadDividerTimerRef.current);
       if (!channel.isDM && channel.type !== 'dm' && channel.type !== 'group-dm') {
         const channelMessages = messages[channel.id] || [];
         const lastMsg = channelMessages[channelMessages.length - 1];
+        const lastReadId = channelLastReadRef.current[channel.id];
+        // Show divider if there are messages beyond the last-read position
+        if (lastReadId && lastMsg && lastMsg.id !== lastReadId) {
+          setUnreadDividerMessageId(lastReadId);
+          // Auto-clear after 30 seconds
+          unreadDividerTimerRef.current = setTimeout(() => setUnreadDividerMessageId(null), 30000);
+        } else {
+          setUnreadDividerMessageId(null);
+        }
         if (lastMsg) markChannelRead(channel.id, lastMsg.id);
+      } else {
+        setUnreadDividerMessageId(null);
       }
     } else {
       setActiveChannel(channel);
@@ -2658,6 +2678,7 @@ export default function App() {
             e2eSecretKey={e2eSecretKeyRef.current}
             publicKeyCache={publicKeyCacheRef.current}
             onAuthorRightClick={(author, e) => setContextMenu({ user: author, position: { x: e.clientX, y: e.clientY } })}
+            unreadDividerMessageId={unreadDividerMessageId}
           />
         )}
       </div>
