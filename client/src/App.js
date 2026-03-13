@@ -117,7 +117,10 @@ export default function App() {
   const [pinnedDMs, setPinnedDMs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nexus_pinned_dms') || '[]'); } catch { return []; }
   });
+  const [unreadDividerMessageId, setUnreadDividerMessageId] = useState(null);
+  const unreadDividerTimerRef = useRef(null);
   const [connectionState, setConnectionState] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   const [showConnectionBanner, setShowConnectionBanner] = useState(false);
   const [showReconnectedBanner, setShowReconnectedBanner] = useState(false);
   const connectionBannerTimer = useRef(null);
@@ -190,6 +193,8 @@ export default function App() {
   const e2eSecretKeyRef = useRef(null);
   const publicKeyCacheRef = useRef(new Map());
   const sessionRestored = useRef(false);
+  const socketEverConnected = useRef(false);
+  const authErrorReceived = useRef(false);
   const pendingInviteCode = useRef(null);
   const activeChannelRef = useRef(null);
   const dmCallActiveRef = useRef(null);
@@ -565,7 +570,9 @@ export default function App() {
 
     s.on('connect', () => {
       console.log('[App]  Socket connected' + (isReconnect ? ' (reconnect)' : ''));
+      socketEverConnected.current = true;
       setConnectionState('connected');
+      setServerUnreachable(false);
 
       // Clear reconnection banner timer and show brief "Reconnected" message
       if (connectionBannerTimer.current) {
@@ -896,6 +903,12 @@ export default function App() {
           localStorage.setItem('nexus_channel_last_read', JSON.stringify(next));
           return next;
         });
+        // Clear NEW divider when user sends a message in the active channel
+        const cu = currentUserRef.current;
+        if (cu && (msg.author?.id === cu.id || msg.userId === cu.id)) {
+          setUnreadDividerMessageId(null);
+          clearTimeout(unreadDividerTimerRef.current);
+        }
       }
       // Message sound & notifications
       const cu = currentUserRef.current;
@@ -1276,6 +1289,7 @@ export default function App() {
       // If auth failed, clear stale tokens and disconnect socket so user can log in fresh
       if (message?.toLowerCase().includes('token') || message?.toLowerCase().includes('auth') || message?.toLowerCase().includes('expired') || message?.toLowerCase().includes('invalid')) {
         console.log('[App]  Auth error - clearing stored tokens');
+        authErrorReceived.current = true;
         localStorage.removeItem('nexus_token');
         localStorage.removeItem('nexus_username');
         s.removeAllListeners();
@@ -1622,12 +1636,16 @@ export default function App() {
     if (token && username) {
       handleLogin({ token, username });
 
-      // Safety timeout: if session restore doesn't complete within 5 seconds,
-      // clear tokens and show login screen to prevent being stuck on "Reconnecting..."
+      // Safety timeout: if session restore doesn't complete within 10 seconds,
+      // decide whether to wipe tokens based on whether the server was ever reached
+      socketEverConnected.current = false;
+      authErrorReceived.current = false;
       const timeout = setTimeout(() => {
         setRestoringSession(prev => {
-          if (prev) {
-            console.log('[App]  Session restore timeout - clearing stale tokens');
+          if (!prev) return false;
+          if (socketEverConnected.current && authErrorReceived.current) {
+            // Server was reached but rejected our tokens — they're genuinely stale
+            console.log('[App]  Session restore timeout - auth rejected, clearing stale tokens');
             localStorage.removeItem('nexus_token');
             localStorage.removeItem('nexus_username');
             if (socketRef.current) {
@@ -1636,10 +1654,14 @@ export default function App() {
               socketRef.current = null;
               setSocket(null);
             }
+          } else {
+            // Never connected (network error) — keep tokens, show unreachable screen
+            console.log('[App]  Session restore timeout - server unreachable, keeping tokens');
+            setServerUnreachable(true);
           }
           return false;
         });
-      }, 5000);
+      }, 10000);
 
       // Clean up timeout if component unmounts
       return () => clearTimeout(timeout);
@@ -1761,11 +1783,23 @@ export default function App() {
         });
       }
 
-      // Mark server channel as read
+      // Snapshot last-read position for NEW messages divider, then mark as read
+      clearTimeout(unreadDividerTimerRef.current);
       if (!channel.isDM && channel.type !== 'dm' && channel.type !== 'group-dm') {
         const channelMessages = messages[channel.id] || [];
         const lastMsg = channelMessages[channelMessages.length - 1];
+        const lastReadId = channelLastReadRef.current[channel.id];
+        // Show divider if there are messages beyond the last-read position
+        if (lastReadId && lastMsg && lastMsg.id !== lastReadId) {
+          setUnreadDividerMessageId(lastReadId);
+          // Auto-clear after 30 seconds
+          unreadDividerTimerRef.current = setTimeout(() => setUnreadDividerMessageId(null), 30000);
+        } else {
+          setUnreadDividerMessageId(null);
+        }
         if (lastMsg) markChannelRead(channel.id, lastMsg.id);
+      } else {
+        setUnreadDividerMessageId(null);
       }
     } else {
       setActiveChannel(channel);
@@ -2316,6 +2350,25 @@ export default function App() {
         </div>
       </div>;
     }
+    if (serverUnreachable) {
+      return <div className="app" style={{ display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-primary, #1e1f22)', color:'var(--text-normal, #dbdee1)', height:'100vh' }}>
+        <div style={{ textAlign:'center', maxWidth:320 }}>
+          <div style={{ fontSize:48, marginBottom:16, opacity:0.6 }}>⬡</div>
+          <div style={{ fontSize:20, fontWeight:600, marginBottom:8 }}>Server Unreachable</div>
+          <div style={{ color:'var(--text-muted, #949ba4)', fontSize:14, marginBottom:24 }}>Waiting to reconnect...</div>
+          <button onClick={() => { if (socketRef.current) { socketRef.current.disconnect(); socketRef.current.connect(); } }}
+            style={{ background:'var(--brand-primary, #5865f2)', color:'#fff', border:'none', borderRadius:4, padding:'10px 24px', fontSize:14, fontWeight:600, cursor:'pointer', marginBottom:12, width:'100%' }}>
+            Retry Now
+          </button>
+          <div>
+            <button onClick={() => { localStorage.removeItem('nexus_token'); localStorage.removeItem('nexus_username'); if (socketRef.current) { socketRef.current.removeAllListeners(); socketRef.current.disconnect(); socketRef.current = null; setSocket(null); } setServerUnreachable(false); }}
+              style={{ background:'none', border:'none', color:'var(--text-muted, #949ba4)', fontSize:13, cursor:'pointer', textDecoration:'underline' }}>
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>;
+    }
     return <LoginScreen onLogin={handleLogin} pendingInvite={!!pendingInviteCode.current} onChangeServer={isStandaloneApp() ? handleChangeServer : null} />;
   }
 
@@ -2337,7 +2390,6 @@ export default function App() {
       {showConnectionBanner && connectionState !== 'connected' && (
         <div className="connection-banner" role="alert" aria-live="assertive">
           <span>{connectionState === 'connecting' ? 'Reconnecting...' : 'Disconnected — waiting to reconnect'}</span>
-          <button className="banner-close" onClick={() => setShowConnectionBanner(false)} aria-label="Dismiss connection banner">&times;</button>
         </div>
       )}
       {showReconnectedBanner && (
@@ -2580,7 +2632,8 @@ export default function App() {
         ) : (
           <ChatArea channel={activeChannel} messages={activeMessages}
             typingUsers={activeTyping} currentUser={currentUser}
-            socket={socketRef.current} server={activeServer} servers={servers}
+            socket={socketRef.current} connectionState={connectionState}
+            server={activeServer} servers={servers}
             onOpenSettings={openSettings}
             memberSidebarVisible={memberSidebarVisible}
             onToggleMemberSidebar={toggleMemberSidebar}
@@ -2625,6 +2678,7 @@ export default function App() {
             e2eSecretKey={e2eSecretKeyRef.current}
             publicKeyCache={publicKeyCacheRef.current}
             onAuthorRightClick={(author, e) => setContextMenu({ user: author, position: { x: e.clientX, y: e.clientY } })}
+            unreadDividerMessageId={unreadDividerMessageId}
           />
         )}
       </div>

@@ -296,7 +296,7 @@ function EmojiPicker({ onSelect, onClose, servers, currentServerId, socket }) {
 }
 
 const ChatArea = React.memo(function ChatArea({
-  channel, messages, typingUsers, currentUser, socket,
+  channel, messages, typingUsers, currentUser, socket, connectionState,
   server, servers, onOpenSettings, memberSidebarVisible, onToggleMemberSidebar,
   hasMore, onFetchOlderMessages,
   onStartDMCall, dmCallActive, onlineUsers, friends,
@@ -310,6 +310,7 @@ const ChatArea = React.memo(function ChatArea({
   screenShareActive,
   e2eSecretKey, publicKeyCache,
   onAuthorRightClick,
+  unreadDividerMessageId,
 }) {
   console.log('[ChatArea] RENDER - channel:', channel?.name, 'messages:', messages.length);
 
@@ -386,21 +387,36 @@ const ChatArea = React.memo(function ChatArea({
         if (savedPos !== undefined) {
           container.scrollTop = savedPos;
           isNearBottomRef.current = checkNearBottom();
+        } else if (unreadDividerMessageId) {
+          // Scroll to the NEW messages divider
+          const dividerEl = container.querySelector('[data-unread-divider]');
+          if (dividerEl) {
+            dividerEl.scrollIntoView({ block: 'center' });
+          } else {
+            container.scrollTop = container.scrollHeight;
+          }
         } else {
           container.scrollTop = container.scrollHeight;
         }
       });
     } else if (pendingScrollRef.current && messages.length > 0) {
-      // Messages arrived after channel switch - force scroll to bottom
+      // Messages arrived after channel switch - scroll to divider or bottom
       pendingScrollRef.current = false;
       requestAnimationFrame(() => {
+        if (unreadDividerMessageId) {
+          const dividerEl = container.querySelector('[data-unread-divider]');
+          if (dividerEl) {
+            dividerEl.scrollIntoView({ block: 'center' });
+            return;
+          }
+        }
         container.scrollTop = container.scrollHeight;
       });
     } else if (isNearBottomRef.current) {
       // Same channel, new message, user was near bottom - smooth scroll
       container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, channel?.id]);
+  }, [messages, channel?.id, unreadDividerMessageId]);
 
   // Auto-focus the message input when switching to a DM channel
   useEffect(() => {
@@ -1354,7 +1370,7 @@ const ChatArea = React.memo(function ChatArea({
           {/* Thread input */}
           <div style={{ padding: '0 16px 16px' }}>
             <div className="chat-input-box">
-              <textarea className="chat-input" placeholder="Reply to thread..." value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && threadInput.trim() && onThreadReply) { e.preventDefault(); onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} rows={1} maxLength={2000} />
+              <textarea className="chat-input" placeholder={connectionState !== 'connected' ? 'Waiting for connection...' : 'Reply to thread...'} value={threadInput} onChange={e => setThreadInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && threadInput.trim() && onThreadReply) { e.preventDefault(); onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} rows={1} maxLength={2000} disabled={connectionState !== 'connected'} />
               <div className="chat-input-actions">
                 <button className="send-btn" onClick={() => { if (threadInput.trim() && onThreadReply) { onThreadReply(threadPanel.channelId, threadPanel.threadId, threadInput); setThreadInput(''); } }} disabled={!threadInput.trim()} title="Send">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -1418,9 +1434,12 @@ const ChatArea = React.memo(function ChatArea({
           const isEncryptedDM = channel.isDM && channel.type === 'dm' && e2eSecretKey && publicKeyCache?.get(channel.participant?.id);
           const isUnencryptedInEncryptedDM = isEncryptedDM && !msg.encrypted && !msg._encrypted && !msg.isSystem;
 
+          const showUnreadDivider = unreadDividerMessageId && i > 0 && grouped[i-1].id === unreadDividerMessageId;
+
           return (
             <React.Fragment key={msg.id}>
               {showDate && <div className="message-date-divider"><span>{formatDate(msg.timestamp)}</span></div>}
+              {showUnreadDivider && <div className="new-messages-divider" data-unread-divider><span>NEW</span></div>}
               <div
                 ref={el => messageRefs.current[msg.id] = el}
                 data-message-id={msg.id}
@@ -1783,10 +1802,10 @@ const ChatArea = React.memo(function ChatArea({
           <input ref={fileInputRef} type="file" accept="image/*" multiple style={{display:'none'}}
             onChange={e=>addFiles(e.target.files)}/>
           <textarea ref={inputRef} className="chat-input"
-            placeholder={channel.messageRequest === 'received' ? 'Accept the message request to reply' : channel.isDM ? `Message @${channel.participant?.username || channel.name}` : 'Start typing...'}
+            placeholder={connectionState !== 'connected' ? 'Waiting for connection...' : channel.messageRequest === 'received' ? 'Accept the message request to reply' : channel.isDM ? `Message @${channel.participant?.username || channel.name}` : 'Start typing...'}
             value={input} onChange={handleInput} onKeyDown={handleKeyDown}
             onPaste={handlePaste} rows={1} maxLength={2000}
-            disabled={channel.messageRequest === 'received'}/>
+            disabled={connectionState !== 'connected' || channel.messageRequest === 'received'}/>
           <div className="chat-input-actions">
             <button className="attach-btn" onClick={()=>fileInputRef.current?.click()} title="Attach image" aria-label="Attach image">
               <AttachmentIcon size={18} color="currentColor" />
