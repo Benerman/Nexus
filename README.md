@@ -32,6 +32,7 @@ See [docs/deployment/DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md)
 
 ### Messaging
 - Text channels with message editing, deletion, and replies
+- Threaded conversations with per-thread reply counts
 - Markdown rendering with sanitized HTML
 - Image and GIF attachments (paste, drag-drop, or upload; up to 4 per message)
 - GIF picker with Giphy integration
@@ -42,6 +43,10 @@ See [docs/deployment/DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md)
 - Typing indicators
 - Infinite scroll with message history pagination
 - Message grouping by author with date separators
+- NEW messages divider — red "NEW" line marks where unread messages start on channel switch
+- Pinned messages panel per channel
+- Message bookmarks / saved messages
+- Message search with advanced operators
 
 ### Search Operators
 
@@ -73,22 +78,30 @@ Combine operators with free text: `hello world from:alice in:general has:link`
 | `/quack` | Random duck image |
 
 ### Voice Chat
-- WebRTC peer-to-peer audio with STUN server support
+- WebRTC peer-to-peer audio with STUN/TURN server support
+- Push-to-Talk (PTT) mode with configurable keybind (desktop and mobile)
 - Screen sharing with dedicated video tiles
 - Speaking detection with visual indicators
 - Per-user volume controls and local mute
 - Mute and deafen controls with state persistence
+- Voice channel persistence — auto-rejoin on page reload (web and desktop)
 - Custom intro/exit sounds per user
 - Soundboard with 16 built-in sounds and custom upload support
 - Self-hosted STUN/TURN support with bundled coturn option
+- AI noise cancellation (RNNoise WASM) with Low/Medium/High aggressiveness
+- Audio processing pipeline: noise suppression, noise gate, AGC (leveler + limiter), compressor
 
 ### Direct Messaging
 - 1-on-1 and group DMs (3+ participants)
+- End-to-end encryption for 1:1 DMs (X25519 key exchange, NaCl/libsodium)
+- Key backup/recovery with passphrase-encrypted export
+- Device verification via key fingerprints
 - Real-time DM creation with instant recipient notification
 - Unread count badges and last message previews
 - DM search and filtering
 - Pinnable DM conversations to the server list
 - DM voice/video calls with incoming call overlay
+- Message request system for non-friends
 
 ### Servers and Channels
 - Multi-server support with custom names, icons, and descriptions
@@ -97,18 +110,28 @@ Combine operators with free text: `hello world from:alice in:general has:link`
 - Private channels with per-role permission overrides
 - Server invite system with optional expiration and usage limits
 - Channel reordering within and across categories
+- Server order persistence (drag and drop)
 
 ### Roles and Permissions
-12 granular permissions with role hierarchy:
+18 granular permissions with role hierarchy:
 
-`viewChannel` `sendMessages` `attachFiles` `joinVoice` `readHistory` `addReactions` `mentionEveryone` `manageMessages` `manageChannels` `manageRoles` `manageServer` `admin`
+`viewChannel` `sendMessages` `attachFiles` `joinVoice` `readHistory` `addReactions` `mentionEveryone` `manageMessages` `manageChannels` `manageRoles` `manageServer` `manageEmojis` `createInvite` `sendTargetedSounds` `kickMembers` `banMembers` `muteMembers/deafenMembers/moveMembers` `moderateMembers` `admin`
 
-Permissions resolve through role stacking with channel-level overrides.
+Permissions resolve through role stacking with channel-level overrides. Server owners bypass all checks.
 
 ### Moderation
-- Kick, ban, and timeout users (admin only)
+- Context menu moderation actions — right-click users in member list, voice tiles, or chat messages
+- Kick, ban, and timeout users with granular permission checks
+- Voice moderation: server mute, server deafen, move to channel, kick from voice
+- Timeout durations: 60s, 5m, 10m, 1h, 1d, 1w
+- AutoMod system with configurable rules:
+  - Keyword filter (block messages containing specific words/phrases)
+  - Spam detection (duplicate message throttling)
+  - Invite link blocking
+  - Configurable actions: warn, delete, timeout, ban
 - Server bans persisted in database
 - User reports with review/action/dismiss workflow
+- Audit log tracking moderation actions
 - Message deletion by author or admin
 
 ### Social
@@ -117,6 +140,12 @@ Permissions resolve through role stacking with channel-level overrides.
 - User profiles with custom avatars, bios, status, and display color
 - Online/idle/DND/invisible status indicators
 - Context menus on right-click (users and messages)
+
+### Themes
+- 11 built-in themes: Dark (default), Retro, Terminal, Light, Neon, Blue, Cherry, Amber, Synthwave, Vaporwave, Forest, Cyberpunk
+- Custom theme editor — create your own theme with color pickers
+- Theme-specific visual effects (3D borders for Retro, neon glow for Neon, monospace for Terminal, etc.)
+- WCAG AA contrast compliance across all themes
 
 ### Custom Emoji
 - Upload custom emoji per server (up to 50)
@@ -179,9 +208,10 @@ curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
 |-------|-----------|
 | Frontend | React 18, Socket.IO Client, WebRTC |
 | Backend | Express, Socket.IO, Node.js |
-| Database | PostgreSQL 15 (JSONB), 10 migration files |
+| Database | PostgreSQL 15 (JSONB), 18 migration files |
 | Cache | Redis 7 (AOF persistence) |
 | Proxy | Nginx with WebSocket upgrade support |
+| Logging | Winston (structured JSON logs with audit trail) |
 | Deployment | Docker Compose |
 
 ---
@@ -192,7 +222,7 @@ curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
 nexus/
 +-- client/                    # React frontend
 |   +-- src/
-|   |   +-- components/        # 26 UI components
+|   |   +-- components/        # 30+ UI components
 |   |   |   +-- ChatArea.js        Messages, input, attachments
 |   |   |   +-- VoiceArea.js       WebRTC tiles, controls, soundboard
 |   |   |   +-- Sidebar.js         Channels (server) / DMs (personal)
@@ -203,6 +233,7 @@ nexus/
 |   |   |   |                      server settings, channels, roles, members,
 |   |   |   |                      webhooks, soundboard, emojis, moderation,
 |   |   |   |                      platform admin, about)
+|   |   |   +-- ErrorBoundary.js   Graceful error recovery
 |   |   |   +-- GifPicker.js       Giphy integration
 |   |   |   +-- CommandMessage.js  Slash command output renderer
 |   |   |   +-- PollCreator.js     Poll creation modal
@@ -213,23 +244,32 @@ nexus/
 |   |   +-- hooks/
 |   |   |   +-- useWebRTC.js       Voice, screen share, peer management
 |   |   |   +-- useLongPress.js    Mobile long-press gesture
+|   |   +-- utils/
+|   |   |   +-- encryption.js      E2E encryption (NaCl/libsodium)
 |   |   +-- App.js                 Root state management, socket handlers
 |   |   +-- config.js              Server URL resolver (web/native)
+|   +-- public/
+|   |   +-- service-worker.js      Offline app shell caching
+|   |   +-- audio-processor.js     AudioWorklet (noise gate, AGC, RNNoise)
 |   +-- Dockerfile                 Multi-stage: Node build + Nginx serve
 |   +-- nginx.conf                 Reverse proxy with WSS support
 |
 +-- server/                    # Node.js backend
-|   +-- index.js               # Express + Socket.IO (103 socket events)
+|   +-- index.js               # Express + Socket.IO (133 socket events)
+|   +-- handlers/              # 14 socket event handler modules
 |   +-- db.js                  # PostgreSQL queries (100+ functions)
 |   +-- config.js              # Environment configuration
 |   +-- validation.js          # Input validation and sanitization
+|   +-- metrics.js             # Runtime metrics (connections, rates, errors)
 |   +-- default-sounds.js      # 16 procedurally generated WAV sounds
-|   +-- migrations/            # Database schema (10 files)
+|   +-- migrations/            # Database schema (18 files)
 |   +-- Dockerfile
 |
-+-- tests/                     # 299 automated tests + 40 manual test cases
++-- tests/                     # 378 automated tests + 93 manual test cases
 +-- docs/                      # Documentation
-+-- docker-compose.yml         # Production orchestration
++-- docker-compose.yml         # Base orchestration
++-- docker-compose.prod.yml    # Production overrides
++-- docker-compose.dev.yml     # Development overrides
 ```
 
 ---
@@ -293,11 +333,11 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 
 ## Database
 
-10 migration files manage the schema across 18 tables:
+18 migration files manage the schema across 24 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `accounts` | Users, credentials, profiles |
+| `accounts` | Users, credentials, profiles, E2E public keys |
 | `tokens` | Authentication sessions |
 | `servers` | Server definitions |
 | `server_members` | Membership records with JSONB roles |
@@ -313,14 +353,21 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 | `custom_emojis` | Per-server custom emoji |
 | `server_bans` / `server_timeouts` | Moderation records |
 | `reports` | User reports |
+| `pins` / `bookmarks` | Pinned and saved messages |
+| `threads` | Threaded conversations |
+| `audit_log` | Moderation action audit trail |
+| `moderation_rules` | AutoMod configuration per server |
+| `recovery_codes` | Account recovery codes |
 
 ---
 
 ## Testing
 
-299 automated tests across 13 suites covering validation, utils, permissions, config, and security. Run with `npm test` from `server/`. Tests run standalone without the full server stack.
+378 automated tests across 13+ suites covering validation, utils, permissions, config, security, voice, LAN mode, and ICE configuration. Run with `npm test` from `server/`. Tests run standalone without the full server stack.
 
-40 manual test cases across 8 categories (auth, messaging, channels, emoji, voice, social, moderation, UI) in `tests/manual/`.
+93 manual test cases across 8 categories (auth, messaging, channels, emoji, voice/soundboard, social/DMs, moderation, UI) in `tests/manual/`.
+
+Performance and stress test suite in `tests/stress/` for load testing and latency benchmarking.
 
 ---
 
@@ -329,12 +376,15 @@ curl -X POST http://localhost:3001/api/server/:serverId/icon \
 - Password hashing: bcrypt (12 rounds) with auto-migration from legacy hashes
 - Minimum 8-character passwords enforced
 - Token-based authentication with configurable expiration and logout revocation
+- End-to-end encryption for 1:1 DMs (X25519 + NaCl, server never sees plaintext)
 - Rate limiting on messages, API routes, socket events, and webhook endpoints
 - SSRF protection on URL preview endpoint (private IP blocking)
 - Input validation and sanitization on all user input
 - Helmet.js security headers (CSP, X-Frame-Options, HSTS)
 - CORS restricted to configured client origin
 - Markdown sanitized via rehype-sanitize
+- Service worker for offline app shell caching
+- Error boundary for graceful crash recovery
 
 ---
 
@@ -345,6 +395,7 @@ Nexus can run fully offline on a local network with no external dependencies.
 - **Per-server toggle** in Server Settings → Channels (owner/admin only)
 - **Disables** GIF picker, URL previews, and external STUN servers
 - **Self-hosted fonts** — no Google Fonts dependency (fonts are bundled)
+- **Service worker** caches the app shell so the client loads even if the server is temporarily unreachable
 - **Voice on LAN** works out of the box on the same subnet; for cross-subnet voice, pair with self-hosted coturn
 
 For full STUN/TURN configuration options, see [docs/STUN_TURN.md](docs/STUN_TURN.md).
@@ -356,14 +407,16 @@ docker-compose -f docker-compose.yml -f docker-compose.coturn.yml up -d --build
 
 ---
 
-## Cross-Platform (Planned)
+## Cross-Platform
 
-Build pipeline configured for:
-- **Web** (current) - Docker + Nginx
-- **Android / iOS** - Capacitor (`capacitor.config.ts` present)
-- **Windows / macOS / Linux** - Tauri (`src-tauri/` configured) and Electron (`electron/` configured)
+- **Web** (primary) — Docker + Nginx
+- **Windows / macOS / Linux** — Tauri desktop app (auto-update, tray icon, native menus)
+- **Android / iOS** — Capacitor mobile builds
+- **Electron** — Fallback desktop option
 
-See [docs/CROSS_PLATFORM_PLAN.md](docs/CROSS_PLATFORM_PLAN.md) for details.
+Download pre-built binaries from the [releases page](https://github.com/Benerman/Nexus/releases/latest).
+
+See [docs/CROSS_PLATFORM_PLAN.md](docs/CROSS_PLATFORM_PLAN.md) for build details.
 
 ---
 
