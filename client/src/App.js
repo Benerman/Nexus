@@ -94,7 +94,7 @@ export default function App() {
   const [messages, setMessages] = useState({});
   const [channelHasMore, setChannelHasMore] = useState({});
   const [typingUsers, setTypingUsers] = useState({});
-  const [screenSharerSocketId, setScreenSharerSocketId] = useState(null);
+  const [screenSharerSocketIds, setScreenSharerSocketIds] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState('profile');
   const [errorMsg, setErrorMsg] = useState(null);
@@ -1155,12 +1155,12 @@ export default function App() {
     s.on('voice:channel:update', ({ channelId, channel }) =>
       setVoiceChannelState(prev => ({ ...prev, [channelId]: channel })));
 
-    s.on('screen:started', ({ socketId }) => setScreenSharerSocketId(socketId));
+    s.on('screen:started', ({ socketId }) => setScreenSharerSocketIds(prev => prev.includes(socketId) ? prev : [...prev, socketId]));
     s.on('screen:stopped', ({ socketId }) => {
-      setScreenSharerSocketId(prev => prev === socketId ? null : prev);
+      setScreenSharerSocketIds(prev => prev.filter(id => id !== socketId));
     });
-    s.on('voice:joined', ({ peers, screenSharerId }) => {
-      if (screenSharerId) setScreenSharerSocketId(screenSharerId);
+    s.on('voice:joined', ({ peers, screenSharerIds }) => {
+      setScreenSharerSocketIds(screenSharerIds || []);
       webrtcRef.current.initExistingPeers(peers || []);
     });
 
@@ -2540,12 +2540,13 @@ export default function App() {
               voiceChannelData={voiceChannelState[dmCallActive]}
               remoteStreams={webrtc.remoteStreams} localStream={webrtc.localStream}
               remoteScreenStreams={webrtc.remoteScreenStreams}
+              remoteScreenThumbnails={webrtc.remoteScreenThumbnails}
               screenStream={webrtc.screenStream} isMuted={webrtc.isMuted}
               isDeafened={webrtc.isDeafened} isSharingScreen={webrtc.isSharingScreen}
               isWatchingScreen={webrtc.isWatchingScreen}
               isScreenAudioMuted={webrtc.isScreenAudioMuted}
               activeSpeakers={webrtc.activeSpeakers} audioLevels={webrtc.audioLevels}
-              screenSharerSocketId={screenSharerSocketId}
+              screenSharerSocketIds={screenSharerSocketIds}
               remoteUserStates={webrtc.remoteUserStates}
               userVolumes={webrtc.userVolumes}
               localMutedUsers={webrtc.localMutedUsers}
@@ -2582,12 +2583,13 @@ export default function App() {
             voiceChannelData={voiceChannelState[activeChannel?.id]}
             remoteStreams={webrtc.remoteStreams} localStream={webrtc.localStream}
             remoteScreenStreams={webrtc.remoteScreenStreams}
+            remoteScreenThumbnails={webrtc.remoteScreenThumbnails}
             screenStream={webrtc.screenStream} isMuted={webrtc.isMuted}
             isDeafened={webrtc.isDeafened} isSharingScreen={webrtc.isSharingScreen}
             isWatchingScreen={webrtc.isWatchingScreen}
             isScreenAudioMuted={webrtc.isScreenAudioMuted}
             activeSpeakers={webrtc.activeSpeakers} audioLevels={webrtc.audioLevels}
-            screenSharerSocketId={screenSharerSocketId}
+            screenSharerSocketIds={screenSharerSocketIds}
             remoteUserStates={webrtc.remoteUserStates}
             userVolumes={webrtc.userVolumes}
             localMutedUsers={webrtc.localMutedUsers}

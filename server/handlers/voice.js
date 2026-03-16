@@ -304,7 +304,7 @@ module.exports = function(io, socket) {
         const u = state.users[s];
         return u ? { socketId: s, user: u, isMuted: u.isMuted || false, isDeafened: u.isDeafened || false } : null;
       }).filter(Boolean),
-      screenSharerId: ch.screenSharers?.[0] || null
+      screenSharerIds: ch.screenSharers || []
     });
     socket.to(`voice:${channelId}`).emit('peer:joined', { socketId: socket.id, user });
     io.emit('voice:channel:update', { channelId, channel: { ...ch, users: ch.users.map(s=>state.users[s]).filter(Boolean) } });
@@ -603,6 +603,13 @@ module.exports = function(io, socket) {
     console.log(`[Voice] ${user?.username || 'Unknown'} stopped screen share in ${channelId}`);
     io.to(`voice:${channelId}`).emit('screen:stopped', { socketId: socket.id });
     io.emit('voice:channel:update', { channelId, channel: { ...ch, users: ch.users.map(s=>state.users[s]).filter(Boolean) } });
+  });
+
+  socket.on('screen:thumbnail', ({ channelId, thumbnail }) => {
+    const ch = state.voiceChannels[channelId];
+    if (!ch || !ch.screenSharers.includes(socket.id)) return;
+    if (typeof thumbnail !== 'string' || thumbnail.length > 70000) return; // ~50KB guard
+    socket.to(`voice:${channelId}`).emit('screen:thumbnail', { socketId: socket.id, thumbnail });
   });
 
   socket.on('screen:watch', ({ sharerId }) => {
