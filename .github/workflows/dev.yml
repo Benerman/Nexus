@@ -302,31 +302,26 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore
 
-      - name: Build signed release AAB
+      - name: Build signed release APK
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew bundleRelease \
+          ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/nexus-release.keystore \
             -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
             -Pandroid.injected.signing.key.alias=nexus-key \
             -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
 
-      - name: Verify AAB exists
-        id: find-aab
+      - name: Find and rename APK
+        id: find-apk
         run: |
-          echo "=== All AAB files produced ==="
-          find client/android -name "*.aab" -type f
-          AAB_PATH=$(find client/android/app/build/outputs/bundle -name "*.aab" -type f | head -1)
-          if [ -z "$AAB_PATH" ]; then
-            echo "::error::No AAB file found after build!"
-            exit 1
-          fi
-          echo "Found AAB: $AAB_PATH"
-          echo "aab_path=$AAB_PATH" >> "$GITHUB_OUTPUT"
+          APK_RAW=$(find client/android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK_RAW" ]; then echo "::error::No APK found!" && exit 1; fi
+          echo "Found APK: $APK_RAW"
+          echo "apk_path=$APK_RAW" >> "$GITHUB_OUTPUT"
 
-      - name: Upload AAB to release
+      - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.create-release.outputs.tag }}
-          files: ${{ steps.find-aab.outputs.aab_path }}
+          files: ${{ steps.find-apk.outputs.apk_path }}
