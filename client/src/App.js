@@ -1175,7 +1175,7 @@ export default function App() {
     s.on('dm:call-ended', ({ channelId }) => {
       if (dmCallActiveRef.current === channelId) {
         webrtcRef.current.leaveVoice();
-        setScreenSharerSocketId(null);
+        setScreenSharerSocketIds([]);
       }
       setDmCallActive(prev => prev === channelId ? null : prev);
       setIncomingCall(prev => prev?.channelId === channelId ? null : prev);
@@ -1184,19 +1184,19 @@ export default function App() {
       if (dmCallActiveRef.current === channelId) {
         webrtcRef.current.leaveVoice();
         setDmCallActive(null);
-        setScreenSharerSocketId(null);
+        setScreenSharerSocketIds([]);
       }
     });
 
     // Voice moderation events
     s.on('voice:kicked', ({ channelId, kickedBy }) => {
       webrtcRef.current.leaveVoice();
-      setScreenSharerSocketId(null);
+      setScreenSharerSocketIds([]);
       console.log(`[Voice] Kicked from voice by ${kickedBy}`);
     });
     s.on('voice:moved', ({ oldChannelId, newChannelId, movedBy, peers }) => {
       // Re-establish connections in the new channel
-      setScreenSharerSocketId(null);
+      setScreenSharerSocketIds([]);
       webrtcRef.current.leaveVoice();
       // Small delay to allow cleanup, then rejoin new channel
       setTimeout(() => {
@@ -1811,7 +1811,7 @@ export default function App() {
 
   const handleLeaveVoice = useCallback(() => {
     webrtcRef.current.leaveVoice();
-    setScreenSharerSocketId(null);
+    setScreenSharerSocketIds([]);
     if (channels.text.length > 0) {
       const ch = channels.text[0];
       setActiveChannel(ch);
@@ -1877,7 +1877,7 @@ export default function App() {
 
   const handleLeaveDMCall = useCallback(() => {
     webrtcRef.current.leaveVoice();
-    setScreenSharerSocketId(null);
+    setScreenSharerSocketIds([]);
     setDmCallActive(null);
   }, []);
 
