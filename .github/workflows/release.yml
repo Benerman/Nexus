@@ -340,27 +340,44 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore
 
-      - name: Build signed release APK
+      - name: Build signed release APK and AAB
         working-directory: client/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease bundleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/nexus-release.keystore \
             -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
             -Pandroid.injected.signing.key.alias=nexus-key \
             -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
 
-      - name: Find and rename APK
+      - name: Find and rename artifacts
         id: find-artifacts
         run: |
           APK_RAW=$(find client/android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          AAB_RAW=$(find client/android/app/build/outputs/bundle/release -name "*.aab" -type f | head -1)
           if [ -z "$APK_RAW" ]; then echo "::error::No APK found!" && exit 1; fi
+          if [ -z "$AAB_RAW" ]; then echo "::error::No AAB found!" && exit 1; fi
           APK_OUT="client/android/nexus-v${{ needs.prepare.outputs.version }}.apk"
+          AAB_OUT="client/android/nexus-v${{ needs.prepare.outputs.version }}.aab"
           mv "$APK_RAW" "$APK_OUT"
+          mv "$AAB_RAW" "$AAB_OUT"
           echo "apk_path=$APK_OUT" >> "$GITHUB_OUTPUT"
+          echo "aab_path=$AAB_OUT" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK to release
+      - name: Upload APK to public release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           files: ${{ steps.find-artifacts.outputs.apk_path }}
+
+      - name: Upload AAB to draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aab-${{ needs.prepare.outputs.tag }}
+          name: "Nexus v${{ needs.prepare.outputs.version }} AAB (Play Store)"
+          body: |
+            Android App Bundle for Play Store submission only.
+            **Not for direct installation.** Use the APK from the main release for sideloading.
+          draft: true
+          prerelease: false
+          files: ${{ steps.find-artifacts.outputs.aab_path }}
