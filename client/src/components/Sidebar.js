@@ -385,7 +385,7 @@ const Sidebar = React.memo(function Sidebar({
                 : <span>{u.avatar}</span>}
             </div>
             <span className="voice-user-name">{u.username}</span>
-            {chData.screenSharerId === u.socketId && <span title="Screen sharing">SCREEN</span>}
+            {chData.screenSharers?.includes(u.socketId) && <span title="Screen sharing">SCREEN</span>}
           </div>
         ))}
       </div>

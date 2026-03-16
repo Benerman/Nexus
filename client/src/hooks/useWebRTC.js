@@ -135,6 +135,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   const [isWatchingScreen, setIsWatchingScreen] = useState(false);
   const [isScreenAudioMuted, setIsScreenAudioMuted] = useState(false);
   const [remoteScreenStreams, setRemoteScreenStreams] = useState({}); // socketId -> screen share MediaStream
+  const [remoteScreenThumbnails, setRemoteScreenThumbnails] = useState({}); // socketId -> jpeg data URL
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [activeSpeakers, setActiveSpeakers] = useState(new Set());
   const [voiceStatus, setVoiceStatus] = useState(VOICE_STATUS.DISCONNECTED);
@@ -160,6 +161,9 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   const screenStreamRef = useRef(null);
   const screenSendersRef = useRef({});  // peerSocketId -> [RTCRtpSender]
   const screenStreamIdsRef = useRef(new Set()); // track remote screen share stream IDs
+  const thumbnailIntervalRef = useRef(null); // setInterval ID for local thumbnail capture
+  const thumbnailVideoRef = useRef(null);    // hidden <video> for frame capture
+  const thumbnailCanvasRef = useRef(null);   // <canvas> for JPEG encoding
   const audioContextRef = useRef(null);
   const analyserRef = useRef({});
   const preDeafenMuteStateRef = useRef(false);  // Track mute state before deafening
@@ -435,6 +439,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       delete screenSendersRef.current[socketId];
       setRemoteStreams(prev => { const n={...prev}; delete n[socketId]; return n; });
       setRemoteScreenStreams(prev => { const n={...prev}; delete n[socketId]; return n; });
+      setRemoteScreenThumbnails(prev => { const n={...prev}; delete n[socketId]; return n; });
       // Clean up speaking detection for this peer
       if (speakingIntervalsRef.current[socketId]) {
         clearInterval(speakingIntervalsRef.current[socketId]);
@@ -568,8 +573,13 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       }
     };
 
+    const handleScreenThumbnail = ({ socketId, thumbnail }) => {
+      setRemoteScreenThumbnails(prev => ({ ...prev, [socketId]: thumbnail }));
+    };
+
     // When a specific user's screen share stops, clean up only that sharer's stream
     const handleScreenStopped = ({ socketId }) => {
+      setRemoteScreenThumbnails(prev => { const n={...prev}; delete n[socketId]; return n; });
       setRemoteScreenStreams(prev => {
         const next = { ...prev };
         delete next[socketId];
@@ -593,6 +603,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     socket.on('screen:add-viewer', handleAddViewer);
     socket.on('screen:remove-viewer', handleRemoveViewer);
     socket.on('screen:stopped', handleScreenStopped);
+    socket.on('screen:thumbnail', handleScreenThumbnail);
 
     return () => {
       socket.off('peer:joined', handlePeerJoined);
@@ -606,6 +617,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
       socket.off('screen:add-viewer', handleAddViewer);
       socket.off('screen:remove-viewer', handleRemoveViewer);
       socket.off('screen:stopped', handleScreenStopped);
+      socket.off('screen:thumbnail', handleScreenThumbnail);
     };
   }, [socket, createPeer, currentUser]);
 
@@ -1232,6 +1244,9 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
     setLocalStream(null);
+    if (thumbnailIntervalRef.current) { clearInterval(thumbnailIntervalRef.current); thumbnailIntervalRef.current = null; }
+    if (thumbnailVideoRef.current) { thumbnailVideoRef.current.srcObject = null; thumbnailVideoRef.current = null; }
+    thumbnailCanvasRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
     setScreenStream(null);
@@ -1239,6 +1254,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     screenSendersRef.current = {};
     setRemoteStreams({});
     setRemoteScreenStreams({});
+    setRemoteScreenThumbnails({});
     setIsWatchingScreen(false);
     setIsScreenAudioMuted(false);
     screenStreamIdsRef.current.clear();
@@ -1310,6 +1326,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     setLocalStream(null);
     setRemoteStreams({});
     setRemoteScreenStreams({});
+    setRemoteScreenThumbnails({});
     screenStreamIdsRef.current.clear();
 
     // Clean up speaking detection
@@ -1545,6 +1562,36 @@ export function useWebRTC(socket, currentUser, activeServerId) {
 
       socket.emit('screen:start', { channelId });
 
+      // Start thumbnail capture: hidden video → canvas → JPEG every 10s
+      const thumbVideo = document.createElement('video');
+      thumbVideo.srcObject = stream;
+      thumbVideo.muted = true;
+      thumbVideo.playsInline = true;
+      thumbnailVideoRef.current = thumbVideo;
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 320;
+      thumbCanvas.height = 180;
+      thumbnailCanvasRef.current = thumbCanvas;
+      const captureThumb = () => {
+        const v = thumbnailVideoRef.current;
+        const c = thumbnailCanvasRef.current;
+        if (!v || !c || v.readyState < 2 || v.videoWidth === 0) return;
+        const ctx = c.getContext('2d');
+        const aspect = v.videoWidth / v.videoHeight;
+        const cw = c.width, ch = c.height;
+        const drawW = aspect > cw / ch ? cw : ch * aspect;
+        const drawH = aspect > cw / ch ? cw / aspect : ch;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.drawImage(v, (cw - drawW) / 2, (ch - drawH) / 2, drawW, drawH);
+        const thumbnail = c.toDataURL('image/jpeg', 0.15);
+        if (socket) socket.emit('screen:thumbnail', { channelId, thumbnail });
+      };
+      thumbVideo.play().then(() => {
+        captureThumb();
+        thumbnailIntervalRef.current = setInterval(captureThumb, 10000);
+      }).catch(() => {});
+
       videoTrack.onended = () => stopScreenShare(channelId);
     } catch (err) {
       if (err.name === 'NotAllowedError') {
@@ -1578,6 +1625,11 @@ export function useWebRTC(socket, currentUser, activeServerId) {
         screenStreamIdsRef.current.delete(screenStreamRef.current.id);
       });
     }
+
+    // Stop thumbnail capture
+    if (thumbnailIntervalRef.current) { clearInterval(thumbnailIntervalRef.current); thumbnailIntervalRef.current = null; }
+    if (thumbnailVideoRef.current) { thumbnailVideoRef.current.srcObject = null; thumbnailVideoRef.current = null; }
+    thumbnailCanvasRef.current = null;
 
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
@@ -1709,9 +1761,16 @@ export function useWebRTC(socket, currentUser, activeServerId) {
   }, [socket]);
 
   const unwatchScreen = useCallback((sharerId) => {
-    setIsWatchingScreen(false);
-    setIsScreenAudioMuted(false);
-    setRemoteScreenStreams(prev => { const n = {...prev}; delete n[sharerId]; return n; });
+    setRemoteScreenStreams(prev => {
+      const next = { ...prev };
+      if (next[sharerId]) screenStreamIdsRef.current.delete(next[sharerId].id);
+      delete next[sharerId];
+      if (Object.keys(next).length === 0) {
+        setIsWatchingScreen(false);
+        setIsScreenAudioMuted(false);
+      }
+      return next;
+    });
     if (socket) socket.emit('screen:unwatch', { sharerId });
   }, [socket]);
 
@@ -1846,7 +1905,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
 
   // Memoize the return object to prevent creating new object on every render
   return useMemo(() => ({
-    localStream, screenStream, remoteStreams, remoteScreenStreams,
+    localStream, screenStream, remoteStreams, remoteScreenStreams, remoteScreenThumbnails,
     isMuted, isDeafened, isSharingScreen, isWatchingScreen, isScreenAudioMuted,
     currentVoiceChannel, activeSpeakers, audioLevels, pttActive,
     voiceStatus, voiceQuality, voiceStatusMessage,
@@ -1860,7 +1919,7 @@ export function useWebRTC(socket, currentUser, activeServerId) {
     updateAudioProcessing,
     getSavedVoiceState, clearVoiceState
   }), [
-    localStream, screenStream, remoteStreams, remoteScreenStreams,
+    localStream, screenStream, remoteStreams, remoteScreenStreams, remoteScreenThumbnails,
     isMuted, isDeafened, isSharingScreen, isWatchingScreen, isScreenAudioMuted,
     currentVoiceChannel, activeSpeakers, audioLevels, pttActive,
     voiceStatus, voiceQuality, voiceStatusMessage,

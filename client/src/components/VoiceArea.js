@@ -213,12 +213,32 @@ const UserTile = React.memo(function UserTile({
   );
 });
 
+const ScreenShareTile = React.memo(function ScreenShareTile({ user, thumbnail, isWatching, isConnecting, onClick }) {
+  return (
+    <div className={`screen-share-tile ${isWatching ? 'watching' : ''}`} onClick={onClick} title={isWatching ? 'Stop watching' : `Watch ${user?.username || 'Unknown'}'s screen`}>
+      <div className="screen-share-tile-preview">
+        {thumbnail
+          ? <img src={thumbnail} alt="" className="screen-share-tile-thumb" />
+          : <div className="screen-share-tile-placeholder"><ScreenShareIcon size={24} /></div>
+        }
+        {isConnecting && <div className="screen-share-tile-status">Connecting...</div>}
+        {isWatching && !isConnecting && <div className="screen-share-tile-live">● LIVE</div>}
+      </div>
+      <div className="screen-share-tile-footer">
+        <span className="screen-share-tile-name">{user?.username || 'Unknown'}</span>
+        <span className="screen-share-tile-action">{isWatching ? 'Stop' : 'Watch'}</span>
+      </div>
+    </div>
+  );
+});
+
 const VoiceArea = React.memo(function VoiceArea({
   channel,
   voiceChannelData,
   remoteStreams,
   localStream,
   remoteScreenStreams,
+  remoteScreenThumbnails,
   screenStream,
   isMuted,
   isDeafened,
@@ -227,7 +247,7 @@ const VoiceArea = React.memo(function VoiceArea({
   isScreenAudioMuted,
   activeSpeakers,
   audioLevels,
-  screenSharerSocketId,
+  screenSharerSocketIds,
   remoteUserStates,
   userVolumes,
   localMutedUsers,
@@ -337,21 +357,44 @@ const VoiceArea = React.memo(function VoiceArea({
     return () => { document.removeEventListener('mousedown', handleClick); document.removeEventListener('keydown', handleKey); };
   }, [contextMenu]);
 
+  const [activeScreenSharerSocketId, setActiveScreenSharerSocketId] = useState(null);
+
   const users = voiceChannelData?.users || [];
-  // Only consider screen share active if the sharer is still in the voice channel or is us
-  const sharerInChannel = screenSharerSocketId && (
-    isSharingScreen ||
-    users.some(u => u.socketId === screenSharerSocketId) ||
-    Object.keys(remoteStreams).includes(screenSharerSocketId)
+
+  // Active remote sharers still present in the channel
+  const activeSharerIds = (screenSharerSocketIds || []).filter(socketId =>
+    users.some(u => u.socketId === socketId) || Object.keys(remoteStreams).includes(socketId)
   );
-  const hasScreen = !!screenSharerSocketId && !!sharerInChannel;
+
+  const hasScreen = isSharingScreen || activeSharerIds.length > 0;
   const isLocalSharer = isSharingScreen;
 
-  // Screen share stream: local sharer sees their own stream, viewers see the remote screen stream
+  // Auto-select first sharer when the list changes; clear when no sharers remain
+  useEffect(() => {
+    if (isSharingScreen) return;
+    if (activeSharerIds.length === 0) {
+      setActiveScreenSharerSocketId(null);
+    } else if (!activeSharerIds.includes(activeScreenSharerSocketId)) {
+      setActiveScreenSharerSocketId(activeSharerIds[0]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenSharerSocketIds, isSharingScreen]);
+
+  // Switch focus to a different sharer (unwatch current, watch new)
+  const handleSwitchSharer = useCallback((newSharerId) => {
+    if (newSharerId === activeScreenSharerSocketId) return;
+    if (isWatchingScreen && activeScreenSharerSocketId) {
+      onUnwatchScreen(activeScreenSharerSocketId);
+    }
+    setActiveScreenSharerSocketId(newSharerId);
+    onWatchScreen(newSharerId);
+  }, [activeScreenSharerSocketId, isWatchingScreen, onUnwatchScreen, onWatchScreen]);
+
+  // Screen share stream: local sharer sees their own stream, viewers see the focused remote stream
   const screenShareStream = isLocalSharer
     ? screenStream
-    : (isWatchingScreen && screenSharerSocketId && remoteScreenStreams?.[screenSharerSocketId])
-      ? remoteScreenStreams[screenSharerSocketId]
+    : (isWatchingScreen && activeScreenSharerSocketId && remoteScreenStreams?.[activeScreenSharerSocketId])
+      ? remoteScreenStreams[activeScreenSharerSocketId]
       : null;
 
   // Whether to show the screen share video area
@@ -361,7 +404,7 @@ const VoiceArea = React.memo(function VoiceArea({
     return onlineUsers.find(u => u.socketId === socketId);
   };
 
-  const screenSharerUser = screenSharerSocketId ? getUser(screenSharerSocketId) : null;
+  const screenSharerUser = activeScreenSharerSocketId ? getUser(activeScreenSharerSocketId) : null;
 
   const enterFullscreen = () => {
     const elem = fullscreenContainerRef.current;
@@ -650,31 +693,6 @@ const VoiceArea = React.memo(function VoiceArea({
 
       {/* Main content */}
       <div className="voice-content">
-        {/* Screen share notification banner (shown when someone is sharing and viewer hasn't opted in) */}
-        {hasScreen && !isLocalSharer && !isWatchingScreen && (
-          <div className="screen-share-banner">
-            <div className="screen-share-banner-info">
-              <ScreenShareIcon size={18} />
-              <span>{screenSharerUser?.username || 'Someone'} is sharing their screen</span>
-            </div>
-            <button className="screen-share-watch-btn" onClick={() => onWatchScreen(screenSharerSocketId)}>
-              Watch Stream
-            </button>
-          </div>
-        )}
-
-        {/* Loading state: watching but stream hasn't arrived yet */}
-        {hasScreen && !isLocalSharer && isWatchingScreen && !screenShareStream && (
-          <div className="screen-share-banner">
-            <div className="screen-share-banner-info">
-              <ScreenShareIcon size={18} />
-              <span>Connecting to {screenSharerUser?.username || 'Someone'}'s stream...</span>
-            </div>
-            <button className="screen-share-stop-btn" onClick={() => onUnwatchScreen(screenSharerSocketId)}>
-              Stop Watching
-            </button>
-          </div>
-        )}
 
         {/* Screen share display (shown for sharer or opted-in viewers) */}
         {showScreenVideo && screenShareStream && (
@@ -690,6 +708,23 @@ const VoiceArea = React.memo(function VoiceArea({
               onFullscreen={enterFullscreen}
               audioMuted={isLocalSharer || isScreenAudioMuted}
             />
+            {/* Sharer selector strip (visible when multiple sharers exist) */}
+            {!isLocalSharer && activeSharerIds.length > 1 && (
+              <div className="screen-share-selector">
+                {activeSharerIds.map(sharerId => {
+                  const u = getUser(sharerId);
+                  return (
+                    <button
+                      key={sharerId}
+                      className={`screen-share-selector-btn ${sharerId === activeScreenSharerSocketId ? 'active' : ''}`}
+                      onClick={() => handleSwitchSharer(sharerId)}
+                    >
+                      {u?.username || 'Unknown'}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {/* Screen share overlay controls (shown on hover) */}
             {!isFullscreen && (
               <div className="screen-share-overlay-controls">
@@ -707,7 +742,7 @@ const VoiceArea = React.memo(function VoiceArea({
                 {!isLocalSharer && isWatchingScreen && (
                   <button
                     className="screen-share-stop-watching-btn"
-                    onClick={() => onUnwatchScreen(screenSharerSocketId)}
+                    onClick={() => onUnwatchScreen(activeScreenSharerSocketId)}
                   >
                     Stop Watching
                   </button>
@@ -731,7 +766,7 @@ const VoiceArea = React.memo(function VoiceArea({
                       </button>
                     )}
                     {!isLocalSharer && isWatchingScreen && (
-                      <button className="fullscreen-exit-btn" onClick={() => { exitFullscreen(); onUnwatchScreen(screenSharerSocketId); }} title="Stop watching">
+                      <button className="fullscreen-exit-btn" onClick={() => { exitFullscreen(); onUnwatchScreen(activeScreenSharerSocketId); }} title="Stop watching">
                         Stop Watching
                       </button>
                     )}
@@ -832,8 +867,8 @@ const VoiceArea = React.memo(function VoiceArea({
           </div>
         )}
 
-        {/* User tiles */}
-        <div className={`voice-users-grid ${showScreenVideo ? 'with-screen' : ''} ${!showScreenVideo && users.length <= 2 ? `users-${users.length}` : ''}`}>
+        {/* User tiles + screen share tiles */}
+        <div className={`voice-users-grid ${showScreenVideo ? 'with-screen' : ''} ${!showScreenVideo && users.length <= 2 && activeSharerIds.length === 0 ? `users-${users.length}` : ''}`}>
           {/* Local user */}
           <UserTile
             user={currentUser}
@@ -866,6 +901,21 @@ const VoiceArea = React.memo(function VoiceArea({
               );
             })
           }
+
+          {/* Screen share tiles (one per active sharer, visible to non-sharers) */}
+          {!isLocalSharer && activeSharerIds.map(sharerId => {
+            const isWatchingThis = isWatchingScreen && sharerId === activeScreenSharerSocketId;
+            return (
+              <ScreenShareTile
+                key={sharerId}
+                user={getUser(sharerId)}
+                thumbnail={remoteScreenThumbnails?.[sharerId]}
+                isWatching={isWatchingThis}
+                isConnecting={isWatchingThis && !screenShareStream}
+                onClick={() => isWatchingThis ? onUnwatchScreen(sharerId) : handleSwitchSharer(sharerId)}
+              />
+            );
+          })}
         </div>
       </div>
 
