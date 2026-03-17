@@ -234,6 +234,77 @@ function CriticizeMessage({ data }) {
   );
 }
 
+// ── MCP Tool Result ──────────────────────────────────────────
+function McpResultMessage({ data }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = data.result && data.result.length > 500;
+
+  return (
+    <div className="cmd-message cmd-mcp-result">
+      <div className="cmd-mcp-header">
+        <span className="cmd-mcp-icon">🔌</span>
+        <span className="cmd-mcp-tool-name">{data.toolName}</span>
+        {data.connectionName && (
+          <span className="cmd-mcp-connection">via {data.connectionName}</span>
+        )}
+        {data.error && <span className="cmd-mcp-error-badge">ERROR</span>}
+      </div>
+      {data.error ? (
+        <div className="cmd-mcp-error">{data.error}</div>
+      ) : (
+        <div className={`cmd-mcp-output ${expanded ? 'expanded' : ''}`}>
+          <pre>{isLong && !expanded ? data.result.slice(0, 500) + '...' : data.result}</pre>
+          {isLong && (
+            <button className="cmd-mcp-expand" onClick={() => setExpanded(!expanded)}>
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </div>
+      )}
+      {data.tools && (
+        <div className="cmd-mcp-tool-list">
+          {data.tools.map((t, i) => (
+            <div key={i} className="cmd-mcp-tool-item">
+              <code>{t.name}</code>
+              <span>{t.description}</span>
+              {t.connection && <span className="cmd-mcp-connection">({t.connection})</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Agent Response (AI-generated message with citations) ────
+function AgentResponseMessage({ data }) {
+  return (
+    <div className="cmd-message cmd-agent-response">
+      <div className="cmd-agent-header">
+        <span className="cmd-agent-icon">🤖</span>
+        {data.agentName && <span className="cmd-agent-name">{data.agentName}</span>}
+        {data.model && <span className="cmd-agent-model">{data.model}</span>}
+      </div>
+      <div className="cmd-agent-content">
+        {data.content || data.result || ''}
+      </div>
+      {data.sources && data.sources.length > 0 && (
+        <div className="cmd-agent-sources">
+          <span className="cmd-agent-sources-label">Sources:</span>
+          {data.sources.map((s, i) => (
+            <span key={i} className="cmd-agent-source">{s}</span>
+          ))}
+        </div>
+      )}
+      {data.toolsUsed && data.toolsUsed.length > 0 && (
+        <div className="cmd-agent-tools-used">
+          Tools used: {data.toolsUsed.join(', ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main CommandMessage ────────────────────────────────────────
 function CommandMessage({ commandData, message, socket, currentUser, server }) {
   if (!commandData) return null;
@@ -249,6 +320,8 @@ function CommandMessage({ commandData, message, socket, currentUser, server }) {
     case 'poll': return <PollMessage data={commandData} message={message} socket={socket} currentUser={currentUser} />;
     case 'criticize': return <CriticizeMessage data={commandData} />;
     case 'quack': return null; // Image shown via attachments
+    case 'mcp_result': return <McpResultMessage data={commandData} />;
+    case 'agent_response': return <AgentResponseMessage data={commandData} />;
     default: return null;
   }
 }

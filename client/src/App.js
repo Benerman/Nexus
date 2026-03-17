@@ -994,6 +994,39 @@ export default function App() {
         ...prev,
         [channelId]: (prev[channelId] || []).filter(m => m.id !== messageId)
       })));
+
+    // ─── Streaming messages (AI agent responses) ───────────────────────
+    s.on('message:stream-start', (msg) => {
+      setMessages(prev => ({
+        ...prev,
+        [msg.channelId]: [...(prev[msg.channelId] || []), { ...msg, isStreaming: true }]
+      }));
+    });
+    s.on('message:stream-chunk', ({ messageId, channelId, content }) => {
+      setMessages(prev => {
+        const channelMsgs = prev[channelId];
+        if (!channelMsgs) return prev;
+        return {
+          ...prev,
+          [channelId]: channelMsgs.map(m =>
+            m.id === messageId ? { ...m, content: (m.content || '') + content } : m
+          )
+        };
+      });
+    });
+    s.on('message:stream-end', ({ messageId, channelId, content }) => {
+      setMessages(prev => {
+        const channelMsgs = prev[channelId];
+        if (!channelMsgs) return prev;
+        return {
+          ...prev,
+          [channelId]: channelMsgs.map(m =>
+            m.id === messageId ? { ...m, content, isStreaming: false } : m
+          )
+        };
+      });
+    });
+
     s.on('message:edited', ({ channelId, messageId, content, editedAt, encrypted }) => {
       let decryptedContent = content;
       if (encrypted && e2eSecretKeyRef.current) {

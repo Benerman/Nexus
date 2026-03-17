@@ -676,6 +676,125 @@ async function handleSlashCommand(cmdName, args, user, channelId, server) {
     }
     case 'poll':
       return null;
+    case 'summarize': {
+      // Summarize recent channel messages
+      try {
+        const { summarizeChannel } = require('./mcp/agent-engine');
+
+        // Check if there's an agent with MCP connection for this server
+        let mcpConnectionId = null;
+        if (server) {
+          const agentResult = await db.query(
+            `SELECT mcp_connection_id FROM agent_configs WHERE server_id = $1 AND enabled = true AND mcp_connection_id IS NOT NULL LIMIT 1`,
+            [server.id]
+          );
+          if (agentResult.rows.length > 0) {
+            mcpConnectionId = agentResult.rows[0].mcp_connection_id;
+          }
+        }
+
+        const count = parseInt(args) || 50;
+        const summary = await summarizeChannel(channelId, mcpConnectionId, Math.min(count, 100));
+        return {
+          content: summary,
+          commandData: { type: 'agent_response', agentName: 'Channel Summary' }
+        };
+      } catch (err) {
+        return { content: `Summary failed: ${err.message}` };
+      }
+    }
+    case 'mcp': {
+      // Bridge to external MCP tools: /mcp <tool_name> [args_json]
+      const mcpMatch = args.match(/^(\S+)\s*(.*)/s);
+      if (!mcpMatch) {
+        return { content: 'Usage: `/mcp <tool_name> [arguments]`' };
+      }
+      const toolName = mcpMatch[1];
+      const toolArgsRaw = mcpMatch[2]?.trim() || '{}';
+
+      let toolArgs;
+      try {
+        toolArgs = JSON.parse(toolArgsRaw);
+      } catch {
+        // Treat as simple string argument
+        toolArgs = { input: toolArgsRaw };
+      }
+
+      try {
+        const { getAvailableTools, executeConnectionTool } = require('./mcp/client');
+        const serverId = server?.id || findServerByChannelId(channelId);
+        if (!serverId) return { content: 'Could not determine server for MCP tool execution.' };
+
+        const availableTools = await getAvailableTools(serverId);
+        const matchedTool = availableTools.find(t => t.name === toolName);
+
+        if (!matchedTool) {
+          const toolList = availableTools.map(t => t.name).join(', ');
+          return {
+            content: toolList
+              ? `Unknown MCP tool: \`${toolName}\`. Available tools: ${toolList}`
+              : 'No MCP tools are connected to this server. Configure MCP connections in server settings.'
+          };
+        }
+
+        const result = await executeConnectionTool(matchedTool.connectionId, toolName, toolArgs);
+
+        if (result.error) {
+          return {
+            content: `MCP tool \`${toolName}\` error: ${result.error}`,
+            commandData: { type: 'mcp_result', toolName, error: result.error }
+          };
+        }
+
+        // Extract text content from MCP result
+        const textContent = (result.content || [])
+          .filter(c => c.type === 'text')
+          .map(c => c.text)
+          .join('\n');
+
+        return {
+          content: textContent || JSON.stringify(result),
+          commandData: {
+            type: 'mcp_result',
+            toolName,
+            connectionName: matchedTool.connectionName,
+            result: textContent || JSON.stringify(result)
+          }
+        };
+      } catch (err) {
+        console.error('[MCP] Slash command bridge error:', err.message);
+        return { content: `MCP error: ${err.message}` };
+      }
+    }
+    case 'mcp-tools': {
+      // List available MCP tools: /mcp-tools
+      try {
+        const { getAvailableTools } = require('./mcp/client');
+        const serverId = server?.id || findServerByChannelId(channelId);
+        if (!serverId) return { content: 'Could not determine server.' };
+
+        const tools = await getAvailableTools(serverId);
+        if (tools.length === 0) {
+          return { content: 'No MCP tools are connected to this server.' };
+        }
+
+        const toolList = tools.map(t =>
+          `• **${t.name}** (${t.connectionName}) — ${t.description || 'No description'}`
+        ).join('\n');
+
+        return {
+          content: `**Available MCP Tools:**\n${toolList}`,
+          commandData: {
+            type: 'mcp_result',
+            toolName: 'mcp-tools',
+            result: toolList,
+            tools: tools.map(t => ({ name: t.name, description: t.description, connection: t.connectionName }))
+          }
+        };
+      } catch (err) {
+        return { content: `Failed to list MCP tools: ${err.message}` };
+      }
+    }
     default:
       return null;
   }

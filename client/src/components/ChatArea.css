@@ -787,6 +787,15 @@
   background: var(--brand-500); color: #fff; font-size: 10px; font-weight: 800;
   padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px; vertical-align: middle;
 }
+.streaming-badge {
+  background: #10B981; color: #fff; font-size: 10px; font-weight: 800;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px; vertical-align: middle;
+  animation: streaming-pulse 1.5s infinite;
+}
+@keyframes streaming-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 .webhook-msg .message-avatar { border-radius: 12px; }
 
 /* ── Webhook Embeds ─────── */

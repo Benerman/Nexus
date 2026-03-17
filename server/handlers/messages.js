@@ -4,6 +4,7 @@ const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
 const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast, parseSearchFilters } = require('../helpers');
 const automod = require('../automod');
+const { processMessage: processAgentMessage } = require('../mcp/agent-engine');
 
 const messageLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 
@@ -343,6 +344,11 @@ module.exports = function(io, socket) {
     if (srv) {
       const ch = [...(srv.channels?.text || [])].find(c => c.id === channelId);
       console.log(`[Message] ${user.username} sent message in #${ch?.name || channelId} (${srv.name})`);
+
+      // Trigger AI agents (async, non-blocking)
+      processAgentMessage(io, msg, srv.id).catch(err => {
+        console.error('[Agent] Error processing message for agents:', err.message);
+      });
     } else {
       console.log(`[Message] ${user.username} sent DM in ${channelId}`);
     }

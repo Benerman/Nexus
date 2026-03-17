@@ -37,6 +37,7 @@ const adminHandlers = require('./handlers/admin');
 const bookmarkHandlers = require('./handlers/bookmarks');
 const auditHandlers = require('./handlers/audit');
 const automodHandlers = require('./handlers/automod');
+const mcpHandlers = require('./handlers/mcp');
 
 // ─── Express setup ──────────────────────────────────────────────────────────
 const app = express();
@@ -752,6 +753,7 @@ io.on('connection', (socket) => {
   bookmarkHandlers(io, socket);
   auditHandlers(io, socket);
   automodHandlers(io, socket);
+  mcpHandlers(io, socket);
 
   socket.on('disconnect', () => {
     metrics.recordDisconnection();
