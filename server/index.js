@@ -19,6 +19,9 @@ const {
 } = require('./helpers');
 const { DEFAULT_PERMS, hashPassword, hashPasswordLegacy, verifyPassword } = utils;
 
+// ─── MCP integration ────────────────────────────────────────────────────────
+const { createMcpRouter } = require('./mcp');
+
 // ─── Handler modules ────────────────────────────────────────────────────────
 const authHandlers = require('./handlers/auth');
 const serverHandlers = require('./handlers/servers');
@@ -715,6 +718,9 @@ app.get('/api/og', requireApiAuth, async (req, res) => {
     res.json({ title: '', description: '', image: '', siteName: '', url });
   }
 });
+
+// ─── MCP API Routes ─────────────────────────────────────────────────────────
+app.use('/api/mcp', createMcpRouter(io));
 
 // ─── Global Error Handler ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
