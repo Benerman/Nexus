@@ -548,6 +548,24 @@ const tools = [
 
   // ── Server & Member Info ──────────────────────────────────────────────────
   {
+    name: 'list_servers',
+    description: 'List all servers the bot account has access to.',
+    inputSchema: { type: 'object', properties: {} },
+    scope: 'read',
+    handler: async (params, ctx) => {
+      const accountId = ctx.tokenData.accountId;
+      const servers = Object.entries(state.servers)
+        .filter(([id, srv]) => !srv.isPersonal && srv.members[accountId] && hasServerAccess(ctx.tokenData, id))
+        .map(([id, srv]) => ({
+          id, name: srv.name, icon: srv.icon,
+          memberCount: Object.keys(srv.members).length,
+          textChannels: srv.channels.text.length,
+          voiceChannels: srv.channels.voice.length
+        }));
+      return { content: [{ type: 'text', text: JSON.stringify(servers) }] };
+    }
+  },
+  {
     name: 'get_server_info',
     description: 'Get information about a server.',
     inputSchema: {
