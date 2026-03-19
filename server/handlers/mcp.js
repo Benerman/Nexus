@@ -6,9 +6,10 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { state } = require('../state');
-const { getUserPerms, serializeServer } = require('../helpers');
+const { getUserPerms, serializeServer, checkSocketRate, socketRateLimiters } = require('../helpers');
 const { createBotToken, getBotTokens, deleteBotToken, VALID_SCOPES } = require('../mcp/auth');
-const { hashPassword } = require('../utils');
+const { hashPassword, isPrivateUrl } = require('../utils');
+const { channelToServer } = require('../state');
 
 module.exports = function(io, socket) {
 
@@ -17,6 +18,7 @@ module.exports = function(io, socket) {
   socket.on('mcp:token:create', async ({ name, scopes, serverIds, expiresInDays }) => {
     const user = state.users[socket.id];
     if (!user || user.isGuest) return socket.emit('error', { message: 'Authentication required' });
+    if (!(await checkSocketRate(socketRateLimiters.mcpTokenCreate, user.id, socket))) return;
 
     if (!name || typeof name !== 'string') {
       return socket.emit('error', { message: 'Token name is required' });
@@ -73,6 +75,7 @@ module.exports = function(io, socket) {
   socket.on('mcp:bot:create', async ({ name, avatar, serverId }) => {
     const user = state.users[socket.id];
     if (!user || user.isGuest) return;
+    if (!(await checkSocketRate(socketRateLimiters.mcpBotCreate, user.id, socket))) return;
 
     // Must have manage server permission (or be owner) to create bots
     if (serverId) {
@@ -206,7 +209,7 @@ module.exports = function(io, socket) {
 
   // ─── MCP Connection Management ─────────────────────────────────────────
 
-  socket.on('mcp:connection:create', async ({ serverId, channelId, name, serverUrl, transport, enabledTools }) => {
+  socket.on('mcp:connection:create', async ({ serverId, channelId, name, serverUrl, transport, enabledTools, authConfig }) => {
     const user = state.users[socket.id];
     if (!user) return;
 
@@ -221,13 +224,30 @@ module.exports = function(io, socket) {
       return socket.emit('error', { message: 'External MCP connections are disabled in LAN mode' });
     }
 
+    // SSRF protection — validate URL
+    try {
+      const parsed = new URL(serverUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return socket.emit('error', { message: 'Only http and https URLs are allowed' });
+      }
+      if (isPrivateUrl(serverUrl)) {
+        return socket.emit('error', { message: 'Private/internal URLs are not allowed' });
+      }
+    } catch {
+      return socket.emit('error', { message: 'Invalid URL' });
+    }
+
+    // Encrypt auth config if provided
+    const { encryptJson } = require('../mcp/auth');
+    const encryptedAuthConfig = authConfig ? encryptJson(authConfig) : '{}';
+
     try {
       const result = await db.query(
-        `INSERT INTO mcp_connections (server_id, channel_id, name, server_url, transport, enabled_tools, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO mcp_connections (server_id, channel_id, name, server_url, transport, enabled_tools, auth_config, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, server_id, channel_id, name, server_url, transport, enabled_tools, enabled, created_at`,
         [serverId, channelId || null, String(name).slice(0, 128), serverUrl,
-         transport || 'sse', JSON.stringify(enabledTools || []), user.id]
+         transport || 'sse', JSON.stringify(enabledTools || []), encryptedAuthConfig, user.id]
       );
 
       const connection = result.rows[0];
@@ -407,9 +427,17 @@ module.exports = function(io, socket) {
   // ─── Message Streaming (for AI agent responses) ────────────────────────
 
   socket.on('mcp:stream:start', async ({ channelId, messageId }) => {
-    // Validate that the caller is a bot or has permission
     const user = state.users[socket.id];
     if (!user) return;
+    if (!(await checkSocketRate(socketRateLimiters.mcpStream, user.id, socket))) return;
+
+    // Verify channel access and sendMessages permission
+    const serverId = channelToServer.get(channelId);
+    if (!serverId) return socket.emit('error', { message: 'Channel not found' });
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
+    const perms = getUserPerms(user.id, serverId, channelId);
+    if (!perms.sendMessages) return socket.emit('error', { message: 'Missing sendMessages permission' });
 
     // Create a placeholder message for streaming
     const msg = {
@@ -431,7 +459,19 @@ module.exports = function(io, socket) {
     io.to(`text:${channelId}`).emit('message:stream-start', msg);
   });
 
-  socket.on('mcp:stream:chunk', ({ channelId, messageId, content }) => {
+  socket.on('mcp:stream:chunk', async ({ channelId, messageId, content }) => {
+    const user = state.users[socket.id];
+    if (!user) return;
+    if (!(await checkSocketRate(socketRateLimiters.mcpStream, user.id, socket))) return;
+
+    // Verify channel access and sendMessages permission
+    const serverId = channelToServer.get(channelId);
+    if (!serverId) return;
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return;
+    const perms = getUserPerms(user.id, serverId, channelId);
+    if (!perms.sendMessages) return;
+
     io.to(`text:${channelId}`).emit('message:stream-chunk', {
       messageId, channelId, content
     });
@@ -440,6 +480,14 @@ module.exports = function(io, socket) {
   socket.on('mcp:stream:end', async ({ channelId, messageId, finalContent }) => {
     const user = state.users[socket.id];
     if (!user) return;
+
+    // Verify channel access and sendMessages permission
+    const serverId = channelToServer.get(channelId);
+    if (!serverId) return socket.emit('error', { message: 'Channel not found' });
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
+    const perms = getUserPerms(user.id, serverId, channelId);
+    if (!perms.sendMessages) return socket.emit('error', { message: 'Missing sendMessages permission' });
 
     const content = String(finalContent || '').slice(0, 2000);
 

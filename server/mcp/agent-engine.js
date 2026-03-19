@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { state, channelToServer } = require('../state');
 const { executeConnectionTool } = require('./client');
+const { notifySSE } = require('./events');
 
 /**
  * Process a new message and check if any agents should respond
@@ -177,6 +178,7 @@ async function handleAgentResponse(io, agent, triggerMsg, serverId) {
 
     // Broadcast
     io.to(`text:${channelId}`).emit('message:new', responseMsg);
+    notifySSE('message:new', { ...responseMsg, channelId });
 
     // Stop typing
     io.to(`text:${channelId}`).emit('typing:stop', {

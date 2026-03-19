@@ -6,25 +6,64 @@
  */
 
 const { state, channelToServer } = require('../state');
+const { isPrivateUrl } = require('../utils');
 
 // Active MCP client connections: Map<connectionId, { config, toolCache, lastRefresh }>
 const activeConnections = new Map();
 
 /**
+ * Safe fetch with SSRF protection and redirect guarding
+ */
+async function safeFetch(url, options = {}) {
+  if (isPrivateUrl(url)) {
+    throw new Error('SSRF protection: private/internal URL blocked');
+  }
+  const resp = await fetch(url, { ...options, redirect: 'manual' });
+  if (resp.status < 300 || resp.status >= 400) return resp;
+  const location = resp.headers.get('location');
+  if (!location) return resp;
+  const redirectUrl = new URL(location, url).toString();
+  if (isPrivateUrl(redirectUrl)) {
+    throw new Error('SSRF protection: redirect to private URL blocked');
+  }
+  return fetch(redirectUrl, { ...options, redirect: 'manual' });
+}
+
+/**
+ * Get auth headers from connection auth_config (decrypting if needed)
+ */
+function getAuthHeaders(connection) {
+  let authConfig = connection.auth_config;
+  if (typeof authConfig === 'string' && authConfig.length > 0 && authConfig !== '{}') {
+    try {
+      const { decryptJson } = require('./auth');
+      authConfig = decryptJson(authConfig);
+    } catch {
+      // If decryption fails, try parsing as plain JSON (legacy)
+      try { authConfig = JSON.parse(authConfig); } catch { authConfig = {}; }
+    }
+  }
+  if (authConfig?.token) {
+    return { 'Authorization': `Bearer ${authConfig.token}` };
+  }
+  return {};
+}
+
+/**
  * Discover tools from an external MCP server
  */
 async function discoverTools(connection) {
-  const { server_url, transport } = connection;
+  const { server_url } = connection;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(`${server_url}/message`, {
+    const response = await safeFetch(`${server_url}/message`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(connection.auth_config?.token ? { 'Authorization': `Bearer ${connection.auth_config.token}` } : {})
+        ...getAuthHeaders(connection)
       },
       body: JSON.stringify({
         jsonrpc: '2.0', id: 1,
@@ -57,11 +96,11 @@ async function executeTool(connection, toolName, args) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
 
-    const response = await fetch(`${server_url}/message`, {
+    const response = await safeFetch(`${server_url}/message`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(connection.auth_config?.token ? { 'Authorization': `Bearer ${connection.auth_config.token}` } : {})
+        ...getAuthHeaders(connection)
       },
       body: JSON.stringify({
         jsonrpc: '2.0', id: Date.now(),
@@ -100,11 +139,11 @@ async function readResource(connection, uri) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(`${server_url}/message`, {
+    const response = await safeFetch(`${server_url}/message`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(connection.auth_config?.token ? { 'Authorization': `Bearer ${connection.auth_config.token}` } : {})
+        ...getAuthHeaders(connection)
       },
       body: JSON.stringify({
         jsonrpc: '2.0', id: Date.now(),

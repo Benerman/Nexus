@@ -19,23 +19,8 @@ let connectionCounter = 0;
  * Listens to io events and forwards them to subscribed SSE clients.
  */
 function registerEventBridge(io) {
-  // Intercept outgoing Socket.IO events and forward to SSE clients
-  const originalEmit = io.emit.bind(io);
-
-  // We monkey-patch io.to().emit() by intercepting at the room level
-  // Instead, we hook into the message pipeline directly
-  io.use((socket, next) => {
-    const origSocketEmit = socket.emit.bind(socket);
-    // We don't patch individual socket emits — SSE clients subscribe at the server level
-    next();
-  });
-
-  // Periodically check for relevant events to forward
-  // More efficient: hook into specific event broadcasts
-
-  // Listen to internal events on the io instance
+  // Listen to internal events on connected sockets
   io.on('connection', (socket) => {
-    // Forward key events from this socket to SSE clients
     const eventsToForward = [
       'message:new', 'message:edited', 'message:deleted', 'message:reacted',
       'user:joined', 'user:left', 'typing:start', 'typing:stop',
@@ -51,28 +36,20 @@ function registerEventBridge(io) {
     }
   });
 
-  // Also hook into server-level broadcasts
+  // Hook into server-level global broadcasts (io.emit)
   const origIoEmit = io.emit.bind(io);
   io.emit = function(eventName, ...args) {
     broadcastToSSE(eventName, args[0]);
     return origIoEmit(eventName, ...args);
   };
+}
 
-  // Hook into room-level broadcasts (io.to('text:channelId').emit(...))
-  const origTo = io.to.bind(io);
-  io.to = function(room) {
-    const broadcaster = origTo(room);
-    const origBroadcastEmit = broadcaster.emit.bind(broadcaster);
-    broadcaster.emit = function(eventName, ...args) {
-      // Extract channelId from room name (format: "text:channelId")
-      const channelId = room.startsWith('text:') ? room.slice(5) : null;
-      if (channelId) {
-        broadcastToSSE(eventName, { ...args[0], _channelId: channelId });
-      }
-      return origBroadcastEmit(eventName, ...args);
-    };
-    return broadcaster;
-  };
+/**
+ * Notify SSE clients directly — use instead of monkey-patching io.to()
+ * Call this from handlers after broadcasting via io.to().emit()
+ */
+function notifySSE(eventName, data) {
+  broadcastToSSE(eventName, data);
 }
 
 /**
@@ -91,6 +68,11 @@ function broadcastToSSE(eventName, data) {
       // Check channel/server access if event has location info
       const channelId = data?._channelId || data?.channelId;
       const serverId = data?.serverId || (channelId ? channelToServer.get(channelId) : null);
+
+      // Skip message/channel events with no determinable serverId (can't verify access)
+      if (!serverId && (eventName.startsWith('message:') || eventName.startsWith('channel:'))) {
+        continue;
+      }
 
       if (serverId && !hasServerAccess(conn.tokenData, serverId)) {
         continue;
@@ -180,4 +162,5 @@ module.exports = {
   registerEventBridge,
   handleSSEConnection,
   getSSEConnectionCount,
+  notifySSE,
 };

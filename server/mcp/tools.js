@@ -10,9 +10,9 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { state, channelToServer } = require('../state');
-const { getUserPerms } = require('../helpers');
+const { getUserPerms, parseMentions, parseChannelLinks } = require('../helpers');
 const { hasScope, hasServerAccess } = require('./auth');
-const utils = require('../utils');
+const { notifySSE } = require('./events');
 
 // ─── Tool Definitions ──────────────────────────────────────────────────────
 
@@ -77,8 +77,8 @@ const tools = [
 
       const account = await db.getAccountById(ctx.tokenData.accountId);
       const messageContent = content ? String(content).slice(0, 2000) : '';
-      const mentions = utils.parseMentions(messageContent, srv);
-      const channelLinks = utils.parseChannelLinks(messageContent, srv, serverId);
+      const mentions = parseMentions(messageContent, serverId);
+      const channelLinks = parseChannelLinks(messageContent, serverId);
 
       const validEmbeds = (embeds || []).slice(0, 10).map(embed => ({
         title: typeof embed.title === 'string' ? embed.title.slice(0, 256) : undefined,
@@ -122,6 +122,7 @@ const tools = [
 
       // Broadcast
       ctx.io.to(`text:${channel_id}`).emit('message:new', msg);
+      notifySSE('message:new', { ...msg, channelId: channel_id });
 
       // Persist to database
       try {
@@ -231,10 +232,12 @@ const tools = [
         }
       }
 
-      ctx.io.to(`text:${channel_id}`).emit('message:edited', {
+      const editedData = {
         messageId: message_id, channelId: channel_id,
         content: newContent, edited: true, editedAt: Date.now()
-      });
+      };
+      ctx.io.to(`text:${channel_id}`).emit('message:edited', editedData);
+      notifySSE('message:edited', editedData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ edited: true, messageId: message_id }) }] };
     }
@@ -276,7 +279,9 @@ const tools = [
         if (idx !== -1) channelMsgs.splice(idx, 1);
       }
 
-      ctx.io.to(`text:${channel_id}`).emit('message:deleted', { messageId: message_id, channelId: channel_id });
+      const deletedData = { messageId: message_id, channelId: channel_id };
+      ctx.io.to(`text:${channel_id}`).emit('message:deleted', deletedData);
+      notifySSE('message:deleted', deletedData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, messageId: message_id }) }] };
     }
@@ -697,10 +702,12 @@ const tools = [
           // Persist
           await db.updateMessageReactions(message_id, msg.reactions);
 
-          ctx.io.to(`text:${channel_id}`).emit('message:reacted', {
+          const reactedData = {
             messageId: message_id, channelId: channel_id,
             reactions: msg.reactions
-          });
+          };
+          ctx.io.to(`text:${channel_id}`).emit('message:reacted', reactedData);
+          notifySSE('message:reacted', reactedData);
         }
       }
 
@@ -732,9 +739,9 @@ const tools = [
 
       await db.pinMessage(channel_id, message_id, ctx.tokenData.accountId);
 
-      ctx.io.to(`text:${channel_id}`).emit('message:pinned', {
-        channelId: channel_id, messageId: message_id
-      });
+      const pinnedData = { channelId: channel_id, messageId: message_id };
+      ctx.io.to(`text:${channel_id}`).emit('message:pinned', pinnedData);
+      notifySSE('message:pinned', pinnedData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ pinned: true }) }] };
     }

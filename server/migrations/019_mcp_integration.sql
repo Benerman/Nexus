@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS bot_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     name VARCHAR(64) NOT NULL,
-    token VARCHAR(128) NOT NULL UNIQUE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
     scopes JSONB NOT NULL DEFAULT '["read", "write"]',
     server_ids JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS bot_tokens (
     last_used_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX IF NOT EXISTS idx_bot_tokens_token ON bot_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_bot_tokens_token_hash ON bot_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_bot_tokens_account_id ON bot_tokens(account_id);
 
 -- Add is_bot flag to accounts

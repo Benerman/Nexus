@@ -21,6 +21,10 @@ const socketRateLimiters = {
   userUpdate: new RateLimiterMemory({ points: 10, duration: 60 }),
   typing: new RateLimiterMemory({ points: 20, duration: 10 }),
   react: new RateLimiterMemory({ points: 30, duration: 10 }),
+  mcpMessage: new RateLimiterMemory({ points: 30, duration: 10 }),
+  mcpTokenCreate: new RateLimiterMemory({ points: 5, duration: 60 }),
+  mcpBotCreate: new RateLimiterMemory({ points: 3, duration: 60 }),
+  mcpStream: new RateLimiterMemory({ points: 30, duration: 10 }),
 };
 
 const soundboardLimiter = new RateLimiterMemory({ points: 10, duration: 10 });

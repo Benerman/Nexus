@@ -15,18 +15,31 @@ function generateBotToken() {
 }
 
 /**
+ * Hash a token using SHA-256 for storage
+ */
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
  * Create a new bot token for an account
  */
-async function createBotToken({ accountId, name, scopes, serverIds, expiresAt }) {
+async function createBotToken({ accountId, name, scopes, serverIds, expiresInDays }) {
   const token = generateBotToken();
+  const tokenHash = hashToken(token);
+  const expiresAt = expiresInDays
+    ? new Date(Date.now() + expiresInDays * 86400000)
+    : null;
+
   const result = await db.query(
-    `INSERT INTO bot_tokens (account_id, name, token, scopes, server_ids, expires_at)
+    `INSERT INTO bot_tokens (account_id, name, token_hash, scopes, server_ids, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, name, token, scopes, server_ids, created_at, expires_at`,
-    [accountId, name, token, JSON.stringify(scopes || ['read', 'write']),
-     JSON.stringify(serverIds || []), expiresAt || null]
+     RETURNING id, name, scopes, server_ids, created_at, expires_at`,
+    [accountId, name, tokenHash, JSON.stringify(scopes || ['read', 'write']),
+     JSON.stringify(serverIds || []), expiresAt]
   );
-  return result.rows[0];
+  // Return the raw token to the caller (only time it's visible)
+  return { ...result.rows[0], token };
 }
 
 /**
@@ -36,10 +49,11 @@ async function createBotToken({ accountId, name, scopes, serverIds, expiresAt })
 async function validateBotToken(token) {
   if (!token || !token.startsWith('nxbot_')) return null;
 
+  const tokenHash = hashToken(token);
   const result = await db.query(
     `SELECT id, account_id, scopes, server_ids, expires_at
-     FROM bot_tokens WHERE token = $1`,
-    [token]
+     FROM bot_tokens WHERE token_hash = $1`,
+    [tokenHash]
   );
 
   if (result.rows.length === 0) return null;
@@ -171,6 +185,52 @@ async function mcpAuthMiddleware(req, res, next) {
   next();
 }
 
+const VALID_SCOPES = ['read', 'write', 'moderate', 'manage', 'admin'];
+
+// ─── Credential Encryption ──────────────────────────────────────────────────
+
+/**
+ * Derive a 256-bit encryption key from JWT_SECRET
+ */
+function getEncryptionKey() {
+  const secret = process.env.JWT_SECRET || 'nexus-dev-secret';
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+/**
+ * Encrypt a JSON object using AES-256-GCM
+ * @returns {string} base64-encoded ciphertext (iv:authTag:ciphertext)
+ */
+function encryptJson(obj) {
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const plaintext = JSON.stringify(obj);
+  let encrypted = cipher.update(plaintext, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
+  const authTag = cipher.getAuthTag().toString('base64');
+  return `${iv.toString('base64')}:${authTag}:${encrypted}`;
+}
+
+/**
+ * Decrypt an AES-256-GCM encrypted string back to a JSON object
+ * @param {string} encryptedStr - base64 encoded iv:authTag:ciphertext
+ * @returns {Object} decrypted JSON object
+ */
+function decryptJson(encryptedStr) {
+  const key = getEncryptionKey();
+  const parts = encryptedStr.split(':');
+  if (parts.length !== 3) throw new Error('Invalid encrypted format');
+  const iv = Buffer.from(parts[0], 'base64');
+  const authTag = Buffer.from(parts[1], 'base64');
+  const ciphertext = parts[2];
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  let decrypted = decipher.update(ciphertext, 'base64', 'utf8');
+  decrypted += decipher.final('utf8');
+  return JSON.parse(decrypted);
+}
+
 module.exports = {
   generateBotToken,
   createBotToken,
@@ -180,5 +240,8 @@ module.exports = {
   hasScope,
   hasServerAccess,
   getBotPermissions,
-  mcpAuthMiddleware
+  requireMcpAuth: mcpAuthMiddleware,
+  VALID_SCOPES,
+  encryptJson,
+  decryptJson
 };

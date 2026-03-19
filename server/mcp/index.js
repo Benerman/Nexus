@@ -19,10 +19,14 @@
  */
 
 const express = require('express');
+const { RateLimiterMemory } = require('rate-limiter-flexible');
 const { requireMcpAuth, createBotToken, getBotTokens, deleteBotToken, validateBotToken } = require('./auth');
 const { getToolDefinitions, executeTool } = require('./tools');
 const { resourceTemplates, readResource } = require('./resources');
 const { handleSSEConnection, registerEventBridge, getSSEConnectionCount } = require('./events');
+
+// Per-token rate limiter for REST MCP message endpoint
+const mcpRestLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 
 const MCP_PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'nexus-mcp';
@@ -49,7 +53,7 @@ function createMcpRouter(io) {
         resources: { subscribe: false, listChanged: false },
         logging: {},
       },
-      instructions: 'Nexus MCP Server — interact with channels, messages, members, and moderation via MCP tools. Authenticate with a bot token (Bearer nxb_...).'
+      instructions: 'Nexus MCP Server — interact with channels, messages, members, and moderation via MCP tools. Authenticate with a bot token (Bearer nxbot_...).'
     });
   });
 
@@ -97,6 +101,17 @@ function createMcpRouter(io) {
 
   // ─── MCP JSON-RPC Message Handler (requires bot token) ────────────────
   router.post('/message', requireMcpAuth, async (req, res) => {
+    // Per-token rate limiting
+    const rateLimitKey = req.mcpAuth.tokenId || req.mcpAuth.accountId;
+    try {
+      await mcpRestLimiter.consume(rateLimitKey);
+    } catch {
+      return res.status(429).json({
+        jsonrpc: '2.0', id: req.body?.id || null,
+        error: { code: -32000, message: 'Rate limit exceeded' }
+      });
+    }
+
     const { jsonrpc, id, method, params } = req.body;
 
     if (jsonrpc !== '2.0') {
@@ -201,7 +216,7 @@ async function requireUserAuth(req, res, next) {
   const token = authHeader.slice(7);
 
   // If it's a bot token, use the bot's account
-  if (token.startsWith('nxb_')) {
+  if (token.startsWith('nxbot_')) {
     const tokenData = await validateBotToken(token);
     if (!tokenData) return res.status(401).json({ error: 'Invalid bot token' });
     req.accountId = tokenData.accountId;
