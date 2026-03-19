@@ -15,6 +15,17 @@ CREATE TABLE IF NOT EXISTS bot_tokens (
 CREATE INDEX IF NOT EXISTS idx_bot_tokens_token_hash ON bot_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_bot_tokens_account_id ON bot_tokens(account_id);
 
+-- Migration: rename token → token_hash for existing deployments
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'bot_tokens' AND column_name = 'token') THEN
+    ALTER TABLE bot_tokens RENAME COLUMN token TO token_hash;
+    -- Truncate existing plaintext tokens (they're now invalid anyway)
+    DELETE FROM bot_tokens;
+    DROP INDEX IF EXISTS idx_bot_tokens_token;
+  END IF;
+END $$;
+
 -- Add is_bot flag to accounts
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT FALSE;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS bot_owner_id UUID REFERENCES accounts(id) ON DELETE SET NULL;
