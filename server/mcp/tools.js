@@ -8,9 +8,10 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const db = require('../db');
 const { state, channelToServer } = require('../state');
-const { getUserPerms, getUserHighestRolePosition, parseMentions, parseChannelLinks } = require('../helpers');
+const { getUserPerms, getUserHighestRolePosition, parseMentions, parseChannelLinks, serializeServer } = require('../helpers');
 const { hasScope, hasServerAccess } = require('./auth');
 const { notifySSE } = require('./events');
 
@@ -546,6 +547,102 @@ const tools = [
     }
   },
 
+  {
+    name: 'edit_channel',
+    description: 'Update a channel\'s name, topic, or other settings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' },
+        channel_id: { type: 'string', description: 'The channel ID to edit' },
+        name: { type: 'string', description: 'New channel name' },
+        topic: { type: 'string', description: 'New channel topic (max 256 chars)' },
+        nsfw: { type: 'boolean', description: 'Mark as NSFW' },
+        slow_mode: { type: 'number', description: 'Slow mode in seconds (0 to disable)' }
+      },
+      required: ['server_id', 'channel_id']
+    },
+    scope: 'manage',
+    handler: async (params, ctx) => {
+      const { server_id, channel_id, name, topic, nsfw, slow_mode } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.manageChannels) return { error: 'Missing manageChannels permission' };
+
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+      const ch = [...srv.channels.text, ...srv.channels.voice].find(c => c.id === channel_id);
+      if (!ch) return { error: 'Channel not found' };
+
+      if (name !== undefined) {
+        const normalized = String(name).toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32);
+        const allChannels = [...srv.channels.text, ...srv.channels.voice];
+        if (allChannels.some(c => c.name === normalized && c.id !== channel_id)) {
+          return { error: `A channel named "${normalized}" already exists` };
+        }
+        ch.name = normalized;
+      }
+      if (topic !== undefined) ch.topic = String(topic).slice(0, 256);
+      if (nsfw !== undefined) ch.nsfw = Boolean(nsfw);
+      if (slow_mode !== undefined) ch.slowMode = Math.max(0, parseInt(slow_mode) || 0);
+
+      await db.saveChannel({
+        id: channel_id, serverId: server_id, categoryId: ch.categoryId, name: ch.name,
+        type: ch.type, description: ch.description, topic: ch.topic,
+        position: ch.position, isPrivate: ch.isPrivate, nsfw: ch.nsfw,
+        slowMode: ch.slowMode, permissionOverrides: ch.permissionOverrides
+      });
+
+      ctx.io.to(server_id).emit('server:updated', { server: serializeServer(server_id) });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ updated: true, channel: { id: ch.id, name: ch.name, topic: ch.topic } }) }] };
+    }
+  },
+
+  {
+    name: 'delete_channel',
+    description: 'Delete a text or voice channel from a server.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' },
+        channel_id: { type: 'string', description: 'The channel ID to delete' }
+      },
+      required: ['server_id', 'channel_id']
+    },
+    scope: 'manage',
+    handler: async (params, ctx) => {
+      const { server_id, channel_id } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.manageChannels) return { error: 'Missing manageChannels permission' };
+
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+
+      const wasText = srv.channels.text.some(c => c.id === channel_id);
+      const wasVoice = srv.channels.voice.some(c => c.id === channel_id);
+      if (!wasText && !wasVoice) return { error: 'Channel not found' };
+
+      srv.channels.text = srv.channels.text.filter(c => c.id !== channel_id);
+      srv.channels.voice = srv.channels.voice.filter(c => c.id !== channel_id);
+      channelToServer.delete(channel_id);
+      Object.values(srv.categories).forEach(cat => {
+        cat.channels = cat.channels.filter(cid => cid !== channel_id);
+      });
+
+      db.query('DELETE FROM channels WHERE id = $1', [channel_id]).catch(err => {
+        console.error('[MCP] Failed to delete channel from DB:', err.message);
+      });
+
+      ctx.io.to(server_id).emit('server:updated', { server: serializeServer(server_id) });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, channelId: channel_id }) }] };
+    }
+  },
+
   // ── Server & Member Info ──────────────────────────────────────────────────
   {
     name: 'list_servers',
@@ -827,6 +924,196 @@ const tools = [
           text: JSON.stringify({ timedOut: true, userId: user_id, expiresAt: expiresAt.toISOString() })
         }]
       };
+    }
+  },
+
+  {
+    name: 'unban_member',
+    description: 'Revoke a ban on a user, allowing them to rejoin the server.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' },
+        user_id: { type: 'string', description: 'User to unban' }
+      },
+      required: ['server_id', 'user_id']
+    },
+    scope: 'moderate',
+    handler: async (params, ctx) => {
+      const { server_id, user_id } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.banMembers) return { error: 'Missing banMembers permission' };
+
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+
+      const wasBanned = await db.isUserBanned(server_id, user_id);
+      if (!wasBanned) return { error: 'User is not banned' };
+
+      await db.unbanUser(server_id, user_id);
+
+      try {
+        await db.createAuditLog({
+          serverId: server_id, actorId: ctx.tokenData.accountId,
+          action: 'member_unban', targetId: user_id, details: {}
+        });
+      } catch (e) { /* non-fatal */ }
+
+      return { content: [{ type: 'text', text: JSON.stringify({ unbanned: true, userId: user_id }) }] };
+    }
+  },
+
+  {
+    name: 'remove_timeout',
+    description: 'Remove a timeout from a member, restoring their permissions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' },
+        user_id: { type: 'string', description: 'User to remove timeout from' }
+      },
+      required: ['server_id', 'user_id']
+    },
+    scope: 'moderate',
+    handler: async (params, ctx) => {
+      const { server_id, user_id } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.moderateMembers) return { error: 'Missing moderateMembers permission' };
+
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+
+      const isTimedOut = await db.isUserTimedOut(server_id, user_id);
+      if (!isTimedOut) return { error: 'User is not timed out' };
+
+      await db.removeTimeout(server_id, user_id);
+
+      ctx.io.to(server_id).emit('server:member-timeout-removed', { serverId: server_id, userId: user_id });
+
+      return { content: [{ type: 'text', text: JSON.stringify({ removed: true, userId: user_id }) }] };
+    }
+  },
+
+  {
+    name: 'get_bans',
+    description: 'List all banned users in a server.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' }
+      },
+      required: ['server_id']
+    },
+    scope: 'moderate',
+    handler: async (params, ctx) => {
+      const { server_id } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.banMembers) return { error: 'Missing banMembers permission' };
+
+      const bans = await db.getServerBans(server_id);
+      return { content: [{ type: 'text', text: JSON.stringify(bans) }] };
+    }
+  },
+
+  {
+    name: 'get_timeouts',
+    description: 'List all currently timed-out users in a server.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' }
+      },
+      required: ['server_id']
+    },
+    scope: 'moderate',
+    handler: async (params, ctx) => {
+      const { server_id } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.moderateMembers) return { error: 'Missing moderateMembers permission' };
+
+      const timeouts = await db.getServerTimeouts(server_id);
+      return { content: [{ type: 'text', text: JSON.stringify(timeouts) }] };
+    }
+  },
+
+  // ── Webhooks ────────────────────────────────────────────────────────────────
+  {
+    name: 'create_webhook',
+    description: 'Create a webhook for a text channel. Returns the webhook URL for posting messages.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' },
+        channel_id: { type: 'string', description: 'The text channel ID' },
+        name: { type: 'string', description: 'Webhook name (max 32 chars)' }
+      },
+      required: ['server_id', 'channel_id', 'name']
+    },
+    scope: 'manage',
+    handler: async (params, ctx) => {
+      const { server_id, channel_id, name } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.manageChannels) return { error: 'Missing manageChannels permission' };
+
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+      const ch = srv.channels.text.find(c => c.id === channel_id);
+      if (!ch) return { error: 'Text channel not found' };
+
+      const webhookId = uuidv4();
+      const token = crypto.randomBytes(32).toString('hex');
+      const webhookName = String(name).slice(0, 32);
+
+      await db.createWebhook({ id: webhookId, channelId: channel_id, name: webhookName, avatar: null, token, createdBy: ctx.tokenData.accountId });
+
+      const webhook = { id: webhookId, name: webhookName, channelId: channel_id, createdBy: ctx.tokenData.accountId, createdAt: Date.now() };
+      if (!ch.webhooks) ch.webhooks = [];
+      ch.webhooks.push(webhook);
+
+      const url = `/api/webhooks/${webhookId}/${token}`;
+      return { content: [{ type: 'text', text: JSON.stringify({ created: true, webhook: { ...webhook, url } }) }] };
+    }
+  },
+
+  {
+    name: 'delete_webhook',
+    description: 'Delete a webhook from a channel.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        server_id: { type: 'string', description: 'The server ID' },
+        channel_id: { type: 'string', description: 'The channel ID' },
+        webhook_id: { type: 'string', description: 'The webhook ID to delete' }
+      },
+      required: ['server_id', 'channel_id', 'webhook_id']
+    },
+    scope: 'manage',
+    handler: async (params, ctx) => {
+      const { server_id, channel_id, webhook_id } = params;
+      if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
+
+      const perms = getUserPerms(ctx.tokenData.accountId, server_id);
+      if (!perms.manageChannels) return { error: 'Missing manageChannels permission' };
+
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+      const ch = srv.channels.text.find(c => c.id === channel_id);
+      if (!ch) return { error: 'Channel not found' };
+
+      await db.deleteWebhook(webhook_id);
+      if (ch.webhooks) ch.webhooks = ch.webhooks.filter(w => w.id !== webhook_id);
+
+      return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, webhookId: webhook_id }) }] };
     }
   },
 
