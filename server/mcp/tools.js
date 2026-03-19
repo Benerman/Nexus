@@ -25,16 +25,28 @@ const tools = [
       type: 'object',
       properties: {
         channel_id: { type: 'string', description: 'The channel ID to send to' },
-        content: { type: 'string', description: 'Message text content (max 2000 chars)' },
+        content: { type: 'string', description: 'Message text content (max 2000 chars). Returns error if exceeded.' },
         embeds: {
           type: 'array',
-          description: 'Rich embed objects',
+          description: 'Rich embed objects (max 10)',
           items: {
             type: 'object',
             properties: {
-              title: { type: 'string' },
-              description: { type: 'string' },
+              title: { type: 'string', description: 'Embed title (max 256 chars)' },
+              description: { type: 'string', description: 'Embed description (max 4096 chars)' },
               color: { type: 'number', description: 'Integer color value' },
+              image: {
+                type: 'object',
+                description: 'Embed image',
+                properties: { url: { type: 'string', description: 'Image URL' } },
+                required: ['url']
+              },
+              thumbnail: {
+                type: 'object',
+                description: 'Embed thumbnail',
+                properties: { url: { type: 'string', description: 'Thumbnail URL' } },
+                required: ['url']
+              },
               fields: {
                 type: 'array',
                 items: {
@@ -76,7 +88,10 @@ const tools = [
       if (!ch) return { error: 'Text channel not found' };
 
       const account = await db.getAccountById(ctx.tokenData.accountId);
-      const messageContent = content ? String(content).slice(0, 2000) : '';
+      if (content && String(content).length > 2000) {
+        return { error: `Message content exceeds 2000 character limit (${String(content).length} chars)` };
+      }
+      const messageContent = content ? String(content) : '';
       const mentions = parseMentions(messageContent, serverId);
       const channelLinks = parseChannelLinks(messageContent, serverId);
 
@@ -84,6 +99,8 @@ const tools = [
         title: typeof embed.title === 'string' ? embed.title.slice(0, 256) : undefined,
         description: typeof embed.description === 'string' ? embed.description.slice(0, 4096) : undefined,
         color: typeof embed.color === 'number' ? embed.color : undefined,
+        image: embed.image?.url ? { url: String(embed.image.url) } : undefined,
+        thumbnail: embed.thumbnail?.url ? { url: String(embed.thumbnail.url) } : undefined,
         fields: Array.isArray(embed.fields) ? embed.fields.slice(0, 25).map(f => ({
           name: String(f.name).slice(0, 256),
           value: String(f.value).slice(0, 1024),
@@ -195,19 +212,62 @@ const tools = [
 
   {
     name: 'edit_message',
-    description: 'Edit a message sent by this bot/agent.',
+    description: 'Edit a message sent by this bot/agent. Can update content and/or embeds.',
     inputSchema: {
       type: 'object',
       properties: {
         channel_id: { type: 'string', description: 'Channel containing the message' },
         message_id: { type: 'string', description: 'Message ID to edit' },
-        content: { type: 'string', description: 'New message content' }
+        content: { type: 'string', description: 'New message content (max 2000 chars). Returns error if exceeded.' },
+        embeds: {
+          type: 'array',
+          description: 'New embed objects (replaces existing embeds, max 10)',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Embed title (max 256 chars)' },
+              description: { type: 'string', description: 'Embed description (max 4096 chars)' },
+              color: { type: 'number', description: 'Integer color value' },
+              image: {
+                type: 'object',
+                description: 'Embed image',
+                properties: { url: { type: 'string', description: 'Image URL' } },
+                required: ['url']
+              },
+              thumbnail: {
+                type: 'object',
+                description: 'Embed thumbnail',
+                properties: { url: { type: 'string', description: 'Thumbnail URL' } },
+                required: ['url']
+              },
+              fields: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    value: { type: 'string' },
+                    inline: { type: 'boolean' }
+                  },
+                  required: ['name', 'value']
+                }
+              },
+              footer: {
+                type: 'object',
+                properties: { text: { type: 'string' } }
+              }
+            }
+          }
+        }
       },
-      required: ['channel_id', 'message_id', 'content']
+      required: ['channel_id', 'message_id']
     },
     scope: 'write',
     handler: async (params, ctx) => {
-      const { channel_id, message_id, content } = params;
+      const { channel_id, message_id, content, embeds } = params;
+      if (content === undefined && !embeds) {
+        return { error: 'Either content or embeds is required' };
+      }
       const serverId = channelToServer.get(channel_id);
       if (!serverId) return { error: 'Channel not found' };
       if (!hasServerAccess(ctx.tokenData, serverId)) return { error: 'No access to this server' };
@@ -218,8 +278,34 @@ const tools = [
         return { error: 'Can only edit own messages' };
       }
 
-      const newContent = String(content).slice(0, 2000);
+      const newContent = content !== undefined ? String(content) : existing.content;
+      if (newContent.length > 2000) {
+        return { error: `Message content exceeds 2000 character limit (${newContent.length} chars)` };
+      }
+
+      const validEmbeds = embeds ? (embeds || []).slice(0, 10).map(embed => ({
+        title: typeof embed.title === 'string' ? embed.title.slice(0, 256) : undefined,
+        description: typeof embed.description === 'string' ? embed.description.slice(0, 4096) : undefined,
+        color: typeof embed.color === 'number' ? embed.color : undefined,
+        image: embed.image?.url ? { url: String(embed.image.url) } : undefined,
+        thumbnail: embed.thumbnail?.url ? { url: String(embed.thumbnail.url) } : undefined,
+        fields: Array.isArray(embed.fields) ? embed.fields.slice(0, 25).map(f => ({
+          name: String(f.name).slice(0, 256),
+          value: String(f.value).slice(0, 1024),
+          inline: !!f.inline
+        })) : undefined,
+        footer: embed.footer ? { text: String(embed.footer.text || '').slice(0, 2048) } : undefined
+      })) : undefined;
+
       await db.updateMessage(message_id, newContent);
+
+      // Update embeds in DB if provided
+      if (validEmbeds !== undefined) {
+        await db.query(
+          'UPDATE messages SET embeds = $1 WHERE id = $2',
+          [JSON.stringify(validEmbeds), message_id]
+        );
+      }
 
       // Update in-memory
       const channelMsgs = state.messages[channel_id];
@@ -229,12 +315,14 @@ const tools = [
           msg.content = newContent;
           msg.edited = true;
           msg.editedAt = Date.now();
+          if (validEmbeds !== undefined) msg.embeds = validEmbeds;
         }
       }
 
       const editedData = {
         messageId: message_id, channelId: channel_id,
-        content: newContent, edited: true, editedAt: Date.now()
+        content: newContent, edited: true, editedAt: Date.now(),
+        ...(validEmbeds !== undefined && { embeds: validEmbeds })
       };
       ctx.io.to(`text:${channel_id}`).emit('message:edited', editedData);
       notifySSE('message:edited', editedData);
@@ -756,7 +844,7 @@ const tools = [
       properties: {
         channel_id: { type: 'string', description: 'Channel containing the parent message' },
         message_id: { type: 'string', description: 'Parent message ID' },
-        content: { type: 'string', description: 'Thread reply content' }
+        content: { type: 'string', description: 'Thread reply content (max 2000 chars)' }
       },
       required: ['channel_id', 'message_id', 'content']
     },
@@ -771,7 +859,10 @@ const tools = [
       if (!perms.sendMessages) return { error: 'Missing sendMessages permission' };
 
       const account = await db.getAccountById(ctx.tokenData.accountId);
-      const threadContent = String(content).slice(0, 2000);
+      if (String(content).length > 2000) {
+        return { error: `Thread content exceeds 2000 character limit (${String(content).length} chars)` };
+      }
+      const threadContent = String(content);
 
       const threadMsg = await db.saveThreadMessage({
         parentMessageId: message_id, channelId: channel_id,
