@@ -2296,15 +2296,30 @@ export default function App() {
   const handleLogout = useCallback(() => {
     clientLogger.setToken(null);
     webrtcRef.current.clearVoiceState?.();
+    // Clear all user-specific localStorage to prevent data leaking between accounts
     localStorage.removeItem('nexus_token');
     localStorage.removeItem('nexus_username');
+    localStorage.removeItem('nexus_last_server');
+    localStorage.removeItem('nexus_last_channel');
+    localStorage.removeItem('nexus_server_order');
+    localStorage.removeItem('nexus_pinned_dms');
+    localStorage.removeItem('nexus_muted_servers');
+    localStorage.removeItem('nexus_onboarding_completed');
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
       socketRef.current = null;
       setSocket(null);
     }
+    // Reset all server/channel state to prevent stale data flash on next login
     setCurrentUser(null);
+    setServers([]);
+    setServerData({});
+    setActiveServerId(null);
+    setActiveChannel(null);
+    setMessages({});
+    setOnlineUsers({});
+    setVoiceChannelState({});
     setSettingsOpen(false);
   }, []);
 
