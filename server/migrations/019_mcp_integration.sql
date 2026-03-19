@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS bot_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_bot_tokens_token_hash ON bot_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_bot_tokens_account_id ON bot_tokens(account_id);
+CREATE INDEX IF NOT EXISTS idx_bot_tokens_expires_at ON bot_tokens(expires_at);
 
 -- Migration: rename token → token_hash for existing deployments
 DO $$
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS mcp_connections (
     name VARCHAR(128) NOT NULL,
     transport VARCHAR(16) NOT NULL DEFAULT 'sse',
     server_url TEXT NOT NULL,
-    auth_config JSONB DEFAULT '{}',
+    auth_config TEXT DEFAULT '{}',
     enabled_tools JSONB DEFAULT '[]',
     enabled BOOLEAN DEFAULT TRUE,
     created_by UUID REFERENCES accounts(id) ON DELETE SET NULL,
@@ -49,6 +50,18 @@ CREATE TABLE IF NOT EXISTS mcp_connections (
 
 CREATE INDEX IF NOT EXISTS idx_mcp_connections_server_id ON mcp_connections(server_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_connections_channel_id ON mcp_connections(channel_id);
+
+-- Migration: change auth_config from JSONB to TEXT for encrypted storage
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'mcp_connections' AND column_name = 'auth_config' AND data_type = 'jsonb'
+  ) THEN
+    ALTER TABLE mcp_connections ALTER COLUMN auth_config TYPE TEXT USING auth_config::TEXT;
+    ALTER TABLE mcp_connections ALTER COLUMN auth_config SET DEFAULT '{}';
+  END IF;
+END $$;
 
 -- Agent configurations per server
 CREATE TABLE IF NOT EXISTS agent_configs (

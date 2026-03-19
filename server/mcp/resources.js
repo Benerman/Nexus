@@ -9,7 +9,7 @@
 
 const db = require('../db');
 const { state, isUserOnline, channelToServer } = require('../state');
-const { hasServerAccess } = require('./auth');
+const { hasServerAccess, hasScope } = require('./auth');
 const { getUserPerms } = require('../helpers');
 
 /**
@@ -70,7 +70,7 @@ const resourceTemplates = [
  * Parse a nexus:// URI into parts
  */
 function parseResourceUri(uri) {
-  const match = uri.match(/^nexus:\/\/(\w+)\/([^/]+)(?:\/(.+))?$/);
+  const match = uri.match(/^nexus:\/\/(server|channel|user)\/([a-zA-Z0-9-]+)(?:\/([\w-]+))?$/);
   if (!match) return null;
   return { type: match[1], id: match[2], sub: match[3] || null };
 }
@@ -79,6 +79,7 @@ function parseResourceUri(uri) {
  * Resolve a resource URI to its content
  */
 async function readResource(uri, tokenData) {
+  if (!hasScope(tokenData, 'read')) return { error: 'Missing read scope' };
   const parsed = parseResourceUri(uri);
   if (!parsed) return { error: 'Invalid resource URI' };
 
@@ -139,21 +140,29 @@ async function resolveServerResource(parsed, tokenData) {
         }]
       };
 
-    case 'members':
+    case 'members': {
+      // Limit to first 200 members to prevent huge payloads
+      const memberEntries = Object.entries(srv.members).slice(0, 200);
+      const totalMembers = Object.keys(srv.members).length;
       return {
         contents: [{
           uri: `nexus://server/${serverId}/members`,
           mimeType: 'application/json',
-          text: JSON.stringify(
-            Object.entries(srv.members).map(([id, m]) => ({
+          text: JSON.stringify({
+            members: memberEntries.map(([id, m]) => ({
               id, username: m.username, roles: m.roles,
               online: isUserOnline(id), joinedAt: m.joinedAt
-            }))
-          )
+            })),
+            total: totalMembers,
+            truncated: totalMembers > 200
+          })
         }]
       };
+    }
 
-    case 'roles':
+    case 'roles': {
+      const rolePerms = getUserPerms(tokenData.accountId, serverId);
+      const canViewPerms = rolePerms.manageRoles || rolePerms.manageServer || srv.ownerId === tokenData.accountId;
       return {
         contents: [{
           uri: `nexus://server/${serverId}/roles`,
@@ -161,11 +170,13 @@ async function resolveServerResource(parsed, tokenData) {
           text: JSON.stringify(
             Object.values(srv.roles).map(r => ({
               id: r.id, name: r.name, color: r.color,
-              position: r.position, permissions: r.permissions
+              position: r.position,
+              ...(canViewPerms && { permissions: r.permissions })
             }))
           )
         }]
       };
+    }
 
     case 'audit-log': {
       const perms = getUserPerms(tokenData.accountId, serverId);
@@ -238,6 +249,14 @@ async function resolveUserResource(parsed, tokenData) {
   const userId = parsed.id;
   const account = await db.getAccountById(userId);
   if (!account) return { error: 'User not found' };
+
+  // Access control: require shared server membership
+  const sharesServer = Object.values(state.servers).some(srv =>
+    srv.members[tokenData.accountId] && srv.members[userId]
+  );
+  if (!sharesServer && tokenData.accountId !== userId) {
+    return { error: 'No shared server with this user' };
+  }
 
   return {
     contents: [{

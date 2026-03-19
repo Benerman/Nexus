@@ -13,12 +13,17 @@ const { getUserPerms } = require('../helpers');
 // Active SSE connections: Map<connectionId, { res, tokenData, subscriptions }>
 const sseConnections = new Map();
 let connectionCounter = 0;
+let eventBridgeRegistered = false;
 
 /**
  * Register the SSE event bridge with Socket.IO
  * Listens to io events and forwards them to subscribed SSE clients.
  */
 function registerEventBridge(io) {
+  // Guard against double registration (hot-reload, tests)
+  if (eventBridgeRegistered) return;
+  eventBridgeRegistered = true;
+
   // Listen to internal events on connected sockets
   io.on('connection', (socket) => {
     const eventsToForward = [
@@ -69,12 +74,10 @@ function broadcastToSSE(eventName, data) {
       const channelId = data?._channelId || data?.channelId;
       const serverId = data?.serverId || (channelId ? channelToServer.get(channelId) : null);
 
-      // Skip message/channel events with no determinable serverId (can't verify access)
-      if (!serverId && (eventName.startsWith('message:') || eventName.startsWith('channel:'))) {
-        continue;
-      }
+      // Skip all events with no determinable serverId — can't verify access
+      if (!serverId) continue;
 
-      if (serverId && !hasServerAccess(conn.tokenData, serverId)) {
+      if (!hasServerAccess(conn.tokenData, serverId)) {
         continue;
       }
 
@@ -114,6 +117,16 @@ function handleSSEConnection(req, res) {
   // Parse subscription filters from query params
   const channels = req.query.channels ? req.query.channels.split(',').filter(Boolean) : [];
   const events = req.query.events ? req.query.events.split(',').filter(Boolean) : [];
+
+  // Limit connections per token/account (max 5)
+  const MAX_SSE_PER_TOKEN = 5;
+  let tokenConnCount = 0;
+  for (const [, conn] of sseConnections) {
+    if (conn.tokenData.accountId === tokenData.accountId) tokenConnCount++;
+  }
+  if (tokenConnCount >= MAX_SSE_PER_TOKEN) {
+    return res.status(429).json({ error: 'Too many SSE connections (max 5 per account)' });
+  }
 
   // Set up SSE headers
   res.writeHead(200, {

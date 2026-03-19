@@ -15,10 +15,11 @@ function generateBotToken() {
 }
 
 /**
- * Hash a token using SHA-256 for storage
+ * Hash a token using HMAC-SHA256 with server key for storage
  */
 function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
+  const key = process.env.JWT_SECRET || 'nexus-dev-secret';
+  return crypto.createHmac('sha256', key).update(token).digest('hex');
 }
 
 /**
@@ -31,11 +32,26 @@ async function createBotToken({ accountId, name, scopes, serverIds, expiresInDay
     ? new Date(Date.now() + expiresInDays * 86400000)
     : null;
 
+  // Always filter scopes against valid set
+  const validatedScopes = Array.isArray(scopes)
+    ? scopes.filter(s => VALID_SCOPES.includes(s))
+    : ['read', 'write'];
+  if (validatedScopes.length === 0) validatedScopes.push('read');
+
+  // Enforce max tokens per account
+  const countResult = await db.query(
+    'SELECT COUNT(*) as count FROM bot_tokens WHERE account_id = $1',
+    [accountId]
+  );
+  if (parseInt(countResult.rows[0].count) >= 25) {
+    throw new Error('Maximum of 25 bot tokens per account');
+  }
+
   const result = await db.query(
     `INSERT INTO bot_tokens (account_id, name, token_hash, scopes, server_ids, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, name, scopes, server_ids, created_at, expires_at`,
-    [accountId, name, tokenHash, JSON.stringify(scopes || ['read', 'write']),
+    [accountId, name, tokenHash, JSON.stringify(validatedScopes),
      JSON.stringify(serverIds || []), expiresAt]
   );
   // Return the raw token to the caller (only time it's visible)
@@ -64,7 +80,8 @@ async function validateBotToken(token) {
   if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
 
   // Update last used timestamp (fire-and-forget)
-  db.query('UPDATE bot_tokens SET last_used_at = NOW() WHERE id = $1', [row.id]).catch(() => {});
+  db.query('UPDATE bot_tokens SET last_used_at = NOW() WHERE id = $1', [row.id])
+    .catch(err => console.error('[MCP] Failed to update last_used_at:', err.message));
 
   return {
     accountId: row.account_id,
@@ -135,11 +152,12 @@ function getBotPermissions(tokenContext, serverId, channelId = null) {
   if (!scopes.includes('write') && !scopes.includes('admin')) {
     restricted.sendMessages = false;
     restricted.manageMessages = false;
+  }
+
+  if (!scopes.includes('manage') && !scopes.includes('admin')) {
     restricted.manageChannels = false;
     restricted.manageRoles = false;
     restricted.manageServer = false;
-    restricted.kickMembers = false;
-    restricted.banMembers = false;
   }
 
   if (!scopes.includes('moderate') && !scopes.includes('admin')) {
@@ -172,14 +190,15 @@ async function mcpAuthMiddleware(req, res, next) {
     return next();
   }
 
-  // Fall back to user token
+  // Fall back to user token — grant read/write/moderate but NOT admin
+  // Admin scope should only be explicitly granted via bot tokens
   const accountId = await db.validateToken(token);
   if (!accountId) return res.status(401).json({ error: 'Invalid or expired token' });
   req.mcpAuth = {
     type: 'user',
     accountId,
     tokenId: null,
-    scopes: ['read', 'write', 'moderate', 'admin'],
+    scopes: ['read', 'write', 'moderate'],
     serverIds: []
   };
   next();
@@ -193,7 +212,8 @@ const VALID_SCOPES = ['read', 'write', 'moderate', 'manage', 'admin'];
  * Derive a 256-bit encryption key from JWT_SECRET
  */
 function getEncryptionKey() {
-  const secret = process.env.JWT_SECRET || 'nexus-dev-secret';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is required for credential encryption');
   return crypto.createHash('sha256').update(secret).digest();
 }
 

@@ -206,8 +206,8 @@ async function handleAgentResponse(io, agent, triggerMsg, serverId) {
         `INSERT INTO agent_activity_log (agent_config_id, server_id, channel_id, action, input_summary, output_summary, tool_calls, duration_ms)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [agent.id, serverId, channelId, 'respond',
-         (triggerMsg.content || '').slice(0, 200),
-         responseText.slice(0, 200),
+         (triggerMsg.content || '').slice(0, 500),
+         responseText.slice(0, 500),
          JSON.stringify(toolCalls.map(t => t.name)),
          duration]
       );

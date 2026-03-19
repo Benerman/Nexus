@@ -10,9 +10,24 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { state, channelToServer } = require('../state');
-const { getUserPerms, parseMentions, parseChannelLinks } = require('../helpers');
+const { getUserPerms, getUserHighestRolePosition, parseMentions, parseChannelLinks } = require('../helpers');
 const { hasScope, hasServerAccess } = require('./auth');
 const { notifySSE } = require('./events');
+
+/**
+ * Validate embed URL — only allow http(s), block javascript:/data: URIs
+ */
+function safeEmbedUrl(url) {
+  if (!url || typeof url !== 'string') return undefined;
+  const str = String(url).trim();
+  try {
+    const parsed = new URL(str);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return undefined;
+    return str;
+  } catch {
+    return undefined;
+  }
+}
 
 // ─── Tool Definitions ──────────────────────────────────────────────────────
 
@@ -88,6 +103,7 @@ const tools = [
       if (!ch) return { error: 'Text channel not found' };
 
       const account = await db.getAccountById(ctx.tokenData.accountId);
+      if (!account) return { error: 'Account not found' };
       if (content && String(content).length > 2000) {
         return { error: `Message content exceeds 2000 character limit (${String(content).length} chars)` };
       }
@@ -99,8 +115,8 @@ const tools = [
         title: typeof embed.title === 'string' ? embed.title.slice(0, 256) : undefined,
         description: typeof embed.description === 'string' ? embed.description.slice(0, 4096) : undefined,
         color: typeof embed.color === 'number' ? embed.color : undefined,
-        image: embed.image?.url ? { url: String(embed.image.url) } : undefined,
-        thumbnail: embed.thumbnail?.url ? { url: String(embed.thumbnail.url) } : undefined,
+        image: embed.image?.url ? { url: safeEmbedUrl(embed.image.url) } : undefined,
+        thumbnail: embed.thumbnail?.url ? { url: safeEmbedUrl(embed.thumbnail.url) } : undefined,
         fields: Array.isArray(embed.fields) ? embed.fields.slice(0, 25).map(f => ({
           name: String(f.name).slice(0, 256),
           value: String(f.value).slice(0, 1024),
@@ -274,6 +290,7 @@ const tools = [
 
       const existing = await db.getMessageById(message_id);
       if (!existing) return { error: 'Message not found' };
+      if (existing.channel_id !== channel_id) return { error: 'Message does not belong to this channel' };
       if (existing.author_id !== ctx.tokenData.accountId) {
         return { error: 'Can only edit own messages' };
       }
@@ -287,8 +304,8 @@ const tools = [
         title: typeof embed.title === 'string' ? embed.title.slice(0, 256) : undefined,
         description: typeof embed.description === 'string' ? embed.description.slice(0, 4096) : undefined,
         color: typeof embed.color === 'number' ? embed.color : undefined,
-        image: embed.image?.url ? { url: String(embed.image.url) } : undefined,
-        thumbnail: embed.thumbnail?.url ? { url: String(embed.thumbnail.url) } : undefined,
+        image: embed.image?.url ? { url: safeEmbedUrl(embed.image.url) } : undefined,
+        thumbnail: embed.thumbnail?.url ? { url: safeEmbedUrl(embed.thumbnail.url) } : undefined,
         fields: Array.isArray(embed.fields) ? embed.fields.slice(0, 25).map(f => ({
           name: String(f.name).slice(0, 256),
           value: String(f.value).slice(0, 1024),
@@ -333,7 +350,7 @@ const tools = [
 
   {
     name: 'delete_message',
-    description: 'Delete a message. Can delete own messages, or any message with manageMessages permission.',
+    description: 'Delete a message. Can delete own messages (write scope), or any message with manageMessages permission (moderate scope).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -342,7 +359,7 @@ const tools = [
       },
       required: ['channel_id', 'message_id']
     },
-    scope: 'moderate',
+    scope: 'write',  // write for own messages; handler checks moderate for others
     handler: async (params, ctx) => {
       const { channel_id, message_id } = params;
       const serverId = channelToServer.get(channel_id);
@@ -354,6 +371,7 @@ const tools = [
 
       const isOwnMessage = existing.author_id === ctx.tokenData.accountId;
       if (!isOwnMessage) {
+        if (!hasScope(ctx.tokenData, 'moderate')) return { error: 'Missing moderate scope to delete others\' messages' };
         const perms = getUserPerms(ctx.tokenData.accountId, serverId, channel_id);
         if (!perms.manageMessages) return { error: 'Missing manageMessages permission' };
       }
@@ -394,7 +412,11 @@ const tools = [
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
       const safeLimit = Math.min(Math.max(parseInt(limit) || 25, 1), 50);
-      const results = await db.searchMessages(server_id, searchQuery, channel_id || null, safeLimit);
+      const results = await db.searchMessages(server_id, {
+        query: searchQuery,
+        channelId: channel_id || null,
+        limit: safeLimit
+      });
 
       return {
         content: [{
@@ -486,12 +508,18 @@ const tools = [
       const channelId = uuidv4();
       const catId = category_id || (srv.categoryOrder && srv.categoryOrder[0]) || null;
 
+      // Compute next position for the channel type
+      const channelList = type === 'voice' ? srv.channels.voice : srv.channels.text;
+      const nextPosition = channelList.length > 0
+        ? Math.max(...channelList.map(c => c.position || 0)) + 1
+        : 0;
+
       const ch = {
         id: channelId, name: String(name).slice(0, 50).toLowerCase().replace(/\s+/g, '-'),
         type, serverId: server_id, categoryId: catId,
         topic: topic ? String(topic).slice(0, 1024) : '',
         description: '', nsfw: false, slowMode: 0,
-        webhooks: [], position: 0, isPrivate: false,
+        webhooks: [], position: nextPosition, isPrivate: false,
         permissionOverrides: {}
       };
 
@@ -508,11 +536,11 @@ const tools = [
       await db.saveChannel({
         id: channelId, serverId: server_id, categoryId: catId,
         name: ch.name, type, description: '', topic: ch.topic,
-        position: 0, isPrivate: false, nsfw: false, slowMode: 0,
+        position: nextPosition, isPrivate: false, nsfw: false, slowMode: 0,
         permissionOverrides: {}
       });
 
-      ctx.io.emit('channel:created', { serverId: server_id, channel: ch });
+      ctx.io.to(server_id).emit('channel:created', { serverId: server_id, channel: ch });
 
       return { content: [{ type: 'text', text: JSON.stringify({ created: true, channel: ch }) }] };
     }
@@ -654,6 +682,15 @@ const tools = [
       if (srv.ownerId === user_id) return { error: 'Cannot kick server owner' };
       if (!srv.members[user_id]) return { error: 'User is not a member' };
 
+      // Role hierarchy check — can't kick members with equal or higher role
+      if (srv.ownerId !== ctx.tokenData.accountId) {
+        const actorPos = getUserHighestRolePosition(ctx.tokenData.accountId, server_id);
+        const targetPos = getUserHighestRolePosition(user_id, server_id);
+        if (targetPos >= actorPos) {
+          return { error: 'Cannot kick a member with equal or higher role' };
+        }
+      }
+
       delete srv.members[user_id];
       await db.removeServerMember(server_id, user_id);
 
@@ -665,7 +702,7 @@ const tools = [
         });
       } catch (e) { /* audit log failure is non-fatal */ }
 
-      ctx.io.emit('server:member-kicked', { serverId: server_id, userId: user_id, reason });
+      ctx.io.to(server_id).emit('server:member-kicked', { serverId: server_id, userId: user_id, reason });
 
       return { content: [{ type: 'text', text: JSON.stringify({ kicked: true, userId: user_id }) }] };
     }
@@ -695,6 +732,15 @@ const tools = [
       if (!srv) return { error: 'Server not found' };
       if (srv.ownerId === user_id) return { error: 'Cannot ban server owner' };
 
+      // Role hierarchy check
+      if (srv.ownerId !== ctx.tokenData.accountId) {
+        const actorPos = getUserHighestRolePosition(ctx.tokenData.accountId, server_id);
+        const targetPos = getUserHighestRolePosition(user_id, server_id);
+        if (targetPos >= actorPos) {
+          return { error: 'Cannot ban a member with equal or higher role' };
+        }
+      }
+
       await db.banUser(server_id, user_id, ctx.tokenData.accountId, reason || 'Banned via MCP');
       delete srv.members[user_id];
       await db.removeServerMember(server_id, user_id);
@@ -707,7 +753,7 @@ const tools = [
         });
       } catch (e) { /* audit log failure is non-fatal */ }
 
-      ctx.io.emit('server:member-banned', { serverId: server_id, userId: user_id, reason });
+      ctx.io.to(server_id).emit('server:member-banned', { serverId: server_id, userId: user_id, reason });
 
       return { content: [{ type: 'text', text: JSON.stringify({ banned: true, userId: user_id }) }] };
     }
@@ -734,12 +780,25 @@ const tools = [
       const perms = getUserPerms(ctx.tokenData.accountId, server_id);
       if (!perms.moderateMembers) return { error: 'Missing moderateMembers permission' };
 
+      const srv = state.servers[server_id];
+      if (!srv) return { error: 'Server not found' };
+      if (srv.ownerId === user_id) return { error: 'Cannot timeout server owner' };
+
+      // Role hierarchy check
+      if (srv.ownerId !== ctx.tokenData.accountId) {
+        const actorPos = getUserHighestRolePosition(ctx.tokenData.accountId, server_id);
+        const targetPos = getUserHighestRolePosition(user_id, server_id);
+        if (targetPos >= actorPos) {
+          return { error: 'Cannot timeout a member with equal or higher role' };
+        }
+      }
+
       const duration = Math.min(Math.max(parseInt(duration_seconds) || 60, 1), 604800);
       const expiresAt = new Date(Date.now() + duration * 1000);
 
       await db.timeoutUser(server_id, user_id, ctx.tokenData.accountId, expiresAt, reason || 'Timed out via MCP');
 
-      ctx.io.emit('server:member-timeout', {
+      ctx.io.to(server_id).emit('server:member-timeout', {
         serverId: server_id, userId: user_id,
         expiresAt: expiresAt.toISOString(), reason
       });
@@ -776,28 +835,27 @@ const tools = [
       const perms = getUserPerms(ctx.tokenData.accountId, serverId, channel_id);
       if (!perms.addReactions) return { error: 'Missing addReactions permission' };
 
-      // Update in-memory
+      // Update in-memory and persist
       const channelMsgs = state.messages[channel_id];
-      if (channelMsgs) {
-        const msg = channelMsgs.find(m => m.id === message_id);
-        if (msg) {
-          if (!msg.reactions) msg.reactions = {};
-          if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
-          if (!msg.reactions[emoji].includes(ctx.tokenData.accountId)) {
-            msg.reactions[emoji].push(ctx.tokenData.accountId);
-          }
+      if (!channelMsgs) return { error: 'Channel messages not loaded' };
 
-          // Persist
-          await db.updateMessageReactions(message_id, msg.reactions);
+      const msg = channelMsgs.find(m => m.id === message_id);
+      if (!msg) return { error: 'Message not found in channel (may be too old)' };
 
-          const reactedData = {
-            messageId: message_id, channelId: channel_id,
-            reactions: msg.reactions
-          };
-          ctx.io.to(`text:${channel_id}`).emit('message:reacted', reactedData);
-          notifySSE('message:reacted', reactedData);
-        }
+      if (!msg.reactions) msg.reactions = {};
+      if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+      if (!msg.reactions[emoji].includes(ctx.tokenData.accountId)) {
+        msg.reactions[emoji].push(ctx.tokenData.accountId);
       }
+
+      await db.updateMessageReactions(message_id, msg.reactions);
+
+      const reactedData = {
+        messageId: message_id, channelId: channel_id,
+        reactions: msg.reactions
+      };
+      ctx.io.to(`text:${channel_id}`).emit('message:reacted', reactedData);
+      notifySSE('message:reacted', reactedData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ reacted: true }) }] };
     }
@@ -936,9 +994,26 @@ const tools = [
       const perms = getUserPerms(ctx.tokenData.accountId, server_id);
       if (!perms.manageServer) return { error: 'Missing manageServer permission' };
 
+      // Validate config based on rule type
+      const safeConfig = {};
+      if (config && typeof config === 'object') {
+        if (type === 'keyword' && Array.isArray(config.keywords)) {
+          safeConfig.keywords = config.keywords.filter(k => typeof k === 'string').slice(0, 100).map(k => k.slice(0, 200));
+        }
+        if (['spam', 'mention_spam'].includes(type) && typeof config.threshold === 'number') {
+          safeConfig.threshold = Math.min(Math.max(config.threshold, 1), 100);
+        }
+        if (typeof config.exemptRoles === 'object' && Array.isArray(config.exemptRoles)) {
+          safeConfig.exemptRoles = config.exemptRoles.filter(r => typeof r === 'string').slice(0, 25);
+        }
+        if (typeof config.exemptChannels === 'object' && Array.isArray(config.exemptChannels)) {
+          safeConfig.exemptChannels = config.exemptChannels.filter(c => typeof c === 'string').slice(0, 25);
+        }
+      }
+
       const rule = await db.createAutomodRule({
         serverId: server_id, name, type,
-        config: config || {}, action,
+        config: safeConfig, action,
         createdBy: ctx.tokenData.accountId
       });
 

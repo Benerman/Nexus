@@ -31,6 +31,12 @@ const mcpRestLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 const MCP_PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'nexus-mcp';
 const SERVER_VERSION = '1.0.0';
+const SERVER_CAPABILITIES = {
+  tools: { listChanged: false },
+  resources: { subscribe: false, listChanged: false },
+  logging: {},
+};
+const SERVER_INSTRUCTIONS = 'Nexus MCP Server — interact with channels, messages, members, and moderation via MCP tools. Authenticate with a bot token (Bearer nxbot_...).';
 
 /**
  * Create the MCP Express router
@@ -42,18 +48,17 @@ function createMcpRouter(io) {
   // Register SSE event bridge with Socket.IO
   registerEventBridge(io);
 
+  // Body size limit for MCP messages (100KB)
+  router.use(express.json({ limit: '100kb' }));
+
   // ─── Public: Server info/capabilities ──────────────────────────────────
   router.get('/info', (req, res) => {
     res.json({
       name: SERVER_NAME,
       version: SERVER_VERSION,
       protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {
-        tools: { listChanged: false },
-        resources: { subscribe: false, listChanged: false },
-        logging: {},
-      },
-      instructions: 'Nexus MCP Server — interact with channels, messages, members, and moderation via MCP tools. Authenticate with a bot token (Bearer nxbot_...).'
+      capabilities: SERVER_CAPABILITIES,
+      instructions: SERVER_INSTRUCTIONS
     });
   });
 
@@ -102,7 +107,7 @@ function createMcpRouter(io) {
   // ─── MCP JSON-RPC Message Handler (requires bot token) ────────────────
   router.post('/message', requireMcpAuth, async (req, res) => {
     // Per-token rate limiting
-    const rateLimitKey = req.mcpAuth.tokenId || req.mcpAuth.accountId;
+    const rateLimitKey = req.mcpAuth.accountId;
     try {
       await mcpRestLimiter.consume(rateLimitKey);
     } catch {
@@ -133,7 +138,7 @@ function createMcpRouter(io) {
       console.error(`[MCP] Method error (${method}):`, err.message);
       res.json({
         jsonrpc: '2.0', id: id || null,
-        error: { code: -32603, message: err.message }
+        error: { code: err.code || -32603, message: err.message }
       });
     }
   });
@@ -162,13 +167,9 @@ async function handleMethod(method, params, context) {
     case 'initialize':
       return {
         protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: {
-          tools: { listChanged: false },
-          resources: { subscribe: false, listChanged: false },
-          logging: {},
-        },
+        capabilities: SERVER_CAPABILITIES,
         serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-        instructions: 'Nexus MCP Server — interact with channels, messages, members, and moderation. Use tools/list to see available tools, resources/list for readable data.'
+        instructions: SERVER_INSTRUCTIONS
       };
 
     case 'ping':
@@ -215,12 +216,9 @@ async function requireUserAuth(req, res, next) {
 
   const token = authHeader.slice(7);
 
-  // If it's a bot token, use the bot's account
+  // Bot tokens cannot manage tokens — only user JWTs can
   if (token.startsWith('nxbot_')) {
-    const tokenData = await validateBotToken(token);
-    if (!tokenData) return res.status(401).json({ error: 'Invalid bot token' });
-    req.accountId = tokenData.accountId;
-    return next();
+    return res.status(403).json({ error: 'Bot tokens cannot manage tokens. Use a user session token.' });
   }
 
   // Otherwise, validate as user JWT token

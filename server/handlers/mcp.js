@@ -85,7 +85,8 @@ module.exports = function(io, socket) {
       }
     }
 
-    const botName = String(name || 'Bot').slice(0, 32);
+    const rawName = String(name || 'Bot').slice(0, 32).replace(/\[BOT\]/gi, '').trim();
+    const botName = rawName || 'Bot';
 
     try {
       // Create bot account
@@ -150,6 +151,12 @@ module.exports = function(io, socket) {
   socket.on('mcp:bot:list', async ({ serverId }) => {
     const user = state.users[socket.id];
     if (!user) return;
+
+    // If listing by server, require membership
+    if (serverId) {
+      const srv = state.servers[serverId];
+      if (!srv || !srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
+    }
 
     try {
       let result;
@@ -263,6 +270,14 @@ module.exports = function(io, socket) {
     const user = state.users[socket.id];
     if (!user) return;
 
+    // Require server membership and manageServer permission
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.manageServer && !perms.admin && srv.ownerId !== user.id) {
+      return socket.emit('error', { message: 'Missing manageServer permission' });
+    }
+
     try {
       const result = await db.query(
         `SELECT id, server_id, channel_id, name, server_url, transport, enabled_tools, enabled, created_at
@@ -350,6 +365,14 @@ module.exports = function(io, socket) {
   socket.on('mcp:agent:list', async ({ serverId }) => {
     const user = state.users[socket.id];
     if (!user) return;
+
+    // Require server membership and manageServer permission
+    const srv = state.servers[serverId];
+    if (!srv || !srv.members[user.id]) return socket.emit('error', { message: 'Not a member of this server' });
+    const perms = getUserPerms(user.id, serverId);
+    if (!perms.manageServer && !perms.admin && srv.ownerId !== user.id) {
+      return socket.emit('error', { message: 'Missing manageServer permission' });
+    }
 
     try {
       const result = await db.query(
@@ -439,9 +462,10 @@ module.exports = function(io, socket) {
     const perms = getUserPerms(user.id, serverId, channelId);
     if (!perms.sendMessages) return socket.emit('error', { message: 'Missing sendMessages permission' });
 
-    // Create a placeholder message for streaming
+    // Create a placeholder message for streaming (always server-generated ID)
+    const serverMessageId = uuidv4();
     const msg = {
-      id: messageId || uuidv4(),
+      id: serverMessageId,
       channelId,
       content: '',
       author: {
@@ -457,6 +481,8 @@ module.exports = function(io, socket) {
     };
 
     io.to(`text:${channelId}`).emit('message:stream-start', msg);
+    // Return server-generated ID to the caller
+    socket.emit('mcp:stream:started', { messageId: serverMessageId, channelId });
   });
 
   socket.on('mcp:stream:chunk', async ({ channelId, messageId, content }) => {
@@ -472,8 +498,10 @@ module.exports = function(io, socket) {
     const perms = getUserPerms(user.id, serverId, channelId);
     if (!perms.sendMessages) return;
 
+    // Cap chunk size at 4KB
+    const safeContent = typeof content === 'string' ? content.slice(0, 4096) : '';
     io.to(`text:${channelId}`).emit('message:stream-chunk', {
-      messageId, channelId, content
+      messageId, channelId, content: safeContent
     });
   });
 
@@ -489,7 +517,11 @@ module.exports = function(io, socket) {
     const perms = getUserPerms(user.id, serverId, channelId);
     if (!perms.sendMessages) return socket.emit('error', { message: 'Missing sendMessages permission' });
 
-    const content = String(finalContent || '').slice(0, 2000);
+    const rawContent = String(finalContent || '');
+    if (rawContent.length > 2000) {
+      return socket.emit('error', { message: `Stream content exceeds 2000 character limit (${rawContent.length} chars)` });
+    }
+    const content = rawContent;
 
     // Finalize the message
     io.to(`text:${channelId}`).emit('message:stream-end', {
