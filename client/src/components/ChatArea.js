@@ -1364,6 +1364,22 @@ const ChatArea = React.memo(function ChatArea({
                         </div>
                       )}
                     </div>
+                    <div className="message-actions">
+                      <button className="reaction-btn"
+                        onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
+                      <button className="message-options-btn"
+                        onClick={e=>handleMessageContextMenu(e, msg)}
+                        title="Message options">⋯</button>
+                      {reactionTarget===msg.id && (
+                        <EmojiPicker
+                          onSelect={(emoji) => handleReact(msg.id, emoji)}
+                          onClose={() => setReactionTarget(null)}
+                          servers={servers}
+                          currentServerId={server?.id}
+                          socket={socket}
+                        />
+                      )}
+                    </div>
                   </div>
                 </React.Fragment>
               );

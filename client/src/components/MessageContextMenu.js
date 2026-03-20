@@ -68,7 +68,7 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, canM
 
         {onThread && !message.threadId && !isDM && <div className="context-menu-divider" />}
 
-        {canManageMessages && !isDM && onPin && (
+        {canManageMessages && !isDM && onPin && !message.threadId && (
           <button className="context-menu-item" onClick={() => { onPin(message); onClose(); }}>
             <span className="context-menu-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg></span>
             {message.pinned ? 'Unpin Message' : 'Pin Message'}
@@ -82,7 +82,7 @@ const MessageContextMenu = ({ message, currentUser, isAdmin, isServerOwner, canM
           </button>
         )}
 
-        {(onBookmark || (canManageMessages && !isDM && onPin)) && <div className="context-menu-divider" />}
+        {(onBookmark || (canManageMessages && !isDM && onPin && !message.threadId)) && <div className="context-menu-divider" />}
 
         {isAuthor && onEdit && !message.isWebhook && (
           <button className="context-menu-item" onClick={() => { onEdit(message); onClose(); }}>
