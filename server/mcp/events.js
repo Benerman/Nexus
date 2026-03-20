@@ -100,6 +100,7 @@ function registerEventBridge(io) {
   });
 
   // Hook into server-level global broadcasts (io.emit)
+  // io.emit delegates to io.sockets.emit — patch both to be safe
   const origIoEmit = io.emit.bind(io);
   io.emit = function(eventName, ...args) {
     if (FORWARDED_EVENTS.has(eventName)) {
@@ -107,6 +108,17 @@ function registerEventBridge(io) {
     }
     return origIoEmit(eventName, ...args);
   };
+
+  // Also patch the default namespace emit (io.sockets = io.of('/'))
+  if (io.sockets && io.sockets.emit) {
+    const origNsEmit = io.sockets.emit.bind(io.sockets);
+    io.sockets.emit = function(eventName, ...args) {
+      if (FORWARDED_EVENTS.has(eventName)) {
+        broadcastToSSE(eventName, args[0]);
+      }
+      return origNsEmit(eventName, ...args);
+    };
+  }
 }
 
 /**
