@@ -23,7 +23,7 @@ const { RateLimiterMemory } = require('rate-limiter-flexible');
 const { requireMcpAuth, createBotToken, getBotTokens, deleteBotToken, validateBotToken } = require('./auth');
 const { getToolDefinitions, executeTool } = require('./tools');
 const { resourceTemplates, readResource } = require('./resources');
-const { handleSSEConnection, registerEventBridge, getSSEConnectionCount } = require('./events');
+const { handleSSEConnection, registerEventBridge, getSSEConnectionCount, notifySSE } = require('./events');
 
 // Per-token rate limiter for REST MCP message endpoint
 const mcpRestLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
@@ -145,6 +145,28 @@ function createMcpRouter(io) {
 
   // ─── SSE Event Stream (requires bot token) ────────────────────────────
   router.get('/events', requireMcpAuth, handleSSEConnection);
+
+  // ─── SSE Debug (temporary) ─────────────────────────────────────────
+  router.get('/debug/sse', requireMcpAuth, (req, res) => {
+    const { channelToServer } = require('../state');
+    const channelId = req.query.channelId;
+    const mapEntries = [];
+    for (const [chId, srvId] of channelToServer) {
+      mapEntries.push({ channelId: chId, serverId: srvId });
+    }
+    const result = {
+      sseConnections: getSSEConnectionCount(),
+      channelToServerMapSize: channelToServer.size,
+      channelToServerEntries: mapEntries,
+    };
+    if (channelId) {
+      result.lookupResult = channelToServer.get(channelId) || 'NOT_FOUND';
+      // Trigger test broadcast
+      notifySSE('voice:channel:update', { channelId, serverId: channelToServer.get(channelId), channel: { users: [], test: true } });
+      result.testBroadcastSent = true;
+    }
+    res.json(result);
+  });
 
   // ─── SSE Metrics ──────────────────────────────────────────────────────
   router.get('/status', requireMcpAuth, (req, res) => {

@@ -133,6 +133,17 @@ function notifySSE(eventName, data) {
  * Forward an event to all SSE clients that have matching subscriptions
  */
 function broadcastToSSE(eventName, data) {
+  // Temporary debug logging for voice events
+  if (eventName === 'voice:channel:update') {
+    const chId = data?._channelId || data?.channelId;
+    console.log('[SSE DEBUG] voice:channel:update →', {
+      sseClients: sseConnections.size,
+      channelId: chId,
+      serverId: data?.serverId,
+      mapLookup: channelToServer.get(chId) || 'NOT_FOUND',
+      mapSize: channelToServer.size
+    });
+  }
   if (sseConnections.size === 0) return;
 
   for (const [connId, conn] of sseConnections) {
