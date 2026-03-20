@@ -23,7 +23,7 @@ const { RateLimiterMemory } = require('rate-limiter-flexible');
 const { requireMcpAuth, createBotToken, getBotTokens, deleteBotToken, validateBotToken } = require('./auth');
 const { getToolDefinitions, executeTool } = require('./tools');
 const { resourceTemplates, readResource } = require('./resources');
-const { handleSSEConnection, registerEventBridge, getSSEConnectionCount, notifySSE } = require('./events');
+const { handleSSEConnection, registerEventBridge, getSSEConnectionCount } = require('./events');
 
 // Per-token rate limiter for REST MCP message endpoint
 const mcpRestLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
@@ -145,36 +145,6 @@ function createMcpRouter(io) {
 
   // ─── SSE Event Stream (requires bot token) ────────────────────────────
   router.get('/events', requireMcpAuth, handleSSEConnection);
-
-  // ─── SSE Debug (temporary) ─────────────────────────────────────────
-  router.get('/debug/sse', requireMcpAuth, (req, res) => {
-    const { channelToServer } = require('../state');
-    const channelId = req.query.channelId;
-    const mapEntries = [];
-    for (const [chId, srvId] of channelToServer) {
-      mapEntries.push({ channelId: chId, serverId: srvId });
-    }
-    const result = {
-      sseConnections: getSSEConnectionCount(),
-      channelToServerMapSize: channelToServer.size,
-      channelToServerEntries: mapEntries,
-    };
-    if (channelId) {
-      result.lookupResult = channelToServer.get(channelId) || 'NOT_FOUND';
-      const mode = req.query.mode || 'direct'; // direct = notifySSE, ioemit = io.emit
-      if (mode === 'ioemit') {
-        // Test via io.emit — goes through monkey-patch
-        io.emit('voice:channel:update', { channelId, channel: { users: [], test: true, via: 'io.emit' } });
-        result.testMode = 'io.emit (monkey-patch)';
-      } else {
-        // Test via notifySSE — bypasses monkey-patch
-        notifySSE('voice:channel:update', { channelId, serverId: channelToServer.get(channelId), channel: { users: [], test: true, via: 'notifySSE' } });
-        result.testMode = 'notifySSE (direct)';
-      }
-      result.testBroadcastSent = true;
-    }
-    res.json(result);
-  });
 
   // ─── SSE Metrics ──────────────────────────────────────────────────────
   router.get('/status', requireMcpAuth, (req, res) => {

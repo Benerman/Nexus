@@ -6,9 +6,11 @@
  * needing a full Socket.IO connection.
  *
  * Capture strategy:
- * - io.to(room).emit() broadcasts are intercepted via BroadcastOperator proxy
- * - io.emit() global broadcasts are intercepted via monkey-patch
- * - notifySSE() is called directly from MCP tool handlers
+ * - io.to(room).emit() and io.in(room).emit() are intercepted via proxy.
+ *   Room name is parsed to inject _channelId for server-access resolution.
+ * - socket.to(room).emit() and socket.broadcast are intercepted per-connection.
+ * - io.emit() global broadcasts are intercepted via monkey-patch.
+ * - No direct notifySSE() calls needed — all events are captured automatically.
  */
 
 const { state, channelToServer } = require('../state');
@@ -28,79 +30,96 @@ const FORWARDED_EVENTS = new Set([
   'server:updated', 'server:member-joined', 'server:member-left',
   'server:member-kicked', 'server:member-banned',
   'server:member-timeout', 'server:member-timeout-removed',
-  'voice:channel:update',  // io.emit — full voice channel state on join/leave
+  'voice:channel:update',
   'user:joined', 'user:left',
   'thread:new-reply'
 ]);
 
 /**
- * Register the SSE event bridge with Socket.IO
- * Intercepts io.to().emit() and io.emit() to forward events to SSE clients.
+ * Extract channel/server context from a Socket.IO room name.
+ * Room names follow patterns like "text:{channelId}", "voice:{channelId}", or "{serverId}".
+ * Returns enriched data with _channelId injected if extractable.
+ */
+function enrichWithRoomContext(room, data) {
+  if (!data || typeof data !== 'object') return data || {};
+  // Already has location info — no enrichment needed
+  if (data.channelId || data._channelId || data.serverId) return data;
+  if (typeof room !== 'string') return data;
+
+  const enriched = { ...data };
+  if (room.startsWith('text:') || room.startsWith('voice:')) {
+    enriched._channelId = room.slice(room.indexOf(':') + 1);
+  } else if (room.match(/^[0-9a-f-]{36}$/) || room === 'nexus-main') {
+    // Looks like a serverId (UUID or default server)
+    enriched.serverId = room;
+  }
+  return enriched;
+}
+
+/**
+ * Register the SSE event bridge with Socket.IO.
+ * Intercepts all emission patterns to forward events to SSE clients.
  */
 function registerEventBridge(io) {
-  // Guard against double registration (hot-reload, tests)
   if (eventBridgeRegistered) return;
   eventBridgeRegistered = true;
 
-  // Intercept io.to(room).emit() — captures all room-targeted broadcasts
+  // Helper: patch a BroadcastOperator chain's emit to forward to SSE
+  function patchChainEmit(chain, room) {
+    const origEmit = chain.emit.bind(chain);
+    chain.emit = function(eventName, ...args) {
+      if (FORWARDED_EVENTS.has(eventName)) {
+        broadcastToSSE(eventName, enrichWithRoomContext(room, args[0]));
+      }
+      return origEmit(eventName, ...args);
+    };
+    return chain;
+  }
+
+  // Intercept io.to(room).emit()
   const origTo = io.to.bind(io);
   io.to = function(room) {
-    const chain = origTo(room);
-    const origEmit = chain.emit.bind(chain);
-    chain.emit = function(eventName, ...args) {
-      if (FORWARDED_EVENTS.has(eventName)) {
-        broadcastToSSE(eventName, args[0]);
-      }
-      return origEmit(eventName, ...args);
-    };
-    return chain;
+    return patchChainEmit(origTo(room), room);
   };
 
-  // Also intercept io.in() which is an alias for io.to()
+  // Intercept io.in(room).emit() — alias for io.to()
   const origIn = io.in.bind(io);
   io.in = function(room) {
-    const chain = origIn(room);
-    const origEmit = chain.emit.bind(chain);
-    chain.emit = function(eventName, ...args) {
-      if (FORWARDED_EVENTS.has(eventName)) {
-        broadcastToSSE(eventName, args[0]);
-      }
-      return origEmit(eventName, ...args);
-    };
-    return chain;
+    return patchChainEmit(origIn(room), room);
   };
 
-  // Intercept socket.to().emit() and socket.broadcast.emit() on each new connection
-  // This captures per-socket room broadcasts (typing, peer events)
+  // Intercept socket.to() and socket.broadcast per connection
   io.on('connection', (socket) => {
-    const patchChain = (chain) => {
-      const origEmit = chain.emit.bind(chain);
-      chain.emit = function(eventName, ...args) {
-        if (FORWARDED_EVENTS.has(eventName)) {
-          broadcastToSSE(eventName, args[0]);
-        }
-        return origEmit(eventName, ...args);
-      };
-      return chain;
+    const origSocketTo = socket.to.bind(socket);
+    socket.to = function(room) {
+      return patchChainEmit(origSocketTo(room), room);
     };
 
-    const origSocketTo = socket.to.bind(socket);
-    socket.to = function(room) { return patchChain(origSocketTo(room)); };
-
-    // socket.broadcast is a getter that returns a NEW BroadcastOperator each access.
-    // Override the getter to patch each new instance.
-    const broadcastDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(socket), 'broadcast');
+    // socket.broadcast is a getter returning a NEW BroadcastOperator each access
+    const broadcastDescriptor = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(socket), 'broadcast'
+    );
     if (broadcastDescriptor && broadcastDescriptor.get) {
       const origBroadcastGet = broadcastDescriptor.get;
       Object.defineProperty(socket, 'broadcast', {
-        get: function() { return patchChain(origBroadcastGet.call(this)); },
+        get: function() {
+          const chain = origBroadcastGet.call(this);
+          const origEmit = chain.emit.bind(chain);
+          chain.emit = function(eventName, ...args) {
+            if (FORWARDED_EVENTS.has(eventName)) {
+              broadcastToSSE(eventName, args[0]);
+            }
+            return origEmit(eventName, ...args);
+          };
+          return chain;
+        },
         configurable: true
       });
     }
   });
 
-  // Hook into server-level global broadcasts (io.emit)
-  // io.emit delegates to io.sockets.emit — patch both to be safe
+  // Intercept io.emit() — global broadcasts (e.g., voice:channel:update)
+  // io.emit delegates to io.sockets.emit internally, so only patch io.emit
   const origIoEmit = io.emit.bind(io);
   io.emit = function(eventName, ...args) {
     if (FORWARDED_EVENTS.has(eventName)) {
@@ -108,22 +127,11 @@ function registerEventBridge(io) {
     }
     return origIoEmit(eventName, ...args);
   };
-
-  // Also patch the default namespace emit (io.sockets = io.of('/'))
-  if (io.sockets && io.sockets.emit) {
-    const origNsEmit = io.sockets.emit.bind(io.sockets);
-    io.sockets.emit = function(eventName, ...args) {
-      if (FORWARDED_EVENTS.has(eventName)) {
-        broadcastToSSE(eventName, args[0]);
-      }
-      return origNsEmit(eventName, ...args);
-    };
-  }
 }
 
 /**
- * Notify SSE clients directly — call from MCP tool handlers
- * after broadcasting via io.to().emit()
+ * Notify SSE clients directly — for cases where events are emitted
+ * outside of Socket.IO (e.g., direct HTTP-triggered notifications).
  */
 function notifySSE(eventName, data) {
   broadcastToSSE(eventName, data);
@@ -133,32 +141,20 @@ function notifySSE(eventName, data) {
  * Forward an event to all SSE clients that have matching subscriptions
  */
 function broadcastToSSE(eventName, data) {
-  // Temporary debug logging for voice events
-  if (eventName === 'voice:channel:update') {
-    const chId = data?._channelId || data?.channelId;
-    console.log('[SSE DEBUG] voice:channel:update →', {
-      sseClients: sseConnections.size,
-      channelId: chId,
-      serverId: data?.serverId,
-      mapLookup: channelToServer.get(chId) || 'NOT_FOUND',
-      mapSize: channelToServer.size
-    });
-  }
   if (sseConnections.size === 0) return;
 
   for (const [connId, conn] of sseConnections) {
     try {
       // Check if this client is subscribed to this event type
-      // Empty events array = subscribe to all events (no filter)
       if (conn.subscriptions.events.length > 0 && !conn.subscriptions.events.includes(eventName)) {
         continue;
       }
 
-      // Check channel/server access if event has location info
+      // Resolve channel/server location from data fields
       const channelId = data?._channelId || data?.channelId;
       const serverId = data?.serverId || (channelId ? channelToServer.get(channelId) : null);
 
-      // Skip all events with no determinable serverId — can't verify access
+      // Skip events with no determinable serverId — can't verify access
       if (!serverId) continue;
 
       if (!hasServerAccess(conn.tokenData, serverId)) {
@@ -166,7 +162,6 @@ function broadcastToSSE(eventName, data) {
       }
 
       // Check channel subscription filter
-      // Empty channels array = subscribe to all channels (no filter)
       if (conn.subscriptions.channels.length > 0) {
         if (channelId && !conn.subscriptions.channels.includes(channelId)) {
           continue;
@@ -183,10 +178,8 @@ function broadcastToSSE(eventName, data) {
       const cleanData = { ...data };
       delete cleanData._channelId;
 
-      // Send SSE event
       conn.res.write(`event: ${eventName}\ndata: ${JSON.stringify(cleanData)}\n\n`);
     } catch (err) {
-      // Connection probably closed
       sseConnections.delete(connId);
     }
   }
@@ -199,11 +192,10 @@ function broadcastToSSE(eventName, data) {
 function handleSSEConnection(req, res) {
   const tokenData = req.mcpAuth;
 
-  // Parse subscription filters from query params
   const channels = req.query.channels ? req.query.channels.split(',').filter(Boolean) : [];
   const events = req.query.events ? req.query.events.split(',').filter(Boolean) : [];
 
-  // Limit connections per token/account (max 5)
+  // Limit connections per account (max 5)
   const MAX_SSE_PER_TOKEN = 5;
   let tokenConnCount = 0;
   for (const [, conn] of sseConnections) {
@@ -213,26 +205,22 @@ function handleSSEConnection(req, res) {
     return res.status(429).json({ error: 'Too many SSE connections (max 5 per account)' });
   }
 
-  // Set up SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no' // Disable nginx buffering
+    'X-Accel-Buffering': 'no'
   });
 
-  // Send initial connection event
   const connId = ++connectionCounter;
   res.write(`event: connected\ndata: ${JSON.stringify({ connectionId: connId, subscriptions: { channels, events } })}\n\n`);
 
-  // Store connection
   sseConnections.set(connId, {
     res,
     tokenData,
     subscriptions: { channels, events }
   });
 
-  // Heartbeat to keep connection alive
   const heartbeat = setInterval(() => {
     try {
       res.write(': heartbeat\n\n');
@@ -242,16 +230,12 @@ function handleSSEConnection(req, res) {
     }
   }, 30000);
 
-  // Clean up on disconnect
   req.on('close', () => {
     clearInterval(heartbeat);
     sseConnections.delete(connId);
   });
 }
 
-/**
- * Get current SSE connection count (for metrics)
- */
 function getSSEConnectionCount() {
   return sseConnections.size;
 }
