@@ -543,6 +543,7 @@ const tools = [
       });
 
       ctx.io.to(server_id).emit('channel:created', { serverId: server_id, channel: ch });
+      notifySSE('channel:created', { serverId: server_id, channel: ch });
 
       return { content: [{ type: 'text', text: JSON.stringify({ created: true, channel: ch }) }] };
     }
@@ -596,6 +597,7 @@ const tools = [
       });
 
       ctx.io.to(server_id).emit('server:updated', { server: serializeServer(server_id) });
+      notifySSE('channel:updated', { serverId: server_id, channelId: channel_id });
 
       return { content: [{ type: 'text', text: JSON.stringify({ updated: true, channel: { id: ch.id, name: ch.name, topic: ch.topic } }) }] };
     }
@@ -640,6 +642,7 @@ const tools = [
       });
 
       ctx.io.to(server_id).emit('server:updated', { server: serializeServer(server_id) });
+      notifySSE('channel:deleted', { serverId: server_id, channelId: channel_id });
 
       return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, channelId: channel_id }) }] };
     }
@@ -821,6 +824,7 @@ const tools = [
       } catch (e) { /* audit log failure is non-fatal */ }
 
       ctx.io.to(server_id).emit('server:member-kicked', { serverId: server_id, userId: user_id, reason });
+      notifySSE('server:member-left', { serverId: server_id, userId: user_id, reason: 'kicked' });
 
       return { content: [{ type: 'text', text: JSON.stringify({ kicked: true, userId: user_id }) }] };
     }
@@ -873,6 +877,7 @@ const tools = [
       } catch (e) { /* audit log failure is non-fatal */ }
 
       ctx.io.to(server_id).emit('server:member-banned', { serverId: server_id, userId: user_id, reason });
+      notifySSE('server:member-left', { serverId: server_id, userId: user_id, reason: 'banned' });
 
       return { content: [{ type: 'text', text: JSON.stringify({ banned: true, userId: user_id }) }] };
     }
@@ -918,10 +923,9 @@ const tools = [
 
       await db.timeoutUser(server_id, user_id, ctx.tokenData.accountId, durationMinutes);
 
-      ctx.io.to(server_id).emit('server:member-timeout', {
-        serverId: server_id, userId: user_id,
-        expiresAt: expiresAt.toISOString(), reason
-      });
+      const timeoutData = { serverId: server_id, userId: user_id, expiresAt: expiresAt.toISOString(), reason };
+      ctx.io.to(server_id).emit('server:member-timeout', timeoutData);
+      notifySSE('server:member-timeout', timeoutData);
 
       return {
         content: [{
@@ -998,7 +1002,9 @@ const tools = [
 
       await db.removeTimeout(server_id, user_id);
 
-      ctx.io.to(server_id).emit('server:member-timeout-removed', { serverId: server_id, userId: user_id });
+      const timeoutRemovedData = { serverId: server_id, userId: user_id };
+      ctx.io.to(server_id).emit('server:member-timeout-removed', timeoutRemovedData);
+      notifySSE('server:member-timeout-removed', timeoutRemovedData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ removed: true, userId: user_id }) }] };
     }
@@ -1240,14 +1246,16 @@ const tools = [
         threadId: message_id
       });
 
-      ctx.io.to(`text:${channel_id}`).emit('thread:new-reply', {
+      const threadData = {
         parentMessageId: message_id, channelId: channel_id,
         reply: {
           id: threadMsg.id, content: threadContent,
           author: { id: account.id, username: account.username, avatar: account.avatar, color: account.color },
           timestamp: Date.now()
         }
-      });
+      };
+      ctx.io.to(`text:${channel_id}`).emit('thread:new-reply', threadData);
+      notifySSE('thread:new-reply', threadData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ threadReplyId: threadMsg.id }) }] };
     }

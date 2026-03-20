@@ -27,11 +27,14 @@ function registerEventBridge(io) {
   // Listen to internal events on connected sockets
   io.on('connection', (socket) => {
     const eventsToForward = [
-      'message:new', 'message:edited', 'message:deleted', 'message:reacted',
+      'message:new', 'message:edited', 'message:deleted', 'message:reacted', 'message:pinned',
       'user:joined', 'user:left', 'typing:start', 'typing:stop',
       'channel:created', 'channel:deleted', 'channel:updated',
       'server:member-joined', 'server:member-left',
-      'voice:user-joined', 'voice:user-left'
+      'server:member-kicked', 'server:member-banned',
+      'server:member-timeout', 'server:member-timeout-removed',
+      'voice:user-joined', 'voice:user-left',
+      'thread:new-reply'
     ];
 
     for (const eventName of eventsToForward) {
