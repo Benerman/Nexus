@@ -1357,7 +1357,7 @@ const ChatArea = React.memo(function ChatArea({
                           {Object.entries(msg.reactions).map(([emoji, users]) => (
                             <button key={emoji}
                               className={`reaction ${users.includes(currentUser?.id) ? 'reacted' : ''}`}
-                              onClick={e => { e.stopPropagation(); socket?.emit('message:react', { messageId: msg.id, emoji }); }}>
+                              onClick={e => { e.stopPropagation(); handleReact(msg.id, emoji); }}>
                               <ReactionEmoji emoji={emoji} socket={socket} /> <span>{users.length}</span>
                             </button>
                           ))}
