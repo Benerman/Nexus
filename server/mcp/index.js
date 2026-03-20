@@ -161,8 +161,16 @@ function createMcpRouter(io) {
     };
     if (channelId) {
       result.lookupResult = channelToServer.get(channelId) || 'NOT_FOUND';
-      // Trigger test broadcast
-      notifySSE('voice:channel:update', { channelId, serverId: channelToServer.get(channelId), channel: { users: [], test: true } });
+      const mode = req.query.mode || 'direct'; // direct = notifySSE, ioemit = io.emit
+      if (mode === 'ioemit') {
+        // Test via io.emit — goes through monkey-patch
+        io.emit('voice:channel:update', { channelId, channel: { users: [], test: true, via: 'io.emit' } });
+        result.testMode = 'io.emit (monkey-patch)';
+      } else {
+        // Test via notifySSE — bypasses monkey-patch
+        notifySSE('voice:channel:update', { channelId, serverId: channelToServer.get(channelId), channel: { users: [], test: true, via: 'notifySSE' } });
+        result.testMode = 'notifySSE (direct)';
+      }
       result.testBroadcastSent = true;
     }
     res.json(result);
