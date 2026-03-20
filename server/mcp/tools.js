@@ -912,10 +912,11 @@ const tools = [
         }
       }
 
-      const duration = Math.min(Math.max(parseInt(duration_seconds) || 60, 1), 604800);
-      const expiresAt = new Date(Date.now() + duration * 1000);
+      const durationSec = Math.min(Math.max(parseInt(duration_seconds) || 60, 1), 604800);
+      const durationMinutes = Math.max(Math.ceil(durationSec / 60), 1);
+      const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
 
-      await db.timeoutUser(server_id, user_id, ctx.tokenData.accountId, expiresAt, reason || 'Timed out via MCP');
+      await db.timeoutUser(server_id, user_id, ctx.tokenData.accountId, durationMinutes);
 
       ctx.io.to(server_id).emit('server:member-timeout', {
         serverId: server_id, userId: user_id,
@@ -1234,8 +1235,9 @@ const tools = [
       const threadContent = String(content);
 
       const threadMsg = await db.saveThreadMessage({
-        parentMessageId: message_id, channelId: channel_id,
-        authorId: ctx.tokenData.accountId, content: threadContent
+        id: uuidv4(), channelId: channel_id,
+        authorId: ctx.tokenData.accountId, content: threadContent,
+        threadId: message_id
       });
 
       ctx.io.to(`text:${channel_id}`).emit('thread:new-reply', {
@@ -1323,10 +1325,11 @@ const tools = [
         }
       }
 
-      const rule = await db.createAutomodRule({
-        serverId: server_id, name, type,
+      const rule = await db.createAutomodRule(server_id, {
+        name, ruleType: type,
         config: safeConfig, action,
-        createdBy: ctx.tokenData.accountId
+        exemptRoles: safeConfig.exemptRoles || [],
+        exemptChannels: safeConfig.exemptChannels || []
       });
 
       // Update in-memory
