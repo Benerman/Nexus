@@ -156,7 +156,6 @@ const tools = [
       // Broadcast
       ctx.io.to(`text:${channel_id}`).emit('message:new', msg);
 
-
       // Persist to database
       try {
         await db.saveMessage({
@@ -343,7 +342,6 @@ const tools = [
       };
       ctx.io.to(`text:${channel_id}`).emit('message:edited', editedData);
 
-
       return { content: [{ type: 'text', text: JSON.stringify({ edited: true, messageId: message_id }) }] };
     }
   },
@@ -388,7 +386,6 @@ const tools = [
 
       const deletedData = { messageId: message_id, channelId: channel_id };
       ctx.io.to(`text:${channel_id}`).emit('message:deleted', deletedData);
-
 
       return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, messageId: message_id }) }] };
     }
@@ -543,7 +540,6 @@ const tools = [
 
       ctx.io.to(server_id).emit('channel:created', { serverId: server_id, channel: ch });
 
-
       return { content: [{ type: 'text', text: JSON.stringify({ created: true, channel: ch }) }] };
     }
   },
@@ -597,7 +593,6 @@ const tools = [
 
       ctx.io.to(server_id).emit('server:updated', { server: serializeServer(server_id) });
 
-
       return { content: [{ type: 'text', text: JSON.stringify({ updated: true, channel: { id: ch.id, name: ch.name, topic: ch.topic } }) }] };
     }
   },
@@ -641,7 +636,6 @@ const tools = [
       });
 
       ctx.io.to(server_id).emit('server:updated', { server: serializeServer(server_id) });
-
 
       return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, channelId: channel_id }) }] };
     }
@@ -824,7 +818,6 @@ const tools = [
 
       ctx.io.to(server_id).emit('server:member-kicked', { serverId: server_id, userId: user_id, reason });
 
-
       return { content: [{ type: 'text', text: JSON.stringify({ kicked: true, userId: user_id }) }] };
     }
   },
@@ -877,7 +870,6 @@ const tools = [
 
       ctx.io.to(server_id).emit('server:member-banned', { serverId: server_id, userId: user_id, reason });
 
-
       return { content: [{ type: 'text', text: JSON.stringify({ banned: true, userId: user_id }) }] };
     }
   },
@@ -924,7 +916,6 @@ const tools = [
 
       const timeoutData = { serverId: server_id, userId: user_id, expiresAt: expiresAt.toISOString(), reason };
       ctx.io.to(server_id).emit('server:member-timeout', timeoutData);
-
 
       return {
         content: [{
@@ -1003,7 +994,6 @@ const tools = [
 
       const timeoutRemovedData = { serverId: server_id, userId: user_id };
       ctx.io.to(server_id).emit('server:member-timeout-removed', timeoutRemovedData);
-
 
       return { content: [{ type: 'text', text: JSON.stringify({ removed: true, userId: user_id }) }] };
     }
@@ -1173,7 +1163,6 @@ const tools = [
       };
       ctx.io.to(`text:${channel_id}`).emit('message:reacted', reactedData);
 
-
       return { content: [{ type: 'text', text: JSON.stringify({ reacted: true }) }] };
     }
   },
@@ -1204,7 +1193,6 @@ const tools = [
 
       const pinnedData = { channelId: channel_id, messageId: message_id };
       ctx.io.to(`text:${channel_id}`).emit('message:pinned', pinnedData);
-
 
       return { content: [{ type: 'text', text: JSON.stringify({ pinned: true }) }] };
     }
@@ -1254,7 +1242,6 @@ const tools = [
         }
       };
       ctx.io.to(`text:${channel_id}`).emit('thread:new-reply', threadData);
-
 
       return { content: [{ type: 'text', text: JSON.stringify({ threadReplyId: threadMsg.id }) }] };
     }
