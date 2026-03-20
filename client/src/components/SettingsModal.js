@@ -5200,7 +5200,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                 <p style={{ color: 'var(--header-secondary)', fontSize: '13px', marginBottom: '12px' }}>
                   Generate tokens for external MCP clients to interact with this server. Tokens inherit your permissions.
                 </p>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                   <input
                     type="text" placeholder="Token name (e.g., 'Claude Agent')"
                     style={{ flex: 1, padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--interactive-muted)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '13px' }}
@@ -5211,12 +5211,20 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                     const nameInput = document.getElementById('mcp-token-name-input');
                     const name = nameInput?.value?.trim();
                     if (!name) return;
-                    socket.emit('mcp:token:create', { name, scopes: ['read', 'write'], serverIds: [server.id] });
+                    const destructiveCheckbox = document.getElementById('mcp-token-destructive');
+                    const scopes = ['read', 'write', 'moderate', 'manage'];
+                    if (destructiveCheckbox?.checked) scopes.push('destructive');
+                    socket.emit('mcp:token:create', { name, scopes, serverIds: [server.id] });
                     nameInput.value = '';
+                    if (destructiveCheckbox) destructiveCheckbox.checked = false;
                   }} style={{ padding: '8px 16px', background: 'var(--brand-500)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
                     Create Token
                   </button>
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', cursor: 'pointer', fontSize: '12px', color: 'var(--header-secondary)' }}>
+                  <input type="checkbox" id="mcp-token-destructive" style={{ accentColor: 'var(--brand-500)' }} />
+                  Allow destructive actions (kick, ban, delete channels/webhooks)
+                </label>
 
                 {mcpNewToken && (
                   <div style={{ marginBottom: '12px', padding: '12px', background: 'rgba(87, 242, 135, 0.1)', border: '1px solid rgba(87, 242, 135, 0.3)', borderRadius: '6px' }}>

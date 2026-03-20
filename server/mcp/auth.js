@@ -204,7 +204,7 @@ async function mcpAuthMiddleware(req, res, next) {
   next();
 }
 
-const VALID_SCOPES = ['read', 'write', 'moderate', 'manage', 'admin'];
+const VALID_SCOPES = ['read', 'write', 'moderate', 'manage', 'destructive', 'admin'];
 
 // ─── Credential Encryption ──────────────────────────────────────────────────
 

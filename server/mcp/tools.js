@@ -372,6 +372,7 @@ const tools = [
 
       const isOwnMessage = existing.author_id === ctx.tokenData.accountId;
       if (!isOwnMessage) {
+        if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to delete others\' messages' };
         if (!hasScope(ctx.tokenData, 'moderate')) return { error: 'Missing moderate scope to delete others\' messages' };
         const perms = getUserPerms(ctx.tokenData.accountId, serverId, channel_id);
         if (!perms.manageMessages) return { error: 'Missing manageMessages permission' };
@@ -614,6 +615,7 @@ const tools = [
     scope: 'manage',
     handler: async (params, ctx) => {
       const { server_id, channel_id } = params;
+      if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to delete channels' };
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
       const perms = getUserPerms(ctx.tokenData.accountId, server_id);
@@ -774,7 +776,7 @@ const tools = [
   // ── Moderation ────────────────────────────────────────────────────────────
   {
     name: 'kick_member',
-    description: 'Kick a member from a server.',
+    description: 'Kick a member from a server. Requires destructive scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -786,6 +788,7 @@ const tools = [
     },
     scope: 'moderate',
     handler: async (params, ctx) => {
+      if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to kick members' };
       const { server_id, user_id, reason } = params;
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
@@ -825,7 +828,7 @@ const tools = [
 
   {
     name: 'ban_member',
-    description: 'Ban a member from a server.',
+    description: 'Ban a member from a server. Requires destructive scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -837,6 +840,7 @@ const tools = [
     },
     scope: 'moderate',
     handler: async (params, ctx) => {
+      if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to ban members' };
       const { server_id, user_id, reason } = params;
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
@@ -929,7 +933,7 @@ const tools = [
 
   {
     name: 'unban_member',
-    description: 'Revoke a ban on a user, allowing them to rejoin the server.',
+    description: 'Revoke a ban on a user, allowing them to rejoin the server. Requires destructive scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -940,6 +944,7 @@ const tools = [
     },
     scope: 'moderate',
     handler: async (params, ctx) => {
+      if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to unban members' };
       const { server_id, user_id } = params;
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
@@ -1087,7 +1092,7 @@ const tools = [
 
   {
     name: 'delete_webhook',
-    description: 'Delete a webhook from a channel.',
+    description: 'Delete a webhook from a channel. Requires destructive scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1099,6 +1104,7 @@ const tools = [
     },
     scope: 'manage',
     handler: async (params, ctx) => {
+      if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to delete webhooks' };
       const { server_id, channel_id, webhook_id } = params;
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
@@ -1279,7 +1285,7 @@ const tools = [
   // ── AutoMod ───────────────────────────────────────────────────────────────
   {
     name: 'create_automod_rule',
-    description: 'Create an AutoMod content filtering rule.',
+    description: 'Create an AutoMod content filtering rule. Requires destructive scope.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1293,6 +1299,7 @@ const tools = [
     },
     scope: 'manage',
     handler: async (params, ctx) => {
+      if (!hasScope(ctx.tokenData, 'destructive')) return { error: 'Destructive scope required to create automod rules' };
       const { server_id, name, type, config, action } = params;
       if (!hasServerAccess(ctx.tokenData, server_id)) return { error: 'No access to this server' };
 
