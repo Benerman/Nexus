@@ -983,12 +983,19 @@ export default function App() {
         }
       }
     });
-    s.on('message:reaction', ({ messageId, reactions }) =>
+    s.on('message:reaction', ({ messageId, reactions }) => {
       setMessages(prev => {
         const u = { ...prev };
         Object.keys(u).forEach(ch => { u[ch] = u[ch].map(m => m.id === messageId ? { ...m, reactions } : m); });
         return u;
-      }));
+      });
+      setThreadPanel(prev => {
+        if (!prev || !prev.messages) return prev;
+        const updated = prev.messages.map(m => m.id === messageId ? { ...m, reactions } : m);
+        if (updated === prev.messages) return prev;
+        return { ...prev, messages: updated };
+      });
+    });
     s.on('message:deleted', ({ channelId, messageId }) =>
       setMessages(prev => ({
         ...prev,
@@ -1755,6 +1762,8 @@ export default function App() {
   const handleSelectServer = useCallback((serverId) => {
     setActiveServerId(serverId);
     setThreadPanel(null);
+    setMobileSidebarOpen(false);
+    setMobileMemberListOpen(false);
     localStorage.setItem('nexus_last_server', serverId);
 
     const srv = serverData[serverId];
@@ -1790,6 +1799,7 @@ export default function App() {
   // ✅ Phase 2: Removed handleSelectDMs - Personal server is selected like any other server
 
   const handleSelectChannel = useCallback((channel, type) => {
+    setMobileSidebarOpen(false);
     // Remember last text channel per server
     const sid = channel.serverId || activeServerId;
     if (sid && type === 'text') {
@@ -2087,6 +2097,9 @@ export default function App() {
   const handleSelectDMChannel = useCallback((channel) => {
     const personal = Object.values(serverData).find(s => s.isPersonal || s.id?.startsWith('personal:'));
     if (!personal) return;
+    setThreadPanel(null);
+    setMobileSidebarOpen(false);
+    setMobileMemberListOpen(false);
     setActiveServerId(personal.id);
     setActiveChannel(channel);
     setActiveChannelType('text');
@@ -2667,6 +2680,12 @@ export default function App() {
             onPttDeactivate={webrtc.pttDeactivate}
             onUserRightClick={(user, e) => setContextMenu({ user, position: { x: e.clientX, y: e.clientY } })}
           />
+        ) : activeServer?.isPersonal && !activeChannel ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">💬</div>
+            <h2 className="empty-state-title">Direct Messages</h2>
+            <p className="empty-state-text">Select a conversation from the list or start a new one.</p>
+          </div>
         ) : !activeChannel && !hasRegularServers ? (
           <div className="empty-state">
             <div className="empty-state-icon">🏠</div>
