@@ -87,15 +87,15 @@ function registerEventBridge(io) {
     const origSocketTo = socket.to.bind(socket);
     socket.to = function(room) { return patchChain(origSocketTo(room)); };
 
-    if (socket.broadcast) {
-      const origBroadcast = socket.broadcast;
-      const origBroadcastEmit = origBroadcast.emit.bind(origBroadcast);
-      origBroadcast.emit = function(eventName, ...args) {
-        if (FORWARDED_EVENTS.has(eventName)) {
-          broadcastToSSE(eventName, args[0]);
-        }
-        return origBroadcastEmit(eventName, ...args);
-      };
+    // socket.broadcast is a getter that returns a NEW BroadcastOperator each access.
+    // Override the getter to patch each new instance.
+    const broadcastDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(socket), 'broadcast');
+    if (broadcastDescriptor && broadcastDescriptor.get) {
+      const origBroadcastGet = broadcastDescriptor.get;
+      Object.defineProperty(socket, 'broadcast', {
+        get: function() { return patchChain(origBroadcastGet.call(this)); },
+        configurable: true
+      });
     }
   });
 
