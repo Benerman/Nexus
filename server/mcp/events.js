@@ -4,6 +4,11 @@
  * Provides a Server-Sent Events endpoint so MCP clients can receive real-time
  * notifications (new messages, user joins, typing indicators, etc.) without
  * needing a full Socket.IO connection.
+ *
+ * Capture strategy:
+ * - io.to(room).emit() broadcasts are intercepted via BroadcastOperator proxy
+ * - io.emit() global broadcasts are intercepted via monkey-patch
+ * - notifySSE() is called directly from MCP tool handlers
  */
 
 const { state, channelToServer } = require('../state');
@@ -15,46 +20,68 @@ const sseConnections = new Map();
 let connectionCounter = 0;
 let eventBridgeRegistered = false;
 
+// Events we forward to SSE clients
+const FORWARDED_EVENTS = new Set([
+  'message:new', 'message:edited', 'message:deleted', 'message:reacted', 'message:pinned',
+  'typing:start', 'typing:stop',
+  'channel:created', 'channel:deleted', 'channel:updated',
+  'server:updated', 'server:member-joined', 'server:member-left',
+  'server:member-kicked', 'server:member-banned',
+  'server:member-timeout', 'server:member-timeout-removed',
+  'voice:user-joined', 'voice:user-left',
+  'thread:new-reply'
+]);
+
 /**
  * Register the SSE event bridge with Socket.IO
- * Listens to io events and forwards them to subscribed SSE clients.
+ * Intercepts io.to().emit() and io.emit() to forward events to SSE clients.
  */
 function registerEventBridge(io) {
   // Guard against double registration (hot-reload, tests)
   if (eventBridgeRegistered) return;
   eventBridgeRegistered = true;
 
-  // Listen to internal events on connected sockets
-  io.on('connection', (socket) => {
-    const eventsToForward = [
-      'message:new', 'message:edited', 'message:deleted', 'message:reacted', 'message:pinned',
-      'user:joined', 'user:left', 'typing:start', 'typing:stop',
-      'channel:created', 'channel:deleted', 'channel:updated',
-      'server:member-joined', 'server:member-left',
-      'server:member-kicked', 'server:member-banned',
-      'server:member-timeout', 'server:member-timeout-removed',
-      'voice:user-joined', 'voice:user-left',
-      'thread:new-reply'
-    ];
+  // Intercept io.to(room).emit() — captures all room-targeted broadcasts
+  const origTo = io.to.bind(io);
+  io.to = function(room) {
+    const chain = origTo(room);
+    const origEmit = chain.emit.bind(chain);
+    chain.emit = function(eventName, ...args) {
+      if (FORWARDED_EVENTS.has(eventName)) {
+        broadcastToSSE(eventName, args[0]);
+      }
+      return origEmit(eventName, ...args);
+    };
+    return chain;
+  };
 
-    for (const eventName of eventsToForward) {
-      socket.on(eventName, (data) => {
-        broadcastToSSE(eventName, data);
-      });
-    }
-  });
+  // Also intercept io.in() which is an alias for io.to()
+  const origIn = io.in.bind(io);
+  io.in = function(room) {
+    const chain = origIn(room);
+    const origEmit = chain.emit.bind(chain);
+    chain.emit = function(eventName, ...args) {
+      if (FORWARDED_EVENTS.has(eventName)) {
+        broadcastToSSE(eventName, args[0]);
+      }
+      return origEmit(eventName, ...args);
+    };
+    return chain;
+  };
 
   // Hook into server-level global broadcasts (io.emit)
   const origIoEmit = io.emit.bind(io);
   io.emit = function(eventName, ...args) {
-    broadcastToSSE(eventName, args[0]);
+    if (FORWARDED_EVENTS.has(eventName)) {
+      broadcastToSSE(eventName, args[0]);
+    }
     return origIoEmit(eventName, ...args);
   };
 }
 
 /**
- * Notify SSE clients directly — use instead of monkey-patching io.to()
- * Call this from handlers after broadcasting via io.to().emit()
+ * Notify SSE clients directly — call from MCP tool handlers
+ * after broadcasting via io.to().emit()
  */
 function notifySSE(eventName, data) {
   broadcastToSSE(eventName, data);
@@ -69,7 +96,8 @@ function broadcastToSSE(eventName, data) {
   for (const [connId, conn] of sseConnections) {
     try {
       // Check if this client is subscribed to this event type
-      if (conn.subscriptions.events && !conn.subscriptions.events.includes(eventName)) {
+      // Empty events array = subscribe to all events (no filter)
+      if (conn.subscriptions.events.length > 0 && !conn.subscriptions.events.includes(eventName)) {
         continue;
       }
 
@@ -85,7 +113,8 @@ function broadcastToSSE(eventName, data) {
       }
 
       // Check channel subscription filter
-      if (conn.subscriptions.channels && conn.subscriptions.channels.length > 0) {
+      // Empty channels array = subscribe to all channels (no filter)
+      if (conn.subscriptions.channels.length > 0) {
         if (channelId && !conn.subscriptions.channels.includes(channelId)) {
           continue;
         }
