@@ -24,7 +24,7 @@ let eventBridgeRegistered = false;
 
 // Events we forward to SSE clients
 const FORWARDED_EVENTS = new Set([
-  'message:new', 'message:edited', 'message:deleted', 'message:reacted', 'message:pinned',
+  'message:new', 'message:edited', 'message:deleted', 'message:reaction', 'message:pinned',
   'typing:start', 'typing:stop',
   'channel:created', 'channel:deleted', 'channel:updated',
   'server:updated', 'server:member-joined', 'server:member-left',

@@ -1161,7 +1161,7 @@ const tools = [
         messageId: message_id, channelId: channel_id,
         reactions: msg.reactions
       };
-      ctx.io.to(`text:${channel_id}`).emit('message:reacted', reactedData);
+      ctx.io.to(`text:${channel_id}`).emit('message:reaction', reactedData);
 
       return { content: [{ type: 'text', text: JSON.stringify({ reacted: true }) }] };
     }
