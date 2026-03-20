@@ -1331,7 +1331,8 @@ const ChatArea = React.memo(function ChatArea({
               return (
                 <React.Fragment key={msg.id}>
                   {showDate && <div className="message-date-divider"><span>{formatDate(msg.timestamp)}</span></div>}
-                  <div className={`message ${isGrouped ? 'grouped' : ''} ${msg.author?.id === currentUser?.id ? 'own' : ''}`}>
+                  <div className={`message ${isGrouped ? 'grouped' : ''} ${msg.author?.id === currentUser?.id ? 'own' : ''}`}
+                    onContextMenu={(e) => handleMessageContextMenu(e, msg)}>
                     {!isGrouped && (
                       <div className="message-avatar" style={{ background: msg.author?.customAvatar ? 'transparent' : (msg.author?.color || '#3B82F6') }}>
                         {msg.author?.customAvatar
