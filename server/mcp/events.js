@@ -28,7 +28,8 @@ const FORWARDED_EVENTS = new Set([
   'server:updated', 'server:member-joined', 'server:member-left',
   'server:member-kicked', 'server:member-banned',
   'server:member-timeout', 'server:member-timeout-removed',
-  'voice:user-joined', 'voice:user-left',
+  'voice:channel:update',  // io.emit — full voice channel state on join/leave
+  'user:joined', 'user:left',
   'thread:new-reply'
 ]);
 
@@ -68,6 +69,35 @@ function registerEventBridge(io) {
     };
     return chain;
   };
+
+  // Intercept socket.to().emit() and socket.broadcast.emit() on each new connection
+  // This captures per-socket room broadcasts (typing, peer events)
+  io.on('connection', (socket) => {
+    const patchChain = (chain) => {
+      const origEmit = chain.emit.bind(chain);
+      chain.emit = function(eventName, ...args) {
+        if (FORWARDED_EVENTS.has(eventName)) {
+          broadcastToSSE(eventName, args[0]);
+        }
+        return origEmit(eventName, ...args);
+      };
+      return chain;
+    };
+
+    const origSocketTo = socket.to.bind(socket);
+    socket.to = function(room) { return patchChain(origSocketTo(room)); };
+
+    if (socket.broadcast) {
+      const origBroadcast = socket.broadcast;
+      const origBroadcastEmit = origBroadcast.emit.bind(origBroadcast);
+      origBroadcast.emit = function(eventName, ...args) {
+        if (FORWARDED_EVENTS.has(eventName)) {
+          broadcastToSSE(eventName, args[0]);
+        }
+        return origBroadcastEmit(eventName, ...args);
+      };
+    }
+  });
 
   // Hook into server-level global broadcasts (io.emit)
   const origIoEmit = io.emit.bind(io);
