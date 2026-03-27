@@ -2,11 +2,23 @@
 
 A self-hosted, real-time communication platform built with React, Node.js, Socket.IO, and WebRTC. Supports servers, channels, voice chat, direct messaging, custom emoji, soundboard, and more.
 
-[![Download](https://img.shields.io/badge/download-v1.0.11-blue)](https://github.com/Benerman/Nexus/releases/latest)
+[![Download](https://img.shields.io/badge/download-v1.0.12-blue)](https://github.com/Benerman/Nexus/releases/latest)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 > **[Download the latest release](https://github.com/Benerman/Nexus/releases/latest)** — available for Windows, macOS, Linux, Android, and iOS.
+
+---
+
+## Screenshots
+
+**Desktop**
+
+![Nexus desktop — server channel view](docs/screenshots/desktop.png)
+
+**Mobile**
+
+![Nexus mobile — channel view](docs/screenshots/mobile.png)
 
 ---
 
@@ -438,4 +450,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Version**: 1.0.10 | **Last Updated**: March 2026
+**Version**: 1.0.12 | **Last Updated**: March 2026
