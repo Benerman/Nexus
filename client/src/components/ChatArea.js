@@ -24,6 +24,9 @@ const SLASH_COMMANDS = [
   { name: 'remindme', description: 'Set a reminder', usage: '/remindme <time> <msg>', icon: '⏰' },
   { name: 'quack', description: 'Random duck picture', usage: '/quack', icon: '🦆' },
   { name: 'criticize', description: 'Start/stop daily roast', usage: '/criticize <target>', icon: '🔥' },
+  { name: 'summarize', description: 'Summarize recent messages', usage: '/summarize [count]', icon: '📝' },
+  { name: 'mcp', description: 'Run an MCP tool', usage: '/mcp <tool_name> [args]', icon: '🔌' },
+  { name: 'mcp-tools', description: 'List available MCP tools', usage: '/mcp-tools', icon: '🧰' },
 ];
 
 const QUICK_REACTIONS = ['\uD83D\uDC4D','\u2764\uFE0F','\uD83D\uDE02','\uD83D\uDE2E','\uD83D\uDE22','\uD83D\uDD25','\uD83C\uDF89','\uD83D\uDCAF'];
@@ -1328,7 +1331,8 @@ const ChatArea = React.memo(function ChatArea({
               return (
                 <React.Fragment key={msg.id}>
                   {showDate && <div className="message-date-divider"><span>{formatDate(msg.timestamp)}</span></div>}
-                  <div className={`message ${isGrouped ? 'grouped' : ''} ${msg.author?.id === currentUser?.id ? 'own' : ''}`}>
+                  <div className={`message ${isGrouped ? 'grouped' : ''} ${msg.author?.id === currentUser?.id ? 'own' : ''}`}
+                    onContextMenu={(e) => handleMessageContextMenu(e, msg)}>
                     {!isGrouped && (
                       <div className="message-avatar" style={{ background: msg.author?.customAvatar ? 'transparent' : (msg.author?.color || '#3B82F6') }}>
                         {msg.author?.customAvatar
@@ -1353,11 +1357,27 @@ const ChatArea = React.memo(function ChatArea({
                           {Object.entries(msg.reactions).map(([emoji, users]) => (
                             <button key={emoji}
                               className={`reaction ${users.includes(currentUser?.id) ? 'reacted' : ''}`}
-                              onClick={e => { e.stopPropagation(); socket?.emit('message:react', { messageId: msg.id, emoji }); }}>
+                              onClick={e => { e.stopPropagation(); handleReact(msg.id, emoji); }}>
                               <ReactionEmoji emoji={emoji} socket={socket} /> <span>{users.length}</span>
                             </button>
                           ))}
                         </div>
+                      )}
+                    </div>
+                    <div className="message-actions">
+                      <button className="reaction-btn"
+                        onClick={e=>{e.stopPropagation();setReactionTarget(reactionTarget===msg.id?null:msg.id);}}>😊</button>
+                      <button className="message-options-btn"
+                        onClick={e=>handleMessageContextMenu(e, msg)}
+                        title="Message options">⋯</button>
+                      {reactionTarget===msg.id && (
+                        <EmojiPicker
+                          onSelect={(emoji) => handleReact(msg.id, emoji)}
+                          onClose={() => setReactionTarget(null)}
+                          servers={servers}
+                          currentServerId={server?.id}
+                          socket={socket}
+                        />
                       )}
                     </div>
                   </div>
@@ -1480,7 +1500,8 @@ const ChatArea = React.memo(function ChatArea({
                   {!msg.isGrouped && (
                     <div className="message-header">
                       <span className="message-author" style={{color:msg.author.color, cursor: 'pointer'}} onContextMenu={(e) => { if (onAuthorRightClick && msg.author) { e.preventDefault(); e.stopPropagation(); onAuthorRightClick(msg.author, e); } }}>{msg.author.username}</span>
-                      {msg.isWebhook && <span className="webhook-badge">BOT</span>}
+                      {(msg.isWebhook || msg.isBot) && <span className="webhook-badge">BOT</span>}
+                      {msg.isStreaming && <span className="streaming-badge">STREAMING</span>}
                       <span className="message-time">{formatTime(msg.timestamp)}</span>
                       {msg.pinned && <span style={{ color: 'var(--text-danger)', marginLeft: '4px', display: 'inline-flex', verticalAlign: 'middle' }} title="Pinned"><PinIcon size={12} /></span>}
                       {msg.editedAt && <span className="edited-badge">(edited)</span>}

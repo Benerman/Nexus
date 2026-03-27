@@ -5,7 +5,7 @@ COPY package.json ./
 RUN npm install
 
 COPY . .
-RUN GENERATE_SOURCEMAP=false npm run build
+RUN PUBLIC_URL=/ GENERATE_SOURCEMAP=false npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/build /usr/share/nginx/html

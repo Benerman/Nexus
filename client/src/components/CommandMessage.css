@@ -446,3 +446,178 @@
     font-size: 26px;
   }
 }
+
+/* ── MCP Tool Result ──────────────────────────── */
+.cmd-mcp-result {
+  border-left-color: #8B5CF6;
+  max-width: 600px;
+}
+
+.cmd-mcp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cmd-mcp-icon {
+  font-size: 16px;
+}
+
+.cmd-mcp-tool-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono, 'Courier New', monospace);
+  font-size: 13px;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.cmd-mcp-connection {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.cmd-mcp-error-badge {
+  background: var(--badge-danger, #ED4245);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.cmd-mcp-error {
+  color: var(--badge-danger, #ED4245);
+  font-size: 13px;
+}
+
+.cmd-mcp-output {
+  position: relative;
+}
+
+.cmd-mcp-output pre {
+  background: var(--bg-tertiary);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.cmd-mcp-expand {
+  background: none;
+  border: none;
+  color: var(--brand-500);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.cmd-mcp-expand:hover {
+  text-decoration: underline;
+}
+
+.cmd-mcp-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.cmd-mcp-tool-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.cmd-mcp-tool-item code {
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.cmd-mcp-tool-item span {
+  color: var(--text-muted);
+}
+
+/* ── Agent Response ───────────────────────────── */
+.cmd-agent-response {
+  border-left-color: #10B981;
+  max-width: 600px;
+}
+
+.cmd-agent-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cmd-agent-icon {
+  font-size: 16px;
+}
+
+.cmd-agent-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.cmd-agent-model {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.cmd-agent-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cmd-agent-sources {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bg-tertiary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.cmd-agent-sources-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.cmd-agent-source {
+  font-size: 11px;
+  color: var(--brand-500);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.cmd-agent-tools-used {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}

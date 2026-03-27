@@ -19,6 +19,9 @@ const {
 } = require('./helpers');
 const { DEFAULT_PERMS, hashPassword, hashPasswordLegacy, verifyPassword } = utils;
 
+// ─── MCP integration ────────────────────────────────────────────────────────
+const { createMcpRouter } = require('./mcp');
+
 // ─── Handler modules ────────────────────────────────────────────────────────
 const authHandlers = require('./handlers/auth');
 const serverHandlers = require('./handlers/servers');
@@ -34,6 +37,7 @@ const adminHandlers = require('./handlers/admin');
 const bookmarkHandlers = require('./handlers/bookmarks');
 const auditHandlers = require('./handlers/audit');
 const automodHandlers = require('./handlers/automod');
+const mcpHandlers = require('./handlers/mcp');
 
 // ─── Express setup ──────────────────────────────────────────────────────────
 const app = express();
@@ -716,6 +720,9 @@ app.get('/api/og', requireApiAuth, async (req, res) => {
   }
 });
 
+// ─── MCP API Routes ─────────────────────────────────────────────────────────
+app.use('/api/mcp', createMcpRouter(io));
+
 // ─── Global Error Handler ───────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   metrics.recordError(err.name || 'UnknownError');
@@ -746,6 +753,7 @@ io.on('connection', (socket) => {
   bookmarkHandlers(io, socket);
   auditHandlers(io, socket);
   automodHandlers(io, socket);
+  mcpHandlers(io, socket);
 
   socket.on('disconnect', () => {
     metrics.recordDisconnection();

@@ -4,6 +4,7 @@ const db = require('../db');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
 const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast, parseSearchFilters } = require('../helpers');
 const automod = require('../automod');
+const { processMessage: processAgentMessage } = require('../mcp/agent-engine');
 
 const messageLimiter = new RateLimiterMemory({ points: 30, duration: 10 });
 
@@ -343,6 +344,11 @@ module.exports = function(io, socket) {
     if (srv) {
       const ch = [...(srv.channels?.text || [])].find(c => c.id === channelId);
       console.log(`[Message] ${user.username} sent message in #${ch?.name || channelId} (${srv.name})`);
+
+      // Trigger AI agents (async, non-blocking)
+      processAgentMessage(io, msg, srv.id).catch(err => {
+        console.error('[Agent] Error processing message for agents:', err.message);
+      });
     } else {
       console.log(`[Message] ${user.username} sent DM in ${channelId}`);
     }
@@ -415,11 +421,26 @@ module.exports = function(io, socket) {
     }
   });
 
-  socket.on('message:react', ({ channelId, messageId, emoji }) => {
+  socket.on('message:react', async ({ channelId, messageId, emoji }) => {
     const user = state.users[socket.id];
     if (!user) return;
-    const msg = (state.messages[channelId]||[]).find(m => m.id === messageId);
-    if (!msg) return;
+
+    // Try in-memory first, fall back to DB (thread replies aren't in memory)
+    let msg = (state.messages[channelId]||[]).find(m => m.id === messageId);
+    let fromDb = false;
+    if (!msg) {
+      try {
+        const dbMsg = await db.getMessageById(messageId);
+        if (!dbMsg || dbMsg.channel_id !== channelId) return;
+        msg = { id: dbMsg.id, reactions: typeof dbMsg.reactions === 'string' ? JSON.parse(dbMsg.reactions) : (dbMsg.reactions || {}) };
+        fromDb = true;
+      } catch (err) {
+        console.error('[Messages] Failed to look up message for reaction:', err.message);
+        return;
+      }
+    }
+
+    if (!msg.reactions) msg.reactions = {};
     if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
     const idx = msg.reactions[emoji].indexOf(user.id);
     if (idx === -1) msg.reactions[emoji].push(user.id);

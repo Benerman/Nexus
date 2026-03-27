@@ -518,6 +518,12 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
   const [actionError, setActionError] = useState(null);
   const showActionError = (msg) => { setActionError(msg); setTimeout(() => setActionError(null), 5000); };
 
+  // MCP state
+  const [mcpTokens, setMcpTokens] = useState([]);
+  const [mcpNewToken, setMcpNewToken] = useState(null); // raw token shown once after creation
+  const [mcpConnections, setMcpConnections] = useState([]);
+  const [mcpAgents, setMcpAgents] = useState([]);
+
   // Server
   const [serverName, setServerName] = useState(server?.name||'');
   const [serverCustomIcon, setServerCustomIcon] = useState(server?.customIcon||null);
@@ -751,6 +757,58 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
     socket.on('audit:logs', handleAuditLogs);
     return () => socket.off('audit:logs', handleAuditLogs);
   }, [socket, server?.id]);
+
+  // MCP socket listeners
+  useEffect(() => {
+    if (!socket) return;
+    const onTokenCreated = ({ token }) => {
+      setMcpNewToken(token.token); // raw token, shown once
+      setMcpTokens(prev => [{ id: token.id, name: token.name, scopes: token.scopes, server_ids: token.server_ids, created_at: token.created_at, expires_at: token.expires_at }, ...prev]);
+    };
+    const onTokenList = ({ tokens }) => setMcpTokens(tokens || []);
+    const onTokenDeleted = ({ tokenId }) => setMcpTokens(prev => prev.filter(t => t.id !== tokenId));
+    const onConnCreated = ({ connection }) => setMcpConnections(prev => [connection, ...prev]);
+    const onConnList = ({ connections }) => setMcpConnections(connections || []);
+    const onConnDeleted = ({ connectionId }) => setMcpConnections(prev => prev.filter(c => c.id !== connectionId));
+    const onConnToggled = ({ connectionId, enabled }) => setMcpConnections(prev => prev.map(c => c.id === connectionId ? { ...c, enabled } : c));
+    const onAgentCreated = ({ agent }) => setMcpAgents(prev => [agent, ...prev]);
+    const onAgentList = ({ agents }) => setMcpAgents(agents || []);
+    const onAgentDeleted = ({ agentId }) => setMcpAgents(prev => prev.filter(a => a.id !== agentId));
+    const onAgentUpdated = ({ agent }) => setMcpAgents(prev => prev.map(a => a.id === agent.id ? agent : a));
+
+    socket.on('mcp:token:created', onTokenCreated);
+    socket.on('mcp:token:list', onTokenList);
+    socket.on('mcp:token:deleted', onTokenDeleted);
+    socket.on('mcp:connection:created', onConnCreated);
+    socket.on('mcp:connection:list', onConnList);
+    socket.on('mcp:connection:deleted', onConnDeleted);
+    socket.on('mcp:connection:toggled', onConnToggled);
+    socket.on('mcp:agent:created', onAgentCreated);
+    socket.on('mcp:agent:list', onAgentList);
+    socket.on('mcp:agent:deleted', onAgentDeleted);
+    socket.on('mcp:agent:updated', onAgentUpdated);
+    return () => {
+      socket.off('mcp:token:created', onTokenCreated);
+      socket.off('mcp:token:list', onTokenList);
+      socket.off('mcp:token:deleted', onTokenDeleted);
+      socket.off('mcp:connection:created', onConnCreated);
+      socket.off('mcp:connection:list', onConnList);
+      socket.off('mcp:connection:deleted', onConnDeleted);
+      socket.off('mcp:connection:toggled', onConnToggled);
+      socket.off('mcp:agent:created', onAgentCreated);
+      socket.off('mcp:agent:list', onAgentList);
+      socket.off('mcp:agent:deleted', onAgentDeleted);
+      socket.off('mcp:agent:updated', onAgentUpdated);
+    };
+  }, [socket]);
+
+  // Load MCP data when tab opens
+  useEffect(() => {
+    if (tab !== 'mcp' || !socket || !server) return;
+    socket.emit('mcp:token:list');
+    socket.emit('mcp:connection:list', { serverId: server.id });
+    socket.emit('mcp:agent:list', { serverId: server.id });
+  }, [tab, socket, server?.id]);
 
   // Check ownership early (needed by ICE config effect below)
   const isOwner = server?.ownerId === currentUser?.id;
@@ -2087,6 +2145,7 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
       ...(userPerms.manageEmojis || userPerms.admin ? [{id:'emojis', label:'Emojis', icon: <EmojiIcon size={16} />}] : []),
       ...(userPerms.admin || userPerms.manageMessages || isOwner ? [{id:'moderation', label:'Moderation', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.67-3.13 9.06-7 10.2-3.87-1.14-7-5.53-7-10.2V6.3l7-3.12z"/></svg>}] : []),
       ...(userPerms.admin || isOwner ? [{id:'audit-log', label:'Audit Log', icon: <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>}] : []),
+      ...(userPerms.manageServer || userPerms.admin || isOwner ? [{id:'mcp', label:'MCP & Bots', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h.01M15 9h.01M9 15h6"/></svg>}] : []),
     ] : []),
     ...(currentUser?.isPlatformAdmin ? [{id:'platform-admin', label:'Platform Admin', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15l-4-4 1.41-1.41L11 13.17l6.59-6.59L19 8l-8 8z"/></svg>}] : []),
     {id:'about', label:'About', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>}
@@ -5125,6 +5184,185 @@ export default function SettingsModal({ initialTab, currentUser, server, servers
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab==='mcp' && server && (userPerms.manageServer || userPerms.admin || isOwner) && (
+            <div className="settings-section">
+              <h2>MCP & Bots</h2>
+              <p style={{ color: 'var(--header-secondary)', fontSize: '14px', marginBottom: '16px' }}>
+                Configure AI agents, bot tokens, and external MCP server connections.
+              </p>
+
+              {/* Bot Tokens Section */}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '14px', color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bot Tokens</h3>
+                <p style={{ color: 'var(--header-secondary)', fontSize: '13px', marginBottom: '12px' }}>
+                  Generate tokens for external MCP clients to interact with this server. Tokens inherit your permissions.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <input
+                    type="text" placeholder="Token name (e.g., 'Claude Agent')"
+                    style={{ flex: 1, padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--interactive-muted)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '13px' }}
+                    id="mcp-token-name-input"
+                    onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('mcp-token-create-btn')?.click(); }}
+                  />
+                  <button id="mcp-token-create-btn" onClick={() => {
+                    const nameInput = document.getElementById('mcp-token-name-input');
+                    const name = nameInput?.value?.trim();
+                    if (!name) return;
+                    const destructiveCheckbox = document.getElementById('mcp-token-destructive');
+                    const scopes = ['read', 'write', 'moderate', 'manage'];
+                    if (destructiveCheckbox?.checked) scopes.push('destructive');
+                    socket.emit('mcp:token:create', { name, scopes, serverIds: [server.id] });
+                    nameInput.value = '';
+                    if (destructiveCheckbox) destructiveCheckbox.checked = false;
+                  }} style={{ padding: '8px 16px', background: 'var(--brand-500)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    Create Token
+                  </button>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', cursor: 'pointer', fontSize: '12px', color: 'var(--header-secondary)' }}>
+                  <input type="checkbox" id="mcp-token-destructive" style={{ accentColor: 'var(--brand-500)' }} />
+                  Allow destructive actions (kick, ban, delete channels/webhooks)
+                </label>
+
+                {mcpNewToken && (
+                  <div style={{ marginBottom: '12px', padding: '12px', background: 'rgba(87, 242, 135, 0.1)', border: '1px solid rgba(87, 242, 135, 0.3)', borderRadius: '6px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#57F287', marginBottom: '6px' }}>Token created! Copy it now — it won't be shown again.</div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <code style={{ flex: 1, padding: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '11px', wordBreak: 'break-all', color: 'var(--text-primary)', userSelect: 'all' }}>{mcpNewToken}</code>
+                      <button onClick={() => { navigator.clipboard.writeText(mcpNewToken); }} style={{ padding: '6px 12px', background: 'var(--brand-500)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>Copy</button>
+                      <button onClick={() => setMcpNewToken(null)} style={{ padding: '6px 12px', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--interactive-muted)', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Dismiss</button>
+                    </div>
+                  </div>
+                )}
+
+                {mcpTokens.length > 0 && (
+                  <div style={{ marginBottom: '12px' }}>
+                    {mcpTokens.map(t => (
+                      <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '4px', marginBottom: '4px' }}>
+                        <div>
+                          <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 500 }}>{t.name}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '8px' }}>
+                            {t.expires_at ? `Expires ${new Date(t.expires_at).toLocaleDateString()}` : 'No expiry'}
+                          </span>
+                          {t.last_used_at && <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '8px' }}>Last used {new Date(t.last_used_at).toLocaleDateString()}</span>}
+                        </div>
+                        <button onClick={() => socket.emit('mcp:token:delete', { tokenId: t.id })} style={{ padding: '4px 8px', background: 'transparent', color: '#ED4245', border: '1px solid #ED4245', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>Revoke</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                  Use the token as a Bearer token in the Authorization header when connecting MCP clients to:
+                  <code style={{ display: 'block', marginTop: '4px', background: 'var(--bg-tertiary)', padding: '6px 8px', borderRadius: '3px', fontSize: '11px', wordBreak: 'break-all' }}>
+                    {window.location.origin}/api/mcp/message
+                  </code>
+                </div>
+              </div>
+
+              {/* MCP Connections Section */}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '14px', color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>External MCP Connections</h3>
+                {server.lanMode ? (
+                  <div style={{ color: 'var(--text-warning)', fontSize: '13px', padding: '12px', background: 'rgba(250, 166, 26, 0.1)', borderRadius: '4px', border: '1px solid rgba(250, 166, 26, 0.3)' }}>
+                    External MCP connections are disabled in LAN mode.
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ color: 'var(--header-secondary)', fontSize: '13px', marginBottom: '12px' }}>
+                      Connect external MCP servers (GitHub, Jira, etc.) to make their tools available via <code>/mcp</code> slash commands.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <input type="text" placeholder="Connection name" id="mcp-conn-name" style={{ flex: '1 1 140px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--interactive-muted)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '13px' }} />
+                      <input type="text" placeholder="MCP Server URL" id="mcp-conn-url" style={{ flex: '2 1 200px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--interactive-muted)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '13px' }} />
+                      <button onClick={() => {
+                        const name = document.getElementById('mcp-conn-name')?.value?.trim();
+                        const url = document.getElementById('mcp-conn-url')?.value?.trim();
+                        if (!name || !url) return;
+                        socket.emit('mcp:connection:create', { serverId: server.id, name, serverUrl: url, transport: 'sse' });
+                        document.getElementById('mcp-conn-name').value = '';
+                        document.getElementById('mcp-conn-url').value = '';
+                      }} style={{ padding: '8px 16px', background: 'var(--brand-500)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        Connect
+                      </button>
+                    </div>
+                    {mcpConnections.length > 0 && (
+                      <div style={{ marginBottom: '8px' }}>
+                        {mcpConnections.map(c => (
+                          <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '4px', marginBottom: '4px' }}>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 500 }}>{c.name}</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '8px' }}>{c.server_url}</span>
+                              <span style={{ color: c.enabled ? '#57F287' : 'var(--text-muted)', fontSize: '11px', marginLeft: '8px' }}>{c.enabled ? 'Active' : 'Disabled'}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button onClick={() => socket.emit('mcp:connection:toggle', { serverId: server.id, connectionId: c.id, enabled: !c.enabled })} style={{ padding: '4px 8px', background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--interactive-muted)', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>{c.enabled ? 'Disable' : 'Enable'}</button>
+                              <button onClick={() => socket.emit('mcp:connection:delete', { serverId: server.id, connectionId: c.id })} style={{ padding: '4px 8px', background: 'transparent', color: '#ED4245', border: '1px solid #ED4245', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Agent Configuration Section */}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '14px', color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Agents</h3>
+                <p style={{ color: 'var(--header-secondary)', fontSize: '13px', marginBottom: '12px' }}>
+                  Configure AI agents that respond to messages in channels. Agents can be triggered by @mentions, keywords, or automatically.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  <input type="text" placeholder="Agent name" id="mcp-agent-name" style={{ flex: '1 1 140px', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--interactive-muted)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '13px' }} />
+                  <select id="mcp-agent-trigger" style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--interactive-muted)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: '13px' }}>
+                    <option value="mention">@mention</option>
+                    <option value="keyword">Keyword</option>
+                    <option value="auto">Auto (all messages)</option>
+                    <option value="slash">Slash command only</option>
+                  </select>
+                  <button onClick={() => {
+                    const name = document.getElementById('mcp-agent-name')?.value?.trim();
+                    const trigger = document.getElementById('mcp-agent-trigger')?.value || 'mention';
+                    if (!name) return;
+                    socket.emit('mcp:agent:create', { serverId: server.id, name, triggerMode: trigger });
+                    document.getElementById('mcp-agent-name').value = '';
+                  }} style={{ padding: '8px 16px', background: '#10B981', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    Create Agent
+                  </button>
+                </div>
+                {mcpAgents.length > 0 && (
+                  <div style={{ marginBottom: '8px' }}>
+                    {mcpAgents.map(a => (
+                      <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '4px', marginBottom: '4px' }}>
+                        <div>
+                          <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 500 }}>{a.name}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: '8px' }}>Trigger: {a.trigger_mode}</span>
+                          <span style={{ color: a.enabled ? '#57F287' : 'var(--text-muted)', fontSize: '11px', marginLeft: '8px' }}>{a.enabled ? 'Active' : 'Disabled'}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button onClick={() => socket.emit('mcp:agent:update', { serverId: server.id, agentId: a.id, updates: { enabled: !a.enabled } })} style={{ padding: '4px 8px', background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--interactive-muted)', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>{a.enabled ? 'Disable' : 'Enable'}</button>
+                          <button onClick={() => socket.emit('mcp:agent:delete', { serverId: server.id, agentId: a.id })} style={{ padding: '4px 8px', background: 'transparent', color: '#ED4245', border: '1px solid #ED4245', borderRadius: '3px', cursor: 'pointer', fontSize: '11px' }}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Documentation Section */}
+              <div style={{ padding: '16px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '14px', color: 'var(--text-primary)', marginBottom: '8px' }}>Quick Start</h3>
+                <div style={{ fontSize: '13px', color: 'var(--header-secondary)', lineHeight: '1.6' }}>
+                  <p style={{ marginBottom: '8px' }}><strong>1.</strong> Create a bot token above</p>
+                  <p style={{ marginBottom: '8px' }}><strong>2.</strong> Connect an MCP client (Claude Desktop, etc.) using the token</p>
+                  <p style={{ marginBottom: '8px' }}><strong>3.</strong> The agent can now send/read messages, manage channels, and more</p>
+                  <p style={{ marginBottom: '8px' }}><strong>4.</strong> Use <code style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px' }}>/mcp &lt;tool&gt;</code> to call external MCP tools</p>
+                  <p><strong>5.</strong> Use <code style={{ background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px' }}>/mcp-tools</code> to list available tools</p>
+                </div>
+              </div>
             </div>
           )}
 

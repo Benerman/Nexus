@@ -983,17 +983,57 @@ export default function App() {
         }
       }
     });
-    s.on('message:reaction', ({ messageId, reactions }) =>
+    s.on('message:reaction', ({ messageId, reactions }) => {
       setMessages(prev => {
         const u = { ...prev };
         Object.keys(u).forEach(ch => { u[ch] = u[ch].map(m => m.id === messageId ? { ...m, reactions } : m); });
         return u;
-      }));
+      });
+      setThreadPanel(prev => {
+        if (!prev || !prev.messages) return prev;
+        const updated = prev.messages.map(m => m.id === messageId ? { ...m, reactions } : m);
+        if (updated === prev.messages) return prev;
+        return { ...prev, messages: updated };
+      });
+    });
     s.on('message:deleted', ({ channelId, messageId }) =>
       setMessages(prev => ({
         ...prev,
         [channelId]: (prev[channelId] || []).filter(m => m.id !== messageId)
       })));
+
+    // ─── Streaming messages (AI agent responses) ───────────────────────
+    s.on('message:stream-start', (msg) => {
+      setMessages(prev => ({
+        ...prev,
+        [msg.channelId]: [...(prev[msg.channelId] || []), { ...msg, isStreaming: true }]
+      }));
+    });
+    s.on('message:stream-chunk', ({ messageId, channelId, content }) => {
+      setMessages(prev => {
+        const channelMsgs = prev[channelId];
+        if (!channelMsgs) return prev;
+        return {
+          ...prev,
+          [channelId]: channelMsgs.map(m =>
+            m.id === messageId ? { ...m, content: (m.content || '') + content } : m
+          )
+        };
+      });
+    });
+    s.on('message:stream-end', ({ messageId, channelId, content }) => {
+      setMessages(prev => {
+        const channelMsgs = prev[channelId];
+        if (!channelMsgs) return prev;
+        return {
+          ...prev,
+          [channelId]: channelMsgs.map(m =>
+            m.id === messageId ? { ...m, content, isStreaming: false } : m
+          )
+        };
+      });
+    });
+
     s.on('message:edited', ({ channelId, messageId, content, editedAt, encrypted }) => {
       let decryptedContent = content;
       if (encrypted && e2eSecretKeyRef.current) {
@@ -1722,6 +1762,8 @@ export default function App() {
   const handleSelectServer = useCallback((serverId) => {
     setActiveServerId(serverId);
     setThreadPanel(null);
+    setMobileSidebarOpen(false);
+    setMobileMemberListOpen(false);
     localStorage.setItem('nexus_last_server', serverId);
 
     const srv = serverData[serverId];
@@ -1757,6 +1799,7 @@ export default function App() {
   // ✅ Phase 2: Removed handleSelectDMs - Personal server is selected like any other server
 
   const handleSelectChannel = useCallback((channel, type) => {
+    setMobileSidebarOpen(false);
     // Remember last text channel per server
     const sid = channel.serverId || activeServerId;
     if (sid && type === 'text') {
@@ -2054,6 +2097,9 @@ export default function App() {
   const handleSelectDMChannel = useCallback((channel) => {
     const personal = Object.values(serverData).find(s => s.isPersonal || s.id?.startsWith('personal:'));
     if (!personal) return;
+    setThreadPanel(null);
+    setMobileSidebarOpen(false);
+    setMobileMemberListOpen(false);
     setActiveServerId(personal.id);
     setActiveChannel(channel);
     setActiveChannelType('text');
@@ -2263,15 +2309,30 @@ export default function App() {
   const handleLogout = useCallback(() => {
     clientLogger.setToken(null);
     webrtcRef.current.clearVoiceState?.();
+    // Clear all user-specific localStorage to prevent data leaking between accounts
     localStorage.removeItem('nexus_token');
     localStorage.removeItem('nexus_username');
+    localStorage.removeItem('nexus_last_server');
+    localStorage.removeItem('nexus_last_channel');
+    localStorage.removeItem('nexus_server_order');
+    localStorage.removeItem('nexus_pinned_dms');
+    localStorage.removeItem('nexus_muted_servers');
+    localStorage.removeItem('nexus_onboarding_completed');
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
       socketRef.current = null;
       setSocket(null);
     }
+    // Reset all server/channel state to prevent stale data flash on next login
     setCurrentUser(null);
+    setServers([]);
+    setServerData({});
+    setActiveServerId(null);
+    setActiveChannel(null);
+    setMessages({});
+    setOnlineUsers({});
+    setVoiceChannelState({});
     setSettingsOpen(false);
   }, []);
 
@@ -2619,6 +2680,12 @@ export default function App() {
             onPttDeactivate={webrtc.pttDeactivate}
             onUserRightClick={(user, e) => setContextMenu({ user, position: { x: e.clientX, y: e.clientY } })}
           />
+        ) : activeServer?.isPersonal && !activeChannel ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">💬</div>
+            <h2 className="empty-state-title">Direct Messages</h2>
+            <p className="empty-state-text">Select a conversation from the list or start a new one.</p>
+          </div>
         ) : !activeChannel && !hasRegularServers ? (
           <div className="empty-state">
             <div className="empty-state-icon">🏠</div>
