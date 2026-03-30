@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useReducer, useRef, useCallback, useEffect, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { useWebRTC } from './hooks/useWebRTC';
 import ServerList from './components/ServerList';
@@ -71,6 +71,40 @@ function applySavedServerOrder(serverList) {
     return [...personal, ...regular];
   } catch {
     return serverList;
+  }
+}
+
+// ── Connection state machine (Stage 4) ──────────────────────────────────────
+// Explicit action types make all connection transitions auditable.
+function connectionReducer(state, action) {
+  switch (action.type) {
+    case 'CONNECTED':
+      // Socket connected (initial or reconnect)
+      return { ...state, connectionState: 'connected', serverUnreachable: false };
+    case 'DISCONNECTED':
+      // Socket disconnected
+      return { ...state, connectionState: 'disconnected', restoringSession: false };
+    case 'RECONNECT_ATTEMPT':
+      // Socket.IO auto-reconnect in progress
+      return { ...state, connectionState: 'connecting' };
+    case 'SHOW_CONNECTION_BANNER':
+      // Show "Reconnecting..." banner (after 5s delay timer fires)
+      return { ...state, showConnectionBanner: true };
+    case 'RECONNECTED':
+      // Reconnect succeeded — swap banners
+      return { ...state, showConnectionBanner: false, showReconnectedBanner: true };
+    case 'HIDE_RECONNECTED_BANNER':
+      return { ...state, showReconnectedBanner: false };
+    case 'SESSION_RESTORED':
+      // Auth handshake finished (init, error, connect_error, etc.)
+      return { ...state, restoringSession: false };
+    case 'SERVER_UNREACHABLE':
+      // Timeout with no successful connection — server is down
+      return { ...state, serverUnreachable: true, restoringSession: false };
+    case 'CLEAR_SERVER_UNREACHABLE':
+      return { ...state, serverUnreachable: false };
+    default:
+      return state;
   }
 }
 
@@ -161,14 +195,14 @@ export default function App() {
     updateAvailable: null,     // { version, notes, install } — Tauri only
   }));
 
-  // connection (useReducer candidate for Stage 4; useState shim for now)
-  const [connection, setConnection] = useState(() => ({
+  // connection — Stage 4: useReducer state machine
+  const [connection, dispatchConnection] = useReducer(connectionReducer, {
     connectionState: 'connecting', // 'connected' | 'connecting' | 'disconnected'
     serverUnreachable: false,
     showConnectionBanner: false,
     showReconnectedBanner: false,
     restoringSession: !!(localStorage.getItem('nexus_token') && localStorage.getItem('nexus_username')),
-  }));
+  });
 
   // voice-related state (stays flat — owned by WebRTC layer; will move to useWebRTC in a later stage)
   const [voiceChannelState, setVoiceChannelState] = useState({});
@@ -324,14 +358,10 @@ export default function App() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { setConnectionState, setServerUnreachable, setShowConnectionBanner, setShowReconnectedBanner, setRestoringSession } = useMemo(() => {
-    const mk = (key) => (v) => setConnection(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
-    return {
-      setConnectionState: mk('connectionState'), setServerUnreachable: mk('serverUnreachable'),
-      setShowConnectionBanner: mk('showConnectionBanner'), setShowReconnectedBanner: mk('showReconnectedBanner'),
-      setRestoringSession: mk('restoringSession'),
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // connectionRef: lets async callbacks (setTimeout) read the latest connection state
+  // without being stale due to closure capture.
+  const connectionRef = useRef(connection);
+  connectionRef.current = connection;
 
   const webrtc = useWebRTC(socket, currentUser, activeServerId);
   const webrtcRef = useRef(webrtc);
@@ -713,8 +743,7 @@ export default function App() {
     s.on('connect', () => {
       console.log('[App]  Socket connected' + (isReconnect ? ' (reconnect)' : ''));
       socketEverConnected.current = true;
-      setConnectionState('connected');
-      setServerUnreachable(false);
+      dispatchConnection({ type: 'CONNECTED' });
 
       // Clear reconnection banner timer and show brief "Reconnected" message
       if (connectionBannerTimer.current) {
@@ -722,9 +751,8 @@ export default function App() {
         connectionBannerTimer.current = null;
       }
       if (isReconnect) {
-        setShowConnectionBanner(false);
-        setShowReconnectedBanner(true);
-        setTimeout(() => setShowReconnectedBanner(false), 4000);
+        dispatchConnection({ type: 'RECONNECTED' });
+        setTimeout(() => dispatchConnection({ type: 'HIDE_RECONNECTED_BANNER' }), 4000);
       }
 
       s.emit('join', { token, username });
@@ -745,7 +773,6 @@ export default function App() {
 
     s.on('disconnect', (reason) => {
       console.log('[App]  Socket disconnected:', reason);
-      setConnectionState('disconnected');
       // If server kicked us (io server disconnect), don't try to reconnect with stale token
       if (reason === 'io server disconnect') {
         console.log('[App]  Server disconnected us - clearing tokens');
@@ -760,23 +787,23 @@ export default function App() {
       } else {
         isReconnect = true;
       }
-      setRestoringSession(false);
+      dispatchConnection({ type: 'DISCONNECTED' });
     });
 
     s.on('reconnect_attempt', (attemptNumber) => {
       console.log(`[App]  Reconnect attempt #${attemptNumber}`);
-      setConnectionState('connecting');
+      dispatchConnection({ type: 'RECONNECT_ATTEMPT' });
       // Only show banner after 5 seconds of reconnection attempts
       if (!connectionBannerTimer.current) {
         connectionBannerTimer.current = setTimeout(() => {
-          setShowConnectionBanner(true);
+          dispatchConnection({ type: 'SHOW_CONNECTION_BANNER' });
         }, 5000);
       }
     });
 
     s.on('connect_error', (err) => {
       console.log('[App]  Connect error:', err.message);
-      setRestoringSession(false);
+      dispatchConnection({ type: 'SESSION_RESTORED' });
     });
 
     s.on('init', ({ user, server, servers, onlineUsers, voiceChannels }) => {
@@ -823,7 +850,7 @@ export default function App() {
         setPinnedDMs(user.settings.pinned_dms);
         localStorage.setItem('nexus_pinned_dms', JSON.stringify(user.settings.pinned_dms));
       }
-      setRestoringSession(false);
+      dispatchConnection({ type: 'SESSION_RESTORED' });
       setCurrentUser(user);
 
       // Detect first-time users: no regular servers and onboarding not yet completed
@@ -1466,7 +1493,7 @@ export default function App() {
 
     s.on('error', ({ message }) => {
       console.log('[App]  Server error:', message);
-      setRestoringSession(false);
+      dispatchConnection({ type: 'SESSION_RESTORED' });
 
       // If auth failed, clear stale tokens and disconnect socket so user can log in fresh
       if (message?.toLowerCase().includes('token') || message?.toLowerCase().includes('auth') || message?.toLowerCase().includes('expired') || message?.toLowerCase().includes('invalid')) {
@@ -1823,26 +1850,25 @@ export default function App() {
       socketEverConnected.current = false;
       authErrorReceived.current = false;
       const timeout = setTimeout(() => {
-        setRestoringSession(prev => {
-          if (!prev) return false;
-          if (socketEverConnected.current && authErrorReceived.current) {
-            // Server was reached but rejected our tokens — they're genuinely stale
-            console.log('[App]  Session restore timeout - auth rejected, clearing stale tokens');
-            localStorage.removeItem('nexus_token');
-            localStorage.removeItem('nexus_username');
-            if (socketRef.current) {
-              socketRef.current.removeAllListeners();
-              socketRef.current.disconnect();
-              socketRef.current = null;
-              setSocket(null);
-            }
-          } else {
-            // Never connected (network error) — keep tokens, show unreachable screen
-            console.log('[App]  Session restore timeout - server unreachable, keeping tokens');
-            setServerUnreachable(true);
+        // Read latest restoringSession via connectionRef to avoid stale closure
+        if (!connectionRef.current.restoringSession) return;
+        if (socketEverConnected.current && authErrorReceived.current) {
+          // Server was reached but rejected our tokens — they're genuinely stale
+          console.log('[App]  Session restore timeout - auth rejected, clearing stale tokens');
+          localStorage.removeItem('nexus_token');
+          localStorage.removeItem('nexus_username');
+          if (socketRef.current) {
+            socketRef.current.removeAllListeners();
+            socketRef.current.disconnect();
+            socketRef.current = null;
+            setSocket(null);
           }
-          return false;
-        });
+          dispatchConnection({ type: 'SESSION_RESTORED' });
+        } else {
+          // Never connected (network error) — keep tokens, show unreachable screen
+          console.log('[App]  Session restore timeout - server unreachable, keeping tokens');
+          dispatchConnection({ type: 'SERVER_UNREACHABLE' });
+        }
       }, 10000);
 
       // Clean up timeout if component unmounts
@@ -2564,7 +2590,7 @@ export default function App() {
             Retry Now
           </button>
           <div>
-            <button onClick={() => { localStorage.removeItem('nexus_token'); localStorage.removeItem('nexus_username'); if (socketRef.current) { socketRef.current.removeAllListeners(); socketRef.current.disconnect(); socketRef.current = null; setSocket(null); } setServerUnreachable(false); }}
+            <button onClick={() => { localStorage.removeItem('nexus_token'); localStorage.removeItem('nexus_username'); if (socketRef.current) { socketRef.current.removeAllListeners(); socketRef.current.disconnect(); socketRef.current = null; setSocket(null); } dispatchConnection({ type: 'CLEAR_SERVER_UNREACHABLE' }); }}
               style={{ background:'none', border:'none', color:'var(--text-muted, #949ba4)', fontSize:13, cursor:'pointer', textDecoration:'underline' }}>
               Sign Out
             </button>
@@ -2598,7 +2624,7 @@ export default function App() {
       {showReconnectedBanner && (
         <div className="connection-banner reconnected" role="status" aria-live="polite">
           <span>Reconnected</span>
-          <button className="banner-close" onClick={() => setShowReconnectedBanner(false)} aria-label="Dismiss reconnected banner">&times;</button>
+          <button className="banner-close" onClick={() => dispatchConnection({ type: 'HIDE_RECONNECTED_BANNER' })} aria-label="Dismiss reconnected banner">&times;</button>
         </div>
       )}
       {updateAvailable && (
