@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 const db = require('../db');
+const redis = require('../redis');
 const { state, getSocketIdForUser, isUserOnline } = require('../state');
 const { findServerByChannelId, getUserPerms, parseMentions, parseChannelLinks, convertDbMessagesToRuntime, convertDbMessages, handleSlashCommand, checkSocketRate, socketRateLimiters, serializeServer, getRandomRoast, parseSearchFilters } = require('../helpers');
 const automod = require('../automod');
@@ -29,18 +30,26 @@ module.exports = function(io, socket) {
     socket.join(`text:${channelId}`);
     console.debug(`[Message] ${user.username} joined channel ${channelId}`);
 
-    // If memory is empty, try loading from database
+    // If memory is empty, check Redis cache then fall back to database
     if (!state.messages[channelId] || state.messages[channelId].length === 0) {
-      try {
-        const dbMessages = await db.getChannelMessagesWithAuthors(channelId, 50);
-        if (dbMessages.length > 0) {
-          state.messages[channelId] = convertDbMessagesToRuntime(dbMessages, channelId);
-        } else {
+      const cached = await redis.getCachedMessages(channelId);
+      if (cached && cached.length > 0) {
+        state.messages[channelId] = cached;
+        console.debug(`[Message] Loaded ${cached.length} messages from Redis cache for ${channelId}`);
+      } else {
+        try {
+          const dbMessages = await db.getChannelMessagesWithAuthors(channelId, 50);
+          if (dbMessages.length > 0) {
+            state.messages[channelId] = convertDbMessagesToRuntime(dbMessages, channelId);
+            // Populate Redis cache for future joins
+            redis.setCachedMessages(channelId, state.messages[channelId]);
+          } else {
+            if (!state.messages[channelId]) state.messages[channelId] = [];
+          }
+        } catch (err) {
+          console.error(`[Channel] Error loading messages from DB for ${channelId}:`, err.message);
           if (!state.messages[channelId]) state.messages[channelId] = [];
         }
-      } catch (err) {
-        console.error(`[Channel] Error loading messages from DB for ${channelId}:`, err.message);
-        if (!state.messages[channelId]) state.messages[channelId] = [];
       }
     }
 
@@ -340,6 +349,7 @@ module.exports = function(io, socket) {
     }
 
     io.to(`text:${channelId}`).emit('message:new', msg);
+    redis.invalidateChannelMessages(channelId);
 
     if (srv) {
       const ch = [...(srv.channels?.text || [])].find(c => c.id === channelId);
@@ -529,6 +539,7 @@ module.exports = function(io, socket) {
 
     // Broadcast deletion
     io.to(`text:${channelId}`).emit('message:deleted', { channelId, messageId });
+    redis.invalidateChannelMessages(channelId);
   });
 
   socket.on('message:edit', async ({ channelId, messageId, content, encrypted }) => {
@@ -573,6 +584,7 @@ module.exports = function(io, socket) {
       editedAt: msg.editedAt,
       encrypted: msg.encrypted || false
     });
+    redis.invalidateChannelMessages(channelId);
   });
 
   // ─── Message Pinning ─────────────────────────────────────────────────────────
