@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import './ChatArea.css';
 import { AttachmentIcon, SettingsIcon, LinkIcon, UserIcon, PhoneIcon, ThreadIcon, PinIcon, BookmarkIcon } from './icons';
 import MessageContextMenu from './MessageContextMenu';
@@ -347,13 +348,24 @@ const ChatArea = React.memo(function ChatArea({
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const messageRefs = useRef({}); // refs for all messages
+  const virtuosoRef = useRef(null);
+  const groupedRef = useRef([]); // kept in sync with grouped each render for use in callbacks
+  const [firstItemIndex, setFirstItemIndex] = useState(100000);
+  const savedVirtuosoStateRef = useRef({});
+  const [messagesContainerNode, setMessagesContainerNode] = useState(null);
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
   const fileInputRef = useRef(null);
   const inputRef = useRef(null); // ref for message input textarea
   const prevChannelRef = useRef(null);
-  const scrollPositionsRef = useRef({});
   const isNearBottomRef = useRef(true);
+
+  // Callback ref for messages container — updates messagesContainerNode state
+  // so Virtuoso gets the DOM node via customScrollParent after mount
+  const messagesContainerCallback = useCallback(node => {
+    messagesContainerRef.current = node;
+    if (node) setMessagesContainerNode(node);
+  }, []);
 
   // Pull-to-refresh state
   const [pullDistance, setPullDistance] = useState(0);
@@ -371,55 +383,57 @@ const ChatArea = React.memo(function ChatArea({
   // Track whether we need to force-scroll after a channel switch
   const pendingScrollRef = useRef(false);
 
-  // Scroll to bottom on channel change (instant) or new messages (smooth if near bottom)
+  // On channel switch: save Virtuoso state, reset firstItemIndex, clean up message refs
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    if (channel?.id !== prevChannelRef.current) {
-      // Save scroll position of previous channel
-      if (prevChannelRef.current) {
-        scrollPositionsRef.current[prevChannelRef.current] = container.scrollTop;
-      }
-      // Channel changed - restore saved position or scroll to bottom
-      prevChannelRef.current = channel?.id;
-      pendingScrollRef.current = true;
-      isNearBottomRef.current = true;
-      const savedPos = scrollPositionsRef.current[channel?.id];
-      requestAnimationFrame(() => {
-        if (savedPos !== undefined) {
-          container.scrollTop = savedPos;
-          isNearBottomRef.current = checkNearBottom();
-        } else if (unreadDividerMessageId) {
-          // Scroll to the NEW messages divider
-          const dividerEl = container.querySelector('[data-unread-divider]');
-          if (dividerEl) {
-            dividerEl.scrollIntoView({ block: 'center' });
-          } else {
-            container.scrollTop = container.scrollHeight;
-          }
-        } else {
-          container.scrollTop = container.scrollHeight;
-        }
+    if (channel?.id === prevChannelRef.current) return;
+    // Save Virtuoso state for previous channel
+    if (prevChannelRef.current && virtuosoRef.current) {
+      virtuosoRef.current.getState(state => {
+        savedVirtuosoStateRef.current[prevChannelRef.current] = state;
       });
-    } else if (pendingScrollRef.current && messages.length > 0) {
-      // Messages arrived after channel switch - scroll to divider or bottom
-      pendingScrollRef.current = false;
-      requestAnimationFrame(() => {
-        if (unreadDividerMessageId) {
-          const dividerEl = container.querySelector('[data-unread-divider]');
-          if (dividerEl) {
-            dividerEl.scrollIntoView({ block: 'center' });
-            return;
-          }
-        }
-        container.scrollTop = container.scrollHeight;
-      });
-    } else if (isNearBottomRef.current) {
-      // Same channel, new message, user was near bottom - smooth scroll
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, channel?.id, unreadDividerMessageId]);
+    // Clean up message refs on channel switch
+    messageRefs.current = {};
+    prevChannelRef.current = channel?.id;
+    isNearBottomRef.current = true;
+    pendingScrollRef.current = true;
+    // Reset firstItemIndex for the new channel
+    setFirstItemIndex(100000);
+  }, [channel?.id]);
+
+  // After channel switch + messages arrive: scroll to unread divider or bottom
+  useEffect(() => {
+    if (!pendingScrollRef.current || !messages.length || !virtuosoRef.current) return;
+    pendingScrollRef.current = false;
+    const savedState = savedVirtuosoStateRef.current[channel?.id];
+    if (savedState) return; // Virtuoso restoreStateFrom handles this
+    if (unreadDividerMessageId) {
+      const dividerIdx = groupedRef.current.findIndex(m => m.id === unreadDividerMessageId);
+      if (dividerIdx !== -1 && dividerIdx + 1 < groupedRef.current.length) {
+        requestAnimationFrame(() => {
+          virtuosoRef.current?.scrollToIndex({ index: dividerIdx + 1, align: 'start' });
+        });
+        return;
+      }
+    }
+    // Scroll to bottom for new channel with no unread divider
+    virtuosoRef.current.scrollToIndex({ index: groupedRef.current.length - 1, align: 'end' });
+  }, [messages.length, channel?.id, unreadDividerMessageId]);
+
+  // Track messages.length changes while loading older messages to update firstItemIndex
+  const prevMessagesLengthRef = useRef(messages.length);
+  useEffect(() => {
+    if (!loadingOlder) {
+      prevMessagesLengthRef.current = messages.length;
+      return;
+    }
+    const prev = prevMessagesLengthRef.current;
+    if (messages.length > prev) {
+      const diff = messages.length - prev;
+      setFirstItemIndex(fi => fi - diff);
+      prevMessagesLengthRef.current = messages.length;
+    }
+  }, [messages.length, loadingOlder]);
 
   // Auto-focus the message input when switching to a DM channel
   useEffect(() => {
@@ -435,20 +449,17 @@ const ChatArea = React.memo(function ChatArea({
     isNearBottomRef.current = checkNearBottom();
     // Hide mobile actions on scroll
     setMobileActionsId(prev => prev ? null : prev);
-    // Load older messages when within 50px of the top
-    if (container.scrollTop < 50 && hasMore && !loadingOlder && channel?.id && messages.length > 0) {
-      setLoadingOlder(true);
-      const oldScrollHeight = container.scrollHeight;
-      onFetchOlderMessages(channel.id, messages[0].timestamp).then(() => {
-        setLoadingOlder(false);
-        // Preserve scroll position after prepending older messages
-        requestAnimationFrame(() => {
-          const newScrollHeight = container.scrollHeight;
-          container.scrollTop = newScrollHeight - oldScrollHeight;
-        });
-      }).catch(() => setLoadingOlder(false));
-    }
-  }, [hasMore, loadingOlder, channel?.id, messages, onFetchOlderMessages, checkNearBottom]);
+    // Older-message loading is now handled by Virtuoso's startReached callback
+  }, [checkNearBottom]);
+
+  // Called by Virtuoso when the user scrolls to the top — loads older messages
+  const handleStartReached = useCallback(() => {
+    if (!hasMore || loadingOlder || !channel?.id || messages.length === 0) return;
+    setLoadingOlder(true);
+    onFetchOlderMessages(channel.id, messages[0].timestamp)
+      .catch(() => {})
+      .finally(() => setLoadingOlder(false));
+  }, [hasMore, loadingOlder, channel?.id, messages, onFetchOlderMessages]);
 
   // Pull-to-refresh touch handlers
   const handlePullTouchStart = useCallback((e) => {
@@ -973,11 +984,10 @@ const ChatArea = React.memo(function ChatArea({
   }, []);
 
   const handleClickReply = useCallback((replyToId) => {
-    const messageEl = messageRefs.current[replyToId];
-    if (messageEl) {
-      messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const idx = groupedRef.current.findIndex(m => m.id === replyToId);
+    if (idx !== -1 && virtuosoRef.current) {
+      virtuosoRef.current.scrollToIndex({ index: idx, behavior: 'smooth', align: 'center' });
       setHighlightedMessageId(replyToId);
-      // Remove highlight after 2 seconds
       setTimeout(() => setHighlightedMessageId(null), 2000);
     }
   }, []);
@@ -986,9 +996,9 @@ const ChatArea = React.memo(function ChatArea({
   useEffect(() => {
     if (!scrollToMessageId) return;
     const tryScroll = () => {
-      const el = messageRefs.current[scrollToMessageId];
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const idx = groupedRef.current.findIndex(m => m.id === scrollToMessageId);
+      if (idx !== -1 && virtuosoRef.current) {
+        virtuosoRef.current.scrollToIndex({ index: idx, behavior: 'smooth', align: 'center' });
         setHighlightedMessageId(scrollToMessageId);
         setTimeout(() => setHighlightedMessageId(null), 2000);
         onScrollToMessageComplete?.();
@@ -1099,6 +1109,21 @@ const ChatArea = React.memo(function ChatArea({
   );
 
   const grouped = groupMessages(messages);
+  groupedRef.current = grouped;
+
+  // Precompute which items need a date divider or unread divider rendered above them.
+  // Keyed by message ID so Virtuoso's itemContent doesn't depend on array index.
+  const showDateSet = new Set();
+  const showUnreadSet = new Set();
+  for (let i = 0; i < grouped.length; i++) {
+    const msg = grouped[i];
+    if (i === 0 || formatDate(msg.timestamp) !== formatDate(grouped[i - 1].timestamp)) {
+      showDateSet.add(msg.id);
+    }
+    if (unreadDividerMessageId && i > 0 && grouped[i - 1].id === unreadDividerMessageId) {
+      showUnreadSet.add(msg.id);
+    }
+  }
 
   return (
     <div className={`chat-area ${dragOver ? 'drag-over' : ''}${threadPanel ? ' chat-area--thread-view' : ''}${screenShareActive ? ' chat-area--screen-share' : ''}`}
@@ -1408,18 +1433,13 @@ const ChatArea = React.memo(function ChatArea({
           style={!isRefreshing ? { transform: `rotate(${pullDistance * 3}deg)` } : undefined}
         />
       </div>
-      {/* Messages */}
-      <div className={`messages-container${pullDistance > 0 || isRefreshing ? ' pulling' : ''}`} ref={messagesContainerRef} onScroll={handleScroll}
+      {/* Messages — virtualized with react-virtuoso */}
+      <div className={`messages-container${pullDistance > 0 || isRefreshing ? ' pulling' : ''}`} ref={messagesContainerCallback} onScroll={handleScroll}
         onTouchStart={handlePullTouchStart} onTouchMove={handlePullTouchMove} onTouchEnd={handlePullTouchEnd}
         role="log" aria-live="polite"
         style={(pullDistance > 0 || isRefreshing) ? { transform: `translateY(${pullDistance}px)`, transition: isPullingRef.current ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' } : { transition: 'transform 0.3s cubic-bezier(0.2, 0, 0, 1)' }}
       >
-        {loadingOlder && (
-          <div className="loading-older-messages">
-            <span className="loading-spinner" />Loading older messages...
-          </div>
-        )}
-        {grouped.length===0 && (
+        {grouped.length === 0 && (
           <div className="messages-welcome">
             {channel.isDM ? (
               <>
@@ -1446,15 +1466,32 @@ const ChatArea = React.memo(function ChatArea({
             )}
           </div>
         )}
-        {grouped.map((msg,i) => {
-          const showDate = i===0 || formatDate(msg.timestamp)!==formatDate(grouped[i-1].timestamp);
+        {grouped.length > 0 && messagesContainerNode && (
+        <Virtuoso
+          ref={virtuosoRef}
+          customScrollParent={messagesContainerNode}
+          data={grouped}
+          firstItemIndex={firstItemIndex}
+          followOutput="smooth"
+          startReached={handleStartReached}
+          atBottomStateChange={(atBottom) => { isNearBottomRef.current = atBottom; }}
+          restoreStateFrom={savedVirtuosoStateRef.current[channel?.id]}
+          components={{
+            Header: loadingOlder ? () => (
+              <div className="loading-older-messages">
+                <span className="loading-spinner" />Loading older messages...
+              </div>
+            ) : undefined,
+          }}
+          itemContent={(_index, msg) => {
+          const showDate = showDateSet.has(msg.id);
           const isEditing = editingMessage?.id === msg.id;
           const replyToMsg = msg.replyTo ? messages.find(m => m.id === msg.replyTo) : null;
           const isAdmin = server?.members?.[currentUser?.id]?.roles?.includes('admin');
           const isEncryptedDM = channel.isDM && channel.type === 'dm' && e2eSecretKey && publicKeyCache?.get(channel.participant?.id);
           const isUnencryptedInEncryptedDM = isEncryptedDM && !msg.encrypted && !msg._encrypted && !msg.isSystem;
 
-          const showUnreadDivider = unreadDividerMessageId && i > 0 && grouped[i-1].id === unreadDividerMessageId;
+          const showUnreadDivider = showUnreadSet.has(msg.id);
 
           return (
             <React.Fragment key={msg.id}>
@@ -1680,8 +1717,9 @@ const ChatArea = React.memo(function ChatArea({
               </div>
             </React.Fragment>
           );
-        })}
-        <div ref={messagesEndRef}/>
+          }}
+        />
+        )}
       </div>
 
       <div className="typing-bar" aria-live="polite" aria-atomic="true">
@@ -1889,7 +1927,7 @@ const ChatArea = React.memo(function ChatArea({
             {(pinnedMessages || []).length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No pinned messages in this channel</div>
             ) : (pinnedMessages || []).map(msg => (
-              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = messageRefs.current[msg.id]; if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(msg.id); setTimeout(() => setHighlightedMessageId(null), 2000); } }}>
+              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const idx = groupedRef.current.findIndex(m => m.id === msg.id); if (idx !== -1 && virtuosoRef.current) { virtuosoRef.current.scrollToIndex({ index: idx, behavior: 'smooth', align: 'center' }); setHighlightedMessageId(msg.id); setTimeout(() => setHighlightedMessageId(null), 2000); } }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <div style={{ width: 24, height: 24, borderRadius: '50%', background: msg.author?.customAvatar ? 'transparent' : (msg.author?.color || '#3B82F6'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0, overflow: 'hidden' }}>
                     {msg.author?.customAvatar ? <img src={msg.author.customAvatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (msg.author?.avatar || '👤')}
@@ -2012,7 +2050,7 @@ const ChatArea = React.memo(function ChatArea({
             ) : searchResults.length === 0 ? (
               <div style={{ color: '#72767d', textAlign: 'center', padding: '40px 20px', fontSize: '14px' }}>No results found</div>
             ) : searchResults.map(msg => (
-              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const el = messageRefs.current[msg.id]; if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightedMessageId(msg.id); setTimeout(() => setHighlightedMessageId(null), 2000); } }}>
+              <div key={msg.id} style={{ padding: '12px', marginBottom: '8px', background: '#1e1f22', borderRadius: '8px', cursor: 'pointer' }} onClick={() => { const idx = groupedRef.current.findIndex(m => m.id === msg.id); if (idx !== -1 && virtuosoRef.current) { virtuosoRef.current.scrollToIndex({ index: idx, behavior: 'smooth', align: 'center' }); setHighlightedMessageId(msg.id); setTimeout(() => setHighlightedMessageId(null), 2000); } }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <span style={{ color: msg.author?.color || '#fff', fontWeight: 600, fontSize: '14px' }}>{msg.author?.username}</span>
                   <span style={{ color: '#72767d', fontSize: '12px' }}>{new Date(msg.timestamp).toLocaleDateString()}</span>
