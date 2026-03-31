@@ -19,6 +19,9 @@ const {
 } = require('./helpers');
 const { DEFAULT_PERMS, hashPassword, hashPasswordLegacy, verifyPassword } = utils;
 
+// ─── Redis cache ─────────────────────────────────────────────────────────────
+const redis = require('./redis');
+
 // ─── MCP integration ────────────────────────────────────────────────────────
 const { createMcpRouter } = require('./mcp');
 
@@ -775,6 +778,10 @@ const PORT = process.env.PORT || 3001;
     console.log('[Server] Initializing database...');
     await db.initializeDatabase();
     console.log('[Server] Database initialized successfully');
+
+    // Connect to Redis (non-blocking — failure just disables cache)
+    redis.connect().catch(() => {});
+
 
     console.log('[Server] Loading servers from database...');
     const allDbServers = await db.getAllServers();
