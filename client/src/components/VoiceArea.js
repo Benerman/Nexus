@@ -478,6 +478,20 @@ const VoiceArea = React.memo(function VoiceArea({
     }
   }, [isFullscreen]);
 
+  // Auto-enter fullscreen in landscape on mobile when a screen share stream arrives
+  useEffect(() => {
+    if (!screenShareStream || isLocalSharer || isFullscreen) return;
+    const isLandscapeMobile = window.innerHeight < 500 && window.innerWidth > window.innerHeight;
+    if (isLandscapeMobile) enterFullscreen();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenShareStream, isLocalSharer, isFullscreen]);
+
+  // Auto-exit fullscreen when the viewer stops watching (cleans up landscape auto-fullscreen)
+  useEffect(() => {
+    if (!isWatchingScreen && isFullscreen && !isLocalSharer) exitFullscreen();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWatchingScreen, isFullscreen, isLocalSharer]);
+
   // Close soundboard popup on click outside or Escape
   useEffect(() => {
     if (!soundboardOpen) return;
