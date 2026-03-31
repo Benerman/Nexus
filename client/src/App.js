@@ -285,13 +285,13 @@ export default function App() {
   const showReconnectedBanner = connection.showReconnectedBanner;
   const restoringSession = connection.restoringSession;
 
-  // ── Stage 1: write shims (stable setter functions via useMemo) ────────────────
-  // setXxx from useState are stable references, so useMemo([]) is safe here.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // ── Stage 2: write shims — explicit deps, no eslint suppressions needed ──────
+  // useState/useReducer setters are guaranteed stable references by React, so
+  // including them in deps satisfies exhaustive-deps without causing re-creation.
   const { setServerSetupNeeded, setCurrentUser } = useMemo(() => {
     const mk = (key) => (v) => setAuth(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
     return { setServerSetupNeeded: mk('serverSetupNeeded'), setCurrentUser: mk('currentUser') };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setAuth]);
 
   const {
     setServers, setActiveServerId, setServerData, setActiveChannel, setActiveChannelType,
@@ -307,7 +307,7 @@ export default function App() {
       setChannelLastRead: mk('channelLastRead'), setLastChannelPerServer: mk('lastChannelPerServer'),
       setPinnedMessages: mk('pinnedMessages'), setChannelThreads: mk('channelThreads'),
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setServerState]);
 
   const { setFriends, setPendingRequests, setMessageRequests, setDmUnreadCounts, setOnlineUsers, setPinnedDMs } = useMemo(() => {
     const mk = (key) => (v) => setSocial(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
@@ -316,7 +316,7 @@ export default function App() {
       setMessageRequests: mk('messageRequests'), setDmUnreadCounts: mk('dmUnreadCounts'),
       setOnlineUsers: mk('onlineUsers'), setPinnedDMs: mk('pinnedDMs'),
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setSocial]);
 
   const {
     setMutedServers, setMutedChannels, setMutedCategories,
@@ -328,7 +328,7 @@ export default function App() {
       setMutedCategories: mk('mutedCategories'), setMessageSoundsEnabled: mk('messageSoundsEnabled'),
       setNotificationsEnabled: mk('notificationsEnabled'), setNotificationsPausedUntil: mk('notificationsPausedUntil'),
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setNotifications]);
 
   const {
     setSettingsOpen, setSettingsTab, setErrorMsg, setMemberSidebarVisible,
@@ -356,7 +356,7 @@ export default function App() {
       setThreadNameModal: mk('threadNameModal'), setShowThreadsListPanel: mk('showThreadsListPanel'),
       setUpdateAvailable: mk('updateAvailable'),
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setUi]);
 
   // connectionRef: lets async callbacks (setTimeout) read the latest connection state
   // without being stale due to closure capture.
