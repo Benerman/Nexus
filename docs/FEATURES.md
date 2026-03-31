@@ -1,6 +1,6 @@
-# Nexus Chat - Complete Feature Documentation
+# Nexus — Complete Feature Documentation
 
-**Version**: 1.0.0 | **Last Updated**: February 16, 2026
+**Version**: 1.0.12 | **Last Updated**: March 2026
 
 ---
 
@@ -10,1351 +10,1382 @@
 2. [Infrastructure & Deployment](#2-infrastructure--deployment)
 3. [Authentication System](#3-authentication-system)
 4. [Messaging System](#4-messaging-system)
-5. [Voice & Video System](#5-voice--video-system)
-6. [Server Management](#6-server-management)
-7. [Categories & Channels](#7-categories--channels)
-8. [Roles & Permissions](#8-roles--permissions)
-9. [Webhooks](#9-webhooks)
-10. [Direct Messaging](#10-direct-messaging)
-11. [Friend System](#11-friend-system)
-12. [User Management & Profiles](#12-user-management--profiles)
-13. [User Interface Components](#13-user-interface-components)
-14. [Socket.IO Events Reference](#14-socketio-events-reference)
-15. [REST API Endpoints](#15-rest-api-endpoints)
-16. [Database Schema](#16-database-schema)
-17. [Security Features](#17-security-features)
-18. [Styling & Theming](#18-styling--theming)
-19. [Performance Optimizations](#19-performance-optimizations)
-20. [File Structure](#20-file-structure)
-21. [Feature Status Summary](#21-feature-status-summary)
+5. [Threads](#5-threads)
+6. [Message Search](#6-message-search)
+7. [Pins & Bookmarks](#7-pins--bookmarks)
+8. [Voice & Audio System](#8-voice--audio-system)
+9. [Screen Sharing](#9-screen-sharing)
+10. [Direct Messaging & Calls](#10-direct-messaging--calls)
+11. [End-to-End Encryption](#11-end-to-end-encryption)
+12. [Server Management](#12-server-management)
+13. [Categories & Channels](#13-categories--channels)
+14. [Roles & Permissions](#14-roles--permissions)
+15. [Moderation](#15-moderation)
+16. [AutoMod](#16-automod)
+17. [Friend & Social System](#17-friend--social-system)
+18. [Custom Emoji & Soundboard](#18-custom-emoji--soundboard)
+19. [Webhooks](#19-webhooks)
+20. [MCP Bot Framework](#20-mcp-bot-framework)
+21. [Themes & Appearance](#21-themes--appearance)
+22. [LAN Mode](#22-lan-mode)
+23. [User Profiles & Settings](#23-user-profiles--settings)
+24. [Platform Admin](#24-platform-admin)
+25. [Slash Commands](#25-slash-commands)
+26. [Audit Log](#26-audit-log)
+27. [Metrics & Observability](#27-metrics--observability)
+28. [Security](#28-security)
+29. [Cross-Platform Support](#29-cross-platform-support)
+30. [Socket.IO Events Reference](#30-socketio-events-reference)
+31. [REST API Endpoints](#31-rest-api-endpoints)
+32. [Database Schema](#32-database-schema)
+33. [Performance Optimizations](#33-performance-optimizations)
+34. [File Structure](#34-file-structure)
+35. [Feature Status Summary](#35-feature-status-summary)
 
 ---
 
 ## 1. Project Overview & Tech Stack
 
-Nexus Chat is a modern, real-time communication platform with full messaging, voice, video, and server management capabilities.
+Nexus is a self-hosted, real-time communication platform with text channels, voice/video, direct messaging, and a bot framework. It targets full feature parity with Discord for small-to-medium communities.
 
 ### Technology Stack
 
-| Layer | Technology | Version |
+| Layer | Technology | Details |
 |-------|-----------|---------|
-| Frontend | React | 18.x |
-| Real-time Communication | Socket.IO | Latest |
-| Voice/Video | WebRTC | Native Browser API |
-| Backend | Express (Node.js) | Latest |
-| Database | PostgreSQL | 15 |
-| Cache/Sessions | Redis | 7 |
-| Reverse Proxy | Nginx | Alpine |
-| Containerization | Docker Compose | Multi-container |
-| Markdown Rendering | react-markdown | With rehype-sanitize |
+| Frontend | React 18 | Socket.IO client, WebRTC, NaCl/libsodium |
+| Backend | Node.js + Express | Socket.IO server, 15 handler modules |
+| Real-time | Socket.IO | 151 registered socket events |
+| Voice/Video | WebRTC (native) | STUN/TURN, multi-sharer screen share |
+| Database | PostgreSQL 15 | JSONB columns, 24 tables, 19 migrations |
+| Cache | Redis 7 | AOF persistence, hot-channel message cache |
+| Proxy | Nginx | WebSocket upgrade, SPA routing, gzip |
+| Logging | Winston | Structured JSON, daily rotation, audit trail |
+| Audio | Web Audio API + RNNoise WASM | Noise gate, AGC, ML noise cancellation |
+| Encryption | NaCl/libsodium | X25519 key exchange, XSalsa20-Poly1305 |
+| Deployment | Docker Compose | Multi-container, production + dev overrides |
 
 ---
 
 ## 2. Infrastructure & Deployment
 
-### 2.1 Multi-Container Docker Setup
+### 2.1 Container Architecture
 
-1. **PostgreSQL Container** (`nexus-chat-postgres`)
-   - Port: 5432
-   - Database name: `nexus_db`
-   - Persistent volume: `postgres-data`
-   - Health checks enabled with `pg_isready`
+```
+Browser (Port 3000) → Nginx → Express + Socket.IO (Port 3001) → PostgreSQL + Redis
+```
 
-2. **Redis Container** (`nexus-chat-redis`)
-   - Port: 6379
-   - Persistence: AOF (Append Only File) enabled
-   - Persistent volume: `redis-data`
-   - Health checks enabled with `redis-cli ping`
+| Container | Port | Purpose |
+|-----------|------|---------|
+| `nexus-postgres` | 5432 | Primary database |
+| `nexus-redis` | 6379 | Session cache, hot-channel message cache |
+| `nexus-server` | 3001 | Backend API + Socket.IO + WebRTC signaling |
+| `nexus-client` | 3000 | Nginx serving the React SPA |
 
-3. **Backend Server** (`nexus-chat-server`)
-   - Port: 3001
-   - Framework: Express + Socket.IO
-   - Custom docker-entrypoint.sh for startup sequencing
-   - Depends on PostgreSQL and Redis health checks
+### 2.2 Docker Compose Profiles
 
-4. **Frontend Client** (`nexus-chat-client`)
-   - Port: 3000 (maps to internal port 80)
-   - Multi-stage build: Node.js builder + Nginx runtime
-   - Custom nginx.conf with WebSocket proxy support
-   - Serves optimized React production build
+- **Production**: `docker compose -p nexus-prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+- **Development**: `docker compose -p nexus-dev --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
+- **Self-hosted STUN/TURN**: add `-f docker-compose.coturn.yml` overlay for bundled coturn
 
-### 2.2 Nginx Reverse Proxy Configuration
+### 2.3 Database Migrations
 
-- WebSocket upgrade support for Socket.IO
-- Proxy pass to backend server for `/api/` and `/socket.io/` routes
-- Content Security Policy headers enforced
-- Gzip compression enabled
-- Static file caching with proper MIME types
-- SPA fallback: all routes serve `index.html`
+19 sequential SQL files applied idempotently on container startup via `docker-entrypoint.sh`. Each migration uses `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` patterns to be safe for re-runs.
 
-### 2.3 Environment Configuration
+### 2.4 Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | 3001 | Server port |
-| `NODE_ENV` | development | Environment mode |
-| `DATABASE_URL` | postgresql://... | PostgreSQL connection string |
-| `REDIS_URL` | redis://localhost:6379 | Redis connection string |
-| `CLIENT_URL` | http://localhost:3000 | Frontend URL for CORS |
-| `JWT_SECRET` | (required) | Token signing secret |
-| `SESSION_EXPIRY` | 604800000 | Token TTL (7 days in ms) |
-| `REFRESH_EXPIRY` | 2592000000 | Refresh TTL (30 days in ms) |
-| `MAX_MESSAGE_LENGTH` | 2000 | Max message character count |
-| `MAX_ATTACHMENTS` | 4 | Max attachments per message |
-| `MAX_ATTACHMENT_SIZE` | 10485760 | Max file size (10MB) |
-| `ENABLE_GUEST_MODE` | true | Allow guest access |
-| `RATE_LIMIT_MESSAGES` | 10 | Messages per rate window |
-| `RATE_LIMIT_WINDOW` | 10000 | Rate window (10s in ms) |
-| `LOG_LEVEL` | info | Logging verbosity |
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `JWT_SECRET` | — | Yes | Token signing key |
+| `DATABASE_URL` | — | Yes | PostgreSQL connection string |
+| `POSTGRES_PASSWORD` | `postgres` | Yes | DB password |
+| `CLIENT_URL` | `http://localhost:3000` | No | Frontend URL for CORS |
+| `GIPHY_API_KEY` | — | No | Enables GIF picker |
+| `PLATFORM_ADMIN` | — | No | Username for platform admin panel |
+| `MAX_MESSAGE_LENGTH` | `2000` | No | Max chars per message |
+| `MAX_ATTACHMENTS` | `4` | No | Max files per message |
+| `MAX_ATTACHMENT_SIZE` | `10485760` | No | Max file size (10 MB) |
+| `SESSION_EXPIRY` | `604800000` | No | Token TTL (7 days) |
+| `RATE_LIMIT_MESSAGES` | `10` | No | Messages per rate window |
+| `RATE_LIMIT_WINDOW` | `10000` | No | Rate window in ms |
+| `STUN_URLS` | Google STUN | No | Comma-separated STUN server URLs |
+| `TURN_URL` | — | No | TURN server URL |
+| `TURN_SECRET` | — | No | Shared secret for ephemeral TURN credentials |
+
+### 2.5 CI/CD Pipelines
+
+| Workflow | Trigger | Action |
+|----------|---------|--------|
+| `deploy-prod.yml` | Push to `main` | Deploy to production (ports 3000/3001) |
+| `deploy-dev.yml` | Push to `develop` | Deploy to dev stack (ports 3002/3003) |
+| `unit-tests.yml` | PR / push | npm audit + Jest (90% coverage threshold) |
+| `dev.yml` | Manual | Pre-release builds (Tauri, Electron, Capacitor) |
+| `release.yml` | Manual | Versioned release from `client/package.json` |
 
 ---
 
 ## 3. Authentication System
 
-### 3.1 User Registration
+### 3.1 Registration & Login
 
-- **Endpoint**: `POST /api/auth/register`
-- Username validation: 3-32 characters, alphanumeric plus underscore/hyphen
-- Password requirement: Minimum 8 characters
-- Password hashing: HMAC-SHA256 with random 16-byte salt
-- Auto-assigned on creation:
-  - Random avatar emoji from curated set
-  - Random display color from palette (#3B82F6, #57F287, #FEE75C, #ED4245, #EB459E, etc.)
-  - Unique UUID identifier
-- Returns: Authentication token + account object
+- **Endpoint**: `POST /api/auth/register` and `POST /api/auth/login`
+- Username: 3–32 characters, alphanumeric plus `_` and `-`
+- Password: minimum 8 characters
+- Password hashing: bcrypt (12 rounds) with auto-migration from legacy HMAC-SHA256 hashes
+- Auto-assigned on creation: random emoji avatar, random display color
+- Token-based sessions stored in browser `localStorage`
+- Logout clears localStorage and revokes token in database
 
-### 3.2 User Login
+### 3.2 Session Management
 
-- **Endpoint**: `POST /api/auth/login`
-- Credential validation against stored hash + salt
-- Returns: Authentication token + full account object (including custom avatar)
-- Error handling: 401 for invalid credentials
+- JWT tokens with configurable TTL (default 7 days)
+- Token stored in `localStorage` as `nexus_token`
+- Auto-restored on page reload via `join` socket event
+- Session restore recovers voice channel state, DMs, and UI position
+- Offline resilience: smart reconnection with error boundary
 
-### 3.3 Session Management
+### 3.3 Account Recovery
 
-- Token storage in browser `localStorage` (`nexus_token`, `nexus_username`)
-- Auto-restoration on page refresh (checks localStorage and reconnects via Socket.IO)
-- Token expiration: 7 days (configurable)
-- Backend validates token against database for active/non-expired status
-- Logout clears localStorage and disconnects socket
-
-### 3.4 Guest Mode
-
-- Username-only access (no password required)
-- Token remains null
-- Can read messages and participate in real-time
-- Can send messages
-- Cannot create servers or perform persistent modifications
+- Recovery codes generated at registration (stored as bcrypt hashes)
+- Passphrase-protected E2E key backup uses separate mechanism (see §11)
 
 ---
 
 ## 4. Messaging System
 
-### 4.1 Message Structure
+### 4.1 Core Message Operations
 
-```
-Message Object:
-  - id: UUID (unique identifier)
-  - channelId: UUID (parent channel)
-  - content: String (max 2000 characters)
-  - author: Object
-    - id: UUID
-    - username: String
-    - avatar: Emoji character
-    - color: Hex color code
-    - customAvatar: Base64 image (optional)
-    - isWebhook: Boolean
-  - timestamp: Milliseconds since epoch
-  - reactions: Object (emoji -> array of user IDs)
-  - attachments: Array of attachment objects
-  - replyTo: Message ID (optional, for threaded replies)
-  - editedAt: Timestamp (optional, set on edit)
-  - isWebhook: Boolean
-  - isGrouped: Boolean (UI grouping flag)
-```
+| Operation | Socket Event | Permission |
+|-----------|-------------|-----------|
+| Send message | `message:send` | `sendMessages` |
+| Edit message | `message:edit` | Author only |
+| Delete message | `message:delete` | Author or `manageMessages` |
+| React | `message:react` | `addReactions` |
+| Pin message | `message:pin` | `manageMessages` |
+| Unpin | `message:unpin` | `manageMessages` |
+| Save/bookmark | `message:save` | Any member |
+| Unsave | `message:unsave` | Any member |
 
-### 4.2 Sending Messages
+### 4.2 Message Features
 
-- Socket event: `message:send`
-- Payload includes channelId, content, attachments, and optional replyTo
-- Server-side rate limiting per user
-- Broadcasts `message:new` to all users in channel
-- Auto-scroll to bottom on new message in active channel
+- **Length limit**: 2000 characters (configurable)
+- **Editing**: sets `editedAt` timestamp, shows "(edited)" label
+- **Grouping**: consecutive messages from the same author within 5 minutes are visually grouped (reduced padding, no repeated avatar)
+- **Date separators**: "Today", "Yesterday", or formatted date between groups
+- **NEW divider**: red "NEW" line marks the first unread message when switching to a channel with unread messages
+- **Mentions**: `@username`, `@rolename`, and `@everyone` with client-side highlighting
+- **Typing indicators**: `typing:start` / `typing:stop` events, cleared on send or 1500 ms inactivity
+- **Infinite scroll**: 50 messages per page, `messages:fetch-older` loads previous history
+- **URL previews**: Open Graph metadata fetched server-side with SSRF protection
+- **Message link embeds**: paste a message link to get a cross-channel message preview card
+- **Markdown rendering**: react-markdown with rehype-sanitize (no raw HTML)
+- **Image/GIF attachments**: paste, drag-drop, or upload; up to 4 per message, 10 MB limit
+- **GIF picker**: Giphy integration (requires `GIPHY_API_KEY`)
+- **Thumbnail embeds**: image and video URL thumbnails
+- **8 quick-pick emoji reactions**: like, heart, laugh, wow, sad, fire, party, 100
 
-### 4.3 Message Reactions
+### 4.3 Redis Message Cache
 
-- 8 quick-pick emoji: like, heart, laugh, wow, sad, fire, party, 100
-- Socket event: `message:react`
-- Toggle logic: adds or removes user based on presence in reaction array
-- Broadcasts `message:reaction` with updated reaction state
-- Visual: emoji badges with count, highlighted if current user reacted
-
-### 4.4 Message Editing
-
-- Socket event: `message:edit`
-- Only the message author can edit
-- Sets `editedAt` timestamp (displayed as "(edited)" in UI)
-- Broadcasts `message:edited` to channel
-- Inline edit mode with text input replacement
-
-### 4.5 Message Deletion
-
-- Socket event: `message:delete`
-- Permitted by: message author or server admin
-- Broadcasts `message:deleted` to channel
-- Message removed from UI immediately
-
-### 4.6 Reply / Thread System
-
-- Reply context preserved in message via `replyTo` field
-- Replied message shown as collapsed preview above the reply
-- Click on reply preview to jump to and highlight original message
-- Highlight animation: 2-second yellow fade on target message
-- Click username anywhere in chat opens user context menu
-
-### 4.7 Image & GIF Attachments
-
-- Supported formats: PNG, JPG, JPEG, GIF, WebP
-- Storage method: Base64 data URLs (in-memory)
-- Upload methods:
-  - File picker button in chat input
-  - Drag-and-drop onto chat area
-- Limits:
-  - 4 attachments per message
-  - GIFs: 5MB max
-  - Other images: 10MB max
-- GIF handling: Native `<img>` animation
-- Lightbox modal: Click any image to expand fullscreen with download button
-- Attachment validation: Extension/MIME type checking, size validation
-
-### 4.8 Typing Indicators
-
-- Socket event: `typing:start` emitted on input activity
-- Socket event: `typing:stop` emitted after 1500ms of inactivity
-- Display: "Username is typing..." below message list
-- Real-time sync across all channel members
-- Auto-clears when message is sent
-
-### 4.9 Message History
-
-- Last 50 messages loaded on channel join via `channel:history`
-- Messages sorted chronologically
-- Grouped by author: consecutive messages from same user within 5 minutes are visually grouped
-- Per-channel cache in React state
-- In-memory on server (cleared on restart)
-
-### 4.10 Message Grouping & Date Separators
-
-- Same-author grouping: messages within 5 minutes show without repeated avatar/name
-- Date separators: "Today", "Yesterday", or formatted date between message groups
-- Visual: grouped messages have reduced top padding, no avatar shown
+Hot-channel messages are cached in Redis (`channel:{id}:messages`) as a sorted set keyed by timestamp. The cache is populated on first load and invalidated on send/edit/delete. This offloads PostgreSQL on high-traffic channels while keeping the database the authoritative source.
 
 ---
 
-## 5. Voice & Video System
+## 5. Threads
 
-### 5.1 WebRTC Configuration
+Threads allow focused side-conversations branching off a parent message without cluttering the main channel.
 
-- STUN servers: Google public STUN (`stun.l.google.com:19302`, `stun1.l.google.com:19302`)
-- Codec negotiation: Automatic browser selection
-- Audio context: 48kHz sample rate or system default
-- FFT buffer size: 256 for speaking detection analysis
-
-### 5.2 Voice Channels
-
-- Channel type: `voice`
-- Properties: id, name, serverId, categoryId, isPrivate, permissionOverrides
-- Real-time user list displayed below channel name in sidebar
-- User avatars and status shown in channel listing
-- Voice channel state tracking: `{users: [...], screenSharerId: null}`
-
-### 5.3 Microphone & Audio Controls
-
-- **Mute**: Disables local microphone (can still hear others)
-- **Deafen**: Disables both microphone AND speaker output (complete isolation)
-- State persistence: saved in localStorage (`nexus_voice_muted`, `nexus_voice_deafened`)
-- Deafen remembers previous mute state and restores on undeafen
-- Visual indicators: muted/deafened icons on user tiles
-
-### 5.4 Audio Join/Leave Cues
-
-- Join cue: Rising two-tone beep (600Hz to 900Hz)
-- Leave cue: Falling two-tone beep (900Hz to 600Hz)
-- Duration: 300ms per tone with exponential fade-out
-- Volume: 15% to prevent distortion
-- Generated via Web Audio API oscillators
-
-### 5.5 Speaking Detection
-
-- Real-time frequency analysis using Web Audio API AnalyserNode
-- FFT size: 256
-- Update interval: 100ms
-- Threshold: average frequency data > 15 marks user as "speaking"
-- Visual indicator: green border on speaking user's video tile
-
-### 5.6 Screen Sharing
-
-- Uses `navigator.mediaDevices.getDisplayMedia()` API
-- Socket events: `screen:start`, `screen:stop`, `screen:started`, `screen:stopped`
-- Creates separate RTCRtpSender for screen stream
-- Supports both video (screen) and audio (microphone) simultaneously
-- Separate, larger video tile labeled "SCREEN" for screen shares
-- Click to toggle fullscreen on screen share tiles
-
-### 5.7 Per-User Audio Controls
-
-- Volume slider: 0-100% per remote user
-- Local mute button: mute individual remote users locally
-- State persistence in localStorage (`nexus_user_volumes`, `nexus_local_muted`)
-- Controls visible on hover/touch over user tile
-
-### 5.8 Video Tile Layout
-
-- CSS Grid layout: auto-fills available space
-- Base tile size: 240x240px
-- Speaking users: green border highlight animation
-- Screen share tiles: larger, with "SCREEN" label
-- Name label at bottom of each tile
-- Mute/deafen status icons at top-right of tile
-- Responsive: adapts to number of participants
-
-### 5.9 WebRTC Peer Management
-
-- ICE candidates exchanged via Socket.IO signaling
-- Standard offer/answer SDP negotiation
-- Connection state monitoring: watches for 'disconnected', 'failed', 'closed'
-- Automatic cleanup on user leave
-- Per-peer audio element management via AudioPlayer components
-- Individual audio elements with volume control per remote user
+- **Create**: right-click a message → "Reply in thread" → opens thread panel
+- **Thread panel**: slides in from the right, shows parent message and all replies
+- **Reply count**: parent message shows reply count badge (e.g., "3 replies")
+- **Thread names**: optional title stored in `thread_names` table
+- **Mobile**: full-width thread panel with back navigation
+- **Events**: `thread:create`, `thread:reply`, `thread:get`, `thread:list`
 
 ---
 
-## 6. Server Management
+## 6. Message Search
 
-### 6.1 Server Creation
+Full-text search across all channels a user can access, with Gmail-style operators.
 
-- Socket event: `server:create`
-- Payload: `{name, icon, customIcon}`
-- Creator automatically becomes owner + admin
-- Default categories auto-created:
-  - **GENERAL** category with channels: `#general`, `#announcements`
-  - **VOICE** category with channels: `Lounge`, `Gaming`
-- Server appears in all members' server lists immediately
+### 6.1 Search Operators
 
-### 6.2 Server Object Structure
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `from:` | `from:alice` | Messages from a specific user |
+| `in:` | `in:general` | Messages in a specific channel |
+| `has:` | `has:link`, `has:image`, `has:attachment` | Filter by attachment type |
+| `before:` | `before:2025-06-01` | Messages before a date |
+| `after:` | `after:2025-01-01` | Messages after a date |
+| `is:` | `is:pinned` | Pinned messages only |
 
-```
-Server:
-  - id: UUID
-  - name: String
-  - icon: Emoji character
-  - customIcon: Base64 image (optional)
-  - ownerId: UUID
-  - description: String
-  - createdAt: Timestamp
-  - categories: Object (categoryId -> category object)
-  - categoryOrder: Array of category IDs (for ordering)
-  - roles: Object (roleId -> role object)
-  - members: Object (userId -> {roles: [...], joinedAt: timestamp})
-  - channels: {text: [...], voice: [...]}
-```
+Operators can be combined with free text: `hello world from:alice in:general has:link`
 
-### 6.3 Server Editing
+### 6.2 Search Implementation
 
-- Socket event: `server:update`
-- Editable fields: name, icon, description, customIcon
-- Permissions: owner or admin only
-- Broadcasts `server:updated` to all server members
-
-### 6.4 Server Icon Upload
-
-- REST endpoint: `POST /api/server/:serverId/icon`
-- Authorization: Bearer token in header
-- Accepts base64 data URL images
-- Owner or admin permission required
-- Returns updated `customIcon` field
-
-### 6.5 Server Deletion
-
-- Owner only permission
-- Socket event: `server:delete`
-- Cascading: removes server from all members' server lists
-- All channels, messages, roles, and categories deleted
-
-### 6.6 Server Membership
-
-- **Join**: Automatic on server creation; added to @everyone role; join timestamp recorded
-- **Leave**: Socket event `server:leave`; removed from all roles; broadcasts member removal
-- **Kick/Ban/Timeout**: Admin-only context menu options (moderation tools)
+- Socket event: `messages:search`
+- PostgreSQL full-text search with `to_tsvector` / `to_tsquery`
+- Results respect channel-level view permissions
+- Returns message with author, channel, and surrounding context
 
 ---
 
-## 7. Categories & Channels
+## 7. Pins & Bookmarks
 
-### 7.1 Categories
+### 7.1 Pinned Messages
 
-- Organizational containers for channels within a server
-- Properties: id, name, position, channel list
-- Collapsible in sidebar UI
-- Collapse state persisted in localStorage
-- Operations: create, rename, delete, reorder
-- Position-based ordering for drag-drop readiness
+- Pin/unpin via message context menu (requires `manageMessages` permission)
+- Pinned messages panel accessible from channel header
+- Maximum 50 pinned messages per channel
+- Socket events: `message:pin`, `message:unpin`, `messages:get-pinned`
 
-### 7.2 Text Channels
+### 7.2 Bookmarks (Saved Messages)
 
-- Type: `text`
-- Properties: id, name, description, topic, serverId, categoryId, NSFW flag, slowMode, isPrivate
-- Channel name convention: lowercase with hyphens
-- Default channels: `#general`, `#announcements`
-- Private channels show lock icon in sidebar
-- Channels with webhooks show "LINK" indicator
-
-### 7.3 Voice Channels
-
-- Type: `voice`
-- Same base properties as text channels
-- Joining triggers WebRTC peer connection setup
-- Real-time user list displayed in sidebar below channel name
-- Default channels: `Lounge`, `Gaming`
-- User count displayed next to channel name
-
-### 7.4 Channel Operations
-
-| Operation | Socket Event | Details |
-|-----------|-------------|---------|
-| Create | `channel:create` | Specify name, type, serverId, categoryId |
-| Update | `channel:update` | Edit name, description, category, private flag |
-| Delete | `channel:delete` | Removes channel and all messages |
-| Reorder | `channel:reorder` | Change position and/or parent category |
-| Join | `channel:join` | Subscribe to channel events, receive history |
-
-### 7.5 Channel Permissions
-
-- `isPrivate` boolean flag
-- Per-channel permission overrides per role
-- Three override states: inherit (null), allow (true), deny (false)
-- Backend enforcement via `getUserPerms(userId, serverId, channelId)`
+- Any member can save/unsave messages via context menu
+- Saved messages accessible from DM sidebar "Saved Messages" section
+- Socket events: `message:save`, `message:unsave`, `bookmarks:list`, `bookmarks:get-ids`
+- Bookmarks are per-user and cross-server
 
 ---
 
-## 8. Roles & Permissions
+## 8. Voice & Audio System
 
-### 8.1 Default Roles
+### 8.1 WebRTC Architecture
 
-1. **@everyone** (base role)
-   - ID: `everyone`
-   - Position: 0 (lowest priority)
-   - Default permissions: viewChannel, sendMessages, attachFiles, joinVoice, readHistory, addReactions
+- Peer-to-peer audio with STUN/TURN support
+- ICE server configuration per-server via `server:get-ice-config`
+- Signaling via Socket.IO: `webrtc:offer`, `webrtc:answer`, `webrtc:ice`
+- AudioContext: 48 kHz sample rate
 
-2. **Admin** (auto-created for server owner)
-   - ID: `admin`
-   - Position: 1
-   - Color: #ED4245 (red)
-   - All permissions enabled
+### 8.2 Voice Controls
 
-### 8.2 Permission Types (12 Total)
+| Control | Behavior |
+|---------|---------|
+| Mute | Silences local mic; others can still hear each other |
+| Deafen | Silences mic AND speaker; restores previous mute state on undeafen |
+| Push-to-Talk | Hold configured key to transmit; configurable keybind (desktop and mobile) |
+| Per-user volume | Local volume slider per voice participant |
+| Server mute/deafen | Moderator-applied, overrides user controls |
+
+State (mute, deafen, PTT keybind) persists across reloads in `localStorage`.
+
+### 8.3 Audio Processing Pipeline
+
+The pipeline runs in an `AudioWorkletProcessor` (`audio-processor.js`) in a dedicated thread:
+
+1. **Noise Gate** — attack/release envelope with configurable threshold; suppresses silence between words
+2. **RNNoise ML Noise Cancellation** — WASM-compiled RNNoise model; aggressiveness levels: Off / Low / Medium / High
+3. **AGC (Automatic Gain Control)** — dual-stage leveler + limiter; tracks noise floor; only active when gate is `open` (prevents pumping)
+4. **Dynamics Compressor** — soft knee compressor for peak limiting
+5. **Sidechain filtering** — separates voice from background noise for more accurate gate decisions
+
+### 8.4 Voice Channel Features
+
+- **Speaking detection**: AnalyserNode FFT, 100 ms updates, threshold > 15 marks user as speaking; green border on tile
+- **Join/leave cues**: rising/falling two-tone beep via Web Audio API oscillators
+- **Voice persistence**: auto-rejoin on page reload; recovers channel state from `localStorage`
+- **User presence**: voice channel members shown in sidebar with real-time join/leave
+
+### 8.5 STUN/TURN Configuration
+
+- Default: Google public STUN servers
+- Custom STUN/TURN via environment variables `STUN_URLS`, `TURN_URL`, `TURN_SECRET`
+- Per-server ICE config override in Server Settings → Advanced
+- Bundled coturn option: `docker compose -f docker-compose.yml -f docker-compose.coturn.yml up`
+- See `docs/STUN_TURN.md` for full configuration guide
+
+---
+
+## 9. Screen Sharing
+
+- Uses `navigator.mediaDevices.getDisplayMedia()`
+- **Multi-sharer**: multiple users can share simultaneously; each gets its own tile
+- **Thumbnail previews**: compact thumbnail tiles for inactive sharers
+- **Watch/unwatch**: `screen:watch` / `screen:unwatch` to subscribe to a specific sharer's stream
+- **Full-screen view**: click any share tile to expand
+- Socket events: `screen:start`, `screen:stop`, `screen:watch`, `screen:unwatch`, `screen:thumbnail`
+
+---
+
+## 10. Direct Messaging & Calls
+
+### 10.1 DM Channels
+
+- 1-on-1 and group DMs (3+ participants)
+- Group DM: add/remove participants via `group-dm:add-participant` / `group-dm:remove-participant`
+- Unread count badges and last message preview in DM list
+- DM search and filtering
+- Pin DM conversations to the server list for quick access
+- Mark-read tracking via `dm:mark-read`
+
+### 10.2 Message Requests
+
+Non-friend users cannot DM directly; their first message lands in Message Requests.
+
+- `dm:message-requests` — list pending requests
+- `dm:message-request:accept` — accept and open DM
+- `dm:message-request:reject` — decline (message discarded)
+- `dm:message-request:block` — decline and block sender
+
+### 10.3 DM Calls
+
+- Initiate voice/video call in any 1:1 DM
+- Incoming call overlay with accept/decline buttons
+- Events: `dm:call-start`, `dm:call-decline`
+- Peer connections managed by the same WebRTC stack as voice channels
+
+---
+
+## 11. End-to-End Encryption
+
+1:1 DMs can be encrypted end-to-end. The server never sees plaintext content.
+
+### 11.1 Key Exchange
+
+- Algorithm: X25519 (Curve25519 Diffie-Hellman)
+- Implementation: `libsodium-wrappers` (NaCl)
+- Each user generates a keypair on first use; public key stored in `accounts` table
+- Private key never leaves the client
+- Socket events: `encryption:set-public-key`, `encryption:get-public-key`
+
+### 11.2 Message Encryption
+
+- Encryption: XSalsa20-Poly1305 (NaCl `secretbox`)
+- Shared secret derived from X25519 key exchange
+- Encrypted payload stored in `messages.content` as base64-encoded ciphertext
+
+### 11.3 Key Backup & Recovery
+
+- Export: passphrase-based AES-GCM encryption of the private key
+- Import: decrypt backup with passphrase on a new device
+- Device verification: compare key fingerprints (first 8 hex chars of the public key) out-of-band
+
+---
+
+## 12. Server Management
+
+### 12.1 Server Operations
+
+| Operation | Socket Event | Permission |
+|-----------|-------------|-----------|
+| Create server | `server:create` | Any user |
+| Update (name, icon, description) | `server:update` | `manageServer` |
+| Delete server | `server:delete` | Owner |
+| Leave server | `server:leave` | Member |
+| Transfer ownership | `server:transfer-ownership` | Owner |
+| Join via invite | `invite:use` | Public |
+| Join default server | `server:join-default` | Any user |
+
+### 12.2 Invite Links
+
+- Create: `invite:create` with optional `maxUses` and `expiresAt`
+- Revoke: `invite:revoke` (requires `createInvite` permission)
+- Peek: `invite:peek` — preview server info before joining
+- List: `invite:list`
+
+---
+
+## 13. Categories & Channels
+
+### 13.1 Categories
+
+- Channels are organized in collapsible categories
+- `category:create`, `category:update`, `category:delete`, `category:reorder`
+- Drag-and-drop reordering within and across categories via `channel:reorder`
+
+### 13.2 Channel Types
+
+| Type | Description |
+|------|-------------|
+| Text (`text`) | Standard message channel |
+| Voice (`voice`) | WebRTC audio/video channel |
+
+### 13.3 Channel Properties
+
+- Name, topic/description, position
+- `isPrivate`: restricts visibility to roles with explicit `viewChannel` override
+- Per-role permission overrides (JSONB column)
+- Channel create/update/delete: `channel:create`, `channel:update`, `channel:delete`
+
+---
+
+## 14. Roles & Permissions
+
+### 14.1 Permission System
+
+Permissions resolve through a three-layer hierarchy:
+
+1. **@everyone defaults** — base permissions for all server members
+2. **Role stacking** — each role grants additional permissions; highest position wins on conflicts
+3. **Channel-level overrides** — per-role allow/deny overrides per channel
+
+Server owners bypass all permission checks.
+
+### 14.2 Permission List (18 permissions)
 
 | Permission | Description |
 |-----------|-------------|
-| `viewChannel` | Can see channel in sidebar |
-| `sendMessages` | Can send text messages |
-| `attachFiles` | Can upload images/attachments |
-| `joinVoice` | Can join voice channels |
-| `readHistory` | Can read message history |
-| `addReactions` | Can react to messages |
-| `mentionEveryone` | Can use @everyone mentions |
-| `manageMessages` | Can delete others' messages |
-| `manageChannels` | Can create/edit/delete channels |
-| `manageRoles` | Can create/edit roles |
-| `manageServer` | Can edit server settings |
-| `admin` | Full unrestricted access (overrides all) |
+| `viewChannel` | See and read a channel |
+| `sendMessages` | Post messages |
+| `attachFiles` | Upload images and files |
+| `joinVoice` | Connect to voice channels |
+| `readHistory` | Access message history |
+| `addReactions` | Add emoji reactions |
+| `mentionEveryone` | Use `@everyone` and `@here` |
+| `manageMessages` | Delete/pin others' messages |
+| `manageChannels` | Create, edit, delete channels |
+| `manageRoles` | Create and assign roles |
+| `manageServer` | Edit server settings |
+| `manageEmojis` | Upload/delete custom emoji |
+| `createInvite` | Create invite links |
+| `sendTargetedSounds` | Play soundboard to specific users |
+| `kickMembers` | Kick members from server |
+| `banMembers` | Ban/unban members |
+| `muteMembers` / `deafenMembers` / `moveMembers` | Voice moderation |
+| `moderateMembers` | Apply timeouts |
+| `admin` | All permissions (bypass checks) |
 
-### 8.3 Role Operations
+### 14.3 Role Operations
 
-| Operation | Socket Event | Permissions Required |
-|-----------|-------------|---------------------|
-| Create Role | `role:create` | Admin or manageRoles |
-| Update Role | `role:update` | Admin or manageRoles |
-| Delete Role | `role:delete` | Admin or manageRoles (cannot delete @everyone) |
-| Assign Role | `member:role` | Admin or owner |
-| Remove Role | `member:role` | Admin or owner |
-
-### 8.4 Permission Resolution
-
-- Owner and admin: all permissions automatically granted
-- Role hierarchy: higher position number = higher priority
-- Channel overrides applied after server-level permissions
-- Backend function: `getUserPerms(userId, serverId, channelId?)` resolves final permissions
+- `role:create`, `role:update`, `role:delete`
+- `member:role` — assign or remove a role from a member
+- Roles have `name`, `color`, `position`, and `permissions` (JSONB)
 
 ---
 
-## 9. Webhooks
+## 15. Moderation
 
-### 9.1 Webhook Management
+### 15.1 Member Moderation
 
-- Created via Settings Modal, Webhooks tab
-- Socket event: `webhook:create` with `{serverId, channelId, name}`
-- Auto-generated unique webhook ID and cryptographic token (32 random bytes, hex-encoded)
-- URL format: `/api/webhooks/:webhookId/:token`
-- Token is shown only once at creation time — copy-to-clipboard button provided
-- Webhooks are persisted to the PostgreSQL `webhooks` table and survive server restarts
-- Loaded from DB on server startup and attached to their channel objects
-- Delete webhook via settings (removes from both in-memory state and DB)
+| Action | Socket Event | Permission |
+|--------|-------------|-----------|
+| Kick | `server:kick-user` | `kickMembers` |
+| Ban | `server:ban-user` | `banMembers` |
+| Unban | `server:unban-user` | `banMembers` |
+| Timeout | `server:timeout-user` | `moderateMembers` |
+| Remove timeout | `server:remove-timeout` | `moderateMembers` |
 
-### 9.2 Webhook Object
+**Timeout durations**: 60 s, 5 min, 10 min, 1 h, 1 day, 1 week
 
-```
-Webhook (in-memory):
-  - id: UUID
-  - name: String (max 32 chars)
-  - channelId: UUID
-  - createdBy: UUID (user who created it)
-  - createdAt: Timestamp
+### 15.2 Voice Moderation
 
-Webhook (database row — additional fields):
-  - token: String (64-char hex, used for authentication)
-  - avatar: String (optional default avatar)
-```
+| Action | Socket Event | Permission |
+|--------|-------------|-----------|
+| Server mute | `voice:force-mute` | `muteMembers` |
+| Server deafen | `voice:force-deafen` | `deafenMembers` |
+| Move to channel | `voice:move` | `moveMembers` |
+| Kick from voice | `voice:kick` | `kickMembers` |
 
-> **Note:** The token is never sent to clients or included in `channel:updated` events.
-> It is only returned once in the `webhook:created` response as part of the full URL.
+### 15.3 Context Menu Moderation
 
-### 9.3 Webhook HTTP Endpoint
+Right-click a user in the member list, voice tiles, or on a chat message to access:
+- Kick, ban, timeout
+- Voice mute, deafen, move, kick
+- View profile, send DM, copy user ID
 
-- **URL**: `POST /api/webhooks/:webhookId/:token`
-- **Authentication**: The `:token` path parameter authenticates the request. No other auth headers needed.
-- **Rate Limit**: 10 requests per 10 seconds (shared `/api` rate limiter)
+### 15.4 User Reports
 
-**Request Payload**:
-```json
-{
-  "content": "Message text (max 2000 chars). Required if no embeds.",
-  "username": "Optional bot name (max 32 chars)",
-  "avatar": "Optional emoji (default: 🤖)",
-  "avatar_url": "Optional avatar image URL",
-  "embeds": [{"title": "...", "description": "...", "color": 5763719}],
-  "tts": false,
-  "attachments": [
-    {
-      "url": "https://example.com/image.png",
-      "name": "image.png",
-      "type": "image/png"
-    }
-  ]
-}
-```
+- `report:user` — submit a report with reason and evidence
+- `moderation:get-reports` — list pending/reviewed reports (admin)
+- `moderation:update-report` — mark as reviewed, take action, or dismiss
 
-**Response Codes**:
-- 200: Success — `{id, success: true, username}`
-- 400: Missing or invalid content / invalid payload
-- 401: Invalid webhook ID or token
-- 429: Rate limited
+---
 
-**Example**:
+## 16. AutoMod
+
+Automatic moderation rules that run before messages are delivered.
+
+### 16.1 Rule Types
+
+| Rule Type | Description |
+|-----------|-------------|
+| `keyword` | Block messages containing specific words or phrases |
+| `spam` | Detect and throttle duplicate message bursts |
+| `invite_link` | Block server invite link patterns |
+
+### 16.2 Rule Actions
+
+| Action | Effect |
+|--------|--------|
+| `block` | Silently delete the message (not sent) |
+| `warn` | Delete message and send a warning DM |
+| `timeout` | Delete + apply a temporary timeout |
+| `ban` | Delete + ban the user |
+
+### 16.3 Rule Configuration
+
+- `exempt_roles`: array of role IDs that bypass the rule
+- `exempt_channels`: array of channel IDs excluded from the rule
+- `timeout_duration`: seconds (for `timeout` action)
+- Rules are per-server and loaded at startup
+
+### 16.4 Socket Events
+
+`automod:create-rule`, `automod:update-rule`, `automod:delete-rule`, `automod:get-rules`, `automod:test-rule`
+
+Requires `manageServer` permission.
+
+---
+
+## 17. Friend & Social System
+
+### 17.1 Friend Requests
+
+- `friend:request` — send a request to a user
+- `friend:accept` / `friend:reject` — respond to incoming requests
+- `friend:remove` — unfriend
+- `friend:list` — all friends, pending, and blocked
+
+### 17.2 Blocking
+
+- `block:user` — block; blocks DM creation and hides from presence
+- `unblock:user` — unblock
+- `blocked:list` — list blocked users
+
+### 17.3 User Search
+
+- `user:search` — find users by username for DMs and friend requests
+
+---
+
+## 18. Custom Emoji & Soundboard
+
+### 18.1 Custom Emoji
+
+- Upload per-server emoji (up to 50)
+- Name validation: 2–32 alphanumeric characters
+- `emoji:upload`, `emoji:get`, `emoji:update`, `emoji:delete`
+- Emoji images stored as base64, served via `emoji:get-image`
+- Available in the message composer emoji picker across the server
+
+### 18.2 Soundboard
+
+- 16 built-in sounds (procedurally generated WAV, `default-sounds.js`)
+- Custom sound upload per server
+- `soundboard:play` — play to everyone in the voice channel
+- `soundboard:play-targeted` — play to a specific user (requires `sendTargetedSounds` permission)
+- Per-user custom intro/exit sounds: `user:update-sounds`, `user:get-sounds`
+- Events: `soundboard:get-sounds`, `soundboard:get-sound`, `soundboard:update`, `soundboard:delete`
+
+---
+
+## 19. Webhooks
+
+### 19.1 Overview
+
+Each webhook gets a unique token-authenticated URL. Anyone with the full URL can POST messages to the channel.
+
 ```bash
 curl -X POST http://localhost:3001/api/webhooks/WEBHOOK_ID/TOKEN \
   -H "Content-Type: application/json" \
-  -d '{"content": "Hello!", "username": "MyBot"}'
+  -d '{"content": "Hello!", "username": "MyBot", "avatar": "robot"}'
 ```
 
-### 9.4 Webhook Message Display
+### 19.2 Payload Format
 
-- Messages show with "BOT" badge in chat
-- Custom username displayed instead of real user
-- Avatar emoji or image URL shown on message
-- Supports up to 4 validated attachments
-- Supports up to 10 embeds (Discord-compatible format)
-- Content trimmed to 2000 characters
-- @mentions, @roles, and #channel references are parsed and rendered
+```json
+{
+  "content": "Message text (required)",
+  "username": "Display name (optional, max 80 chars)",
+  "avatar": "Avatar string (optional)"
+}
+```
 
-### 9.5 Built-in Documentation
+### 19.3 Features
 
-- WebhookDocs component with usage examples
-- Code samples for cURL, JavaScript (fetch), and Python (requests)
-- Accessible from the Webhooks settings tab via "View Documentation" button
+- Token is a 64-char cryptographic hex string, shown only once at creation
+- Messages display with a `BOT` badge
+- Rate limited: 10 requests per 10 seconds
+- Stored in the `webhooks` table; survive server restarts
+- `webhook:create`, `webhook:delete`
 
-### 9.6 Security
+### 19.4 Embed Support
 
-- Webhook authentication uses a 64-character cryptographic token (32 bytes from `crypto.randomBytes`)
-- Tokens are stored in the database alongside the webhook, never exposed to other clients
-- The full URL (including token) is only shown once at creation time
-- Webhook messages are saved to the database with `is_webhook = true` and `author_id = null`
-- Keep your webhook URL secret — anyone with the full URL can post to the channel
+POST a `url` field alongside `content` to render a link embed card (image, title, description from Open Graph metadata).
 
 ---
 
-## 10. Direct Messaging
+## 20. MCP Bot Framework
 
-### 10.1 DM Infrastructure
+Nexus includes a full bot framework based on the Model Context Protocol (MCP), enabling AI agents to participate in channels.
 
-- Virtual "Personal Server" created per user
-  - ID format: `personal:{userId}`
-  - Server name: "Direct Messages"
-  - Icon: speech bubble emoji
-  - Private to owner only
+### 20.1 Bot Accounts
 
-### 10.2 DM Channel Types
+Each bot is a first-class account with `is_bot = true`, an owner, and a description.
 
-**1-on-1 DM**:
-```
-  - id: UUID
-  - type: 'dm'
-  - isDM: true
-  - name: Other user's username
-  - participant: {id, username, avatar, color, status, bio}
-  - lastMessage: {id, content, timestamp, authorId}
-  - unreadCount: Number
-  - createdAt: Timestamp
-```
+- `mcp:bot:create` — create a bot account within a server (requires `manageServer`)
+- `mcp:bot:list` — list bots in a server
+- `mcp:bot:delete` — delete bot account
 
-**Group DM** (3+ participants):
-```
-  - id: UUID
-  - type: 'group-dm'
-  - isDM: true
-  - isGroup: true
-  - name: Custom name or comma-separated usernames
-  - participants: Array of user objects
-  - lastMessage: Object
-  - unreadCount: Number
-  - createdAt: Timestamp
-```
+### 20.2 Bot Tokens
 
-### 10.3 DM Features
+Bot tokens authenticate external clients to the Nexus API.
 
-- **New Conversation Button**: Prominent button below DM search to start new conversations
-- **New Conversation Modal**: Popup to enter username, verify user exists, and create DM
-  - Username validation (exists check, self-DM prevention, duplicate check)
-  - Error messages for invalid states
-  - Enter key to submit, click outside to close
-- **DM Search**: Filter conversations by name or username with clear button
-- **Autocomplete**: Search suggestions showing online users, friends prioritized
-- **Unread Tracking**: Per-channel unread message counts with badge display
-- **Last Message Preview**: Shows truncated last message and timestamp in DM list
-- **Sorting**: DMs sorted by most recent activity
-- **Status Indicators**: Online/offline status shown for each participant
+- `mcp:token:create` — create a token with scopes (`read`, `write`) and optional server/expiry restrictions
+- `mcp:token:list` — list your tokens
+- `mcp:token:delete` — revoke a token
 
-### 10.4 DM Socket Events
+Tokens are stored as SHA-256 hashes in `bot_tokens` table (plaintext shown only once).
 
-| Event | Direction | Description |
-|-------|-----------|-------------|
-| `dm:create` | Client -> Server | Create DM channel |
-| `dm:list` | Client -> Server | List all DM channels |
-| `dm:close` | Client -> Server | Close/archive DM |
-| `dm:created` | Server -> Client | New DM created |
-| `dm:unread-counts` | Server -> Client | Unread counts per channel |
-| `dm:updated` | Server -> Client | DM info changed |
+### 20.3 MCP Connections
 
----
+An MCP connection points Nexus at an external MCP-compliant server that exposes tools.
 
-## 11. Friend System
+- `mcp:connection:create` — register an MCP server URL (SSE or HTTP transport)
+- `mcp:connection:list` / `mcp:connection:delete` / `mcp:connection:toggle`
+- `auth_config` stored encrypted in the database
+- `enabled_tools` JSONB array restricts which tools the agent can call
 
-### 11.1 Friend Operations
+### 20.4 Agent Configurations
 
-| Operation | Socket Event | Description |
-|-----------|-------------|-------------|
-| Send Request | `friend:request` | Send friend request by user ID |
-| Accept Request | `friend:accept` | Accept incoming request |
-| Reject Request | `friend:reject` | Decline incoming request |
-| Remove Friend | `friend:remove` | Unfriend a user |
-| List Friends | `friend:list` | Get friends and pending requests |
-| Block User | `friend:block` | Block a user |
-| Unblock User | `friend:unblock` | Remove block |
-| Report User | `friend:report` | Report user for violations |
+An agent config ties a bot account to an MCP connection with trigger rules and a system prompt.
 
-### 11.2 Friend Object
+| Field | Description |
+|-------|-------------|
+| `bot_account_id` | The bot that will post responses |
+| `system_prompt` | Instructions prepended to every LLM call |
+| `trigger_mode` | `mention` (responds when @-mentioned), `keyword` (any matching keyword), `all` (every message) |
+| `trigger_channels` | Restrict to specific channels |
+| `trigger_keywords` | Keywords for `keyword` mode |
+| `mcp_connection_id` | The MCP server providing tools |
+| `max_response_length` | Cap on response characters |
 
-```
-Friend:
-  - id: UUID
-  - friendId: UUID
-  - username: String
-  - avatar: Emoji
-  - customAvatar: Base64 image
-  - color: Hex color
-  - status: 'online' | 'offline'
-  - bio: String
-```
+Events: `mcp:agent:create`, `mcp:agent:list`, `mcp:agent:update`, `mcp:agent:delete`
 
-### 11.3 Friend UI (Settings Tab)
+### 20.5 Streaming Responses
 
-- Current friends list with online status
-- Pending friend requests with accept/reject buttons
-- Add friend by username input
-- Remove friend button per entry
-- Search/filter friends
-- Toast notifications for friend events
+Agents stream responses token-by-token via:
+
+- `mcp:stream:start` — begin a streaming message
+- `mcp:stream:chunk` — append content chunk
+- `mcp:stream:end` — finalize and persist message
+
+### 20.6 Agent Activity Log
+
+All agent invocations are logged to `agent_activity_log`:
+- Action performed, input/output summaries
+- Tool calls made (JSONB), tokens used, duration
+- Errors recorded for debugging
 
 ---
 
-## 12. User Management & Profiles
-
-### 12.1 User Object
-
-```
-User:
-  - id: UUID
-  - username: String
-  - avatar: Emoji character
-  - customAvatar: Base64 image (optional)
-  - color: Hex color code
-  - bio: String
-  - status: 'online' | 'offline' | 'idle' | 'dnd' | 'invisible'
-  - socketId: String (when connected)
-  - roles: Array of role IDs (per-server)
-  - isGuest: Boolean
-  - isWebhook: Boolean
-```
-
-### 12.2 Profile Customization
-
-- **Avatar Upload**: `POST /api/user/avatar` with base64 data URL
-  - Accepted formats: PNG, JPG, GIF, WebP
-  - Max display: 128x128px
-- **Color Selection**: 12 preset colors for username display
-- **Bio**: Short profile description text
-- **Status**: Dropdown with online, offline, idle, DND options
-
-### 12.3 User Status Types
-
-| Status | Color | Description |
-|--------|-------|-------------|
-| Online | Green | User is active |
-| Offline | Gray | User not connected |
-| Idle | Yellow | Away from keyboard |
-| DND | Red | Do Not Disturb |
-| Invisible | Gray | Hidden but connected |
-
-### 12.4 Online User Tracking
-
-- Real-time tracking via `user:joined` and `user:left` socket events
-- Per-server member lists maintained
-- Used for: member sidebar, DM status indicators, voice user lists
-- Full user objects broadcast including status updates
-
----
-
-## 13. User Interface Components
-
-### 13.1 Main Application Layout
-
-```
-+--------------------------------------------------+
-|                      App                          |
-+--------+---------------------------+--------------+
-| Server |                           | Member       |
-| List   |   Main Content Area       | List         |
-| (left) |   (Chat / Voice)          | (right)      |
-|        |                           |              |
-+--------+---------------------------+--------------+
-|        |      User Panel           |              |
-+--------+---------------------------+--------------+
-```
-
-### 13.2 Server List (Left Rail)
-
-- Vertical list of server icons
-- Home/Personal server button at top (hexagon icon)
-- Visual separator between personal and other servers
-- Active server indicator: pill/highlight on right side
-- Hover tooltips with server names
-- "+" button at bottom to create new server
-- Custom server icons displayed (emoji or uploaded image)
-
-### 13.3 Sidebar (Channel List)
-
-**Server Mode**:
-- Server name and icon in header
-- Settings button (gear icon)
-- Collapsible categories
-- Channels listed under categories with type icons:
-  - `#` hashtag for text channels
-  - Speaker icon for voice channels
-- Lock icon for private channels
-- "LINK" indicator for channels with webhooks
-- Voice user avatars shown under voice channels
-
-**DM Mode (Personal Server)**:
-- "Direct Messages" header
-- Search bar with clear button to filter conversations
-- "New Conversation" button with modal popup
-- DM list entries showing:
-  - User avatar with online status dot
-  - Username
-  - Last message preview (truncated)
-  - Timestamp (Today, Yesterday, weekday, or date)
-  - Unread count badge
-- Empty state: "No conversations yet" message
-
-### 13.4 Chat Area
-
-**Header**:
-- Channel name with type icon
-- Channel description/topic
-- Toggle member sidebar button (chevron)
-- Settings/info button
-
-**Message List**:
-- Scrollable message history with auto-scroll
-- Message grouping (same author within 5 minutes)
-- Date separators ("Today", "Yesterday", formatted dates)
-- Message components:
-  - User avatar (custom image or emoji)
-  - Colored username (by top role color)
-  - Message content
-  - Attachments (images with lightbox)
-  - Reactions (emoji badges with count)
-  - Edit indicator "(edited)"
-  - Reply preview (collapsible)
-- Hover actions: emoji picker, reply, edit, delete
-
-**Image Lightbox Modal**:
-- Click image to expand fullscreen
-- Close button (X) and escape key
-- Download button
-- GIF animation support
-- Click outside to dismiss
-
-**Message Input**:
-- Auto-expanding textarea
-- Keyboard shortcuts: Enter to send, Shift+Enter for newline
-- Emoji picker with 8 quick reactions
-- Attachment upload button
-- Drag-and-drop file support
-- Typing indicator display
-
-### 13.5 Member List (Right Sidebar)
-
-- "ONLINE - N" header with count
-- Shows non-offline users only
-- Users grouped by top role color
-- Each entry shows:
-  - User avatar with status dot (green/yellow/red/gray)
-  - Username (self marked with "(you)")
-  - Top role badge(s)
-- Click user to open context menu
-
-### 13.6 Voice Area
-
-- CSS Grid of video/audio tiles
-- Speaking users: green border highlight
-- Screen share: larger tile labeled "SCREEN"
-- User tiles show:
-  - Video stream (if available) or avatar
-  - Username label at bottom
-  - Mute/deafen icons at top-right
-  - Per-user volume slider on hover
-- Control bar:
-  - Mute toggle (microphone icon)
-  - Deafen toggle (headphones icon)
-  - Screen share toggle
-  - Leave voice button
-- Current voice channel name in header
-
-### 13.7 Settings Modal
-
-**8 Tabs**:
-
-1. **Profile**: Username, avatar (emoji or upload), color picker (12 options), bio, status dropdown, save button
-2. **Server Settings**: Server name, description, icon upload, save/delete/leave buttons
-3. **Channels**: List/create/edit/delete channels, type selector (text/voice), category assignment, private flag, drag-drop reorder handles
-4. **Roles**: Create/edit/delete roles, name and color inputs, permission checkboxes grid (12 permissions)
-5. **Members**: Member list with username search (with clear button), role assignment checkboxes per member
-6. **Webhooks**: Create/delete webhooks, generated URL with copy button, built-in documentation with code examples
-7. **Audio Settings**: Input/output device selectors, input/output volume sliders, test audio button, persistent preferences
-8. **Friends**: Current friends list, pending requests with accept/reject, add friend by username, remove friend buttons
-
-### 13.8 User Panel (Bottom Bar)
-
-- User avatar (custom or emoji)
-- Username display
-- Status indicator dot
-- Settings button (gear icon)
-- Logout button (registered users only)
-
-### 13.9 Context Menus
-
-**Message Context Menu** (right-click message):
-- Reply to Message
-- Edit Message (author only)
-- Copy Message URL
-- Delete Message (author or admin)
-
-**User Context Menu** (right-click username):
-- View Profile
-- Send Message (opens DM)
-- Timeout User (admin only)
-- Kick from Server (admin only)
-- Ban from Server (admin only)
-
-### 13.10 Search Inputs with Clear Buttons
-
-All search/filter inputs across the application include a clear (X) button that appears when text is entered:
-- DM search in DMList component
-- DM search in Sidebar component
-- Member search in Settings Modal
-
-### 13.11 Login Screen
-
-- Tab switch between Login and Register
-- Username input field
-- Password input field
-- Guest mode option (username only)
-- Error message display
-- Form validation feedback
-
-### 13.12 Mobile / Responsive Design
-
-- Breakpoint: 768px
-- Mobile features:
-  - Swipe left: opens sidebar
-  - Swipe right: opens member list
-  - Fixed server list at top
-  - Fixed user panel at bottom
-  - Full-height main content area
-  - Touch-friendly controls
-
----
-
-## 14. Socket.IO Events Reference
-
-### 14.1 Connection & Session
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `join` | C->S | `{token, username}` | Authenticate on connect |
-| `disconnect` | C->S | - | Clean up session |
-| `init` | S->C | `{user, server, servers, onlineUsers, voiceState}` | Initialize client state |
-| `user:joined` | S->C | User object | User came online |
-| `user:left` | S->C | `{id}` | User went offline |
-| `user:updated` | S->C | User object | Profile/status changed |
-
-### 14.2 Messaging
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `message:send` | C->S | `{channelId, content, attachments, replyTo}` | Send message |
-| `message:new` | S->C | Message object | New message received |
-| `message:react` | C->S | `{messageId, emoji}` | Toggle reaction |
-| `message:reaction` | S->C | `{messageId, reactions}` | Reactions updated |
-| `message:edit` | C->S | `{messageId, content}` | Edit message |
-| `message:edited` | S->C | `{messageId, content, editedAt}` | Message edited |
-| `message:delete` | C->S | `{messageId}` | Delete message |
-| `message:deleted` | S->C | `{messageId}` | Message removed |
-| `channel:join` | C->S | `{channelId}` | Subscribe to channel |
-| `channel:history` | S->C | `{channelId, messages}` | Message history (50) |
-| `typing:start` | C->S/S->C | `{channelId, user}` | User typing |
-| `typing:stop` | C->S/S->C | `{channelId, userId}` | User stopped typing |
-
-### 14.3 Voice & WebRTC
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `voice:join` | C->S | `{channelId}` | Join voice channel |
-| `voice:leave` | C->S | `{channelId}` | Leave voice channel |
-| `voice:joined` | S->C | `{peers}` | List of existing peers |
-| `voice:left` | S->C | `{userId}` | Peer left voice |
-| `voice:channel:update` | S->C | State object | Voice state changed |
-| `voice:cue` | S->C | `{type}` | Join/leave audio cue |
-| `voice:user:state` | S->C | `{userId, isMuted, isDeafened}` | Mute/deafen state |
-| `peer:joined` | S->C | `{peerId}` | New peer entered |
-| `peer:left` | S->C | `{peerId}` | Peer disconnected |
-| `webrtc:offer` | C->S/S->C | `{to, offer}` | SDP offer |
-| `webrtc:answer` | C->S/S->C | `{to, answer}` | SDP answer |
-| `webrtc:ice` | C->S/S->C | `{to, candidate}` | ICE candidate |
-| `screen:start` | C->S | - | Begin screen share |
-| `screen:stop` | C->S | - | End screen share |
-| `screen:started` | S->C | `{socketId}` | Screen share active |
-| `screen:stopped` | S->C | - | Screen share ended |
-
-### 14.4 Servers & Channels
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `server:create` | C->S | `{name, icon, customIcon}` | Create server |
-| `server:created` | S->C | Server object | Server created |
-| `server:update` | C->S | `{serverId, ...fields}` | Update server |
-| `server:updated` | S->C | Server object | Server changed |
-| `server:delete` | C->S | `{serverId}` | Delete server |
-| `server:deleted` | S->C | `{serverId}` | Server removed |
-| `server:leave` | C->S | `{serverId}` | Leave server |
-| `channel:create` | C->S | `{name, type, serverId, categoryId}` | Create channel |
-| `channel:update` | C->S | `{channelId, ...fields}` | Update channel |
-| `channel:delete` | C->S | `{channelId}` | Delete channel |
-| `channel:reorder` | C->S | `{channelId, position, categoryId}` | Move channel |
-| `channels:updated` | S->C | Channel list | Channels refreshed |
-
-### 14.5 Roles
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `role:create` | C->S | `{serverId, name, color}` | Create role |
-| `role:update` | C->S | `{serverId, roleId, ...fields}` | Update role |
-| `role:delete` | C->S | `{serverId, roleId}` | Delete role |
-| `member:role` | C->S | `{serverId, targetUserId, roleId, action}` | Assign/remove role |
-
-### 14.6 Direct Messages & Friends
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `dm:create` | C->S | `{userId}` | Create DM |
-| `dm:list` | C->S | - | List DMs |
-| `dm:close` | C->S | `{dmId}` | Close DM |
-| `dm:created` | S->C | DM object | DM created |
-| `dm:unread-counts` | S->C | Counts object | Unread per DM |
-| `friend:list` | C->S | - | Get friends |
-| `friend:request` | C->S | `{userId}` | Send request |
-| `friend:accept` | C->S | `{requestId}` | Accept request |
-| `friend:reject` | C->S | `{requestId}` | Reject request |
-| `friend:remove` | C->S | `{friendId}` | Remove friend |
-| `friend:block` | C->S | `{userId}` | Block user |
-| `friend:unblock` | C->S | `{userId}` | Unblock user |
-
-### 14.7 Webhooks
-
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `webhook:create` | C->S | `{serverId, channelId, name}` | Create webhook |
-| `webhook:created` | S->C | Webhook object | Webhook ready |
-| `webhook:delete` | C->S | `{webhookId}` | Delete webhook |
-
----
-
-## 15. REST API Endpoints
-
-### 15.1 Authentication
-
-| Method | Endpoint | Auth | Request Body | Response |
-|--------|----------|------|-------------|----------|
-| POST | `/api/auth/register` | None | `{username, password}` | `{token, account}` |
-| POST | `/api/auth/login` | None | `{username, password}` | `{token, account}` |
-
-### 15.2 User
-
-| Method | Endpoint | Auth | Request Body | Response |
-|--------|----------|------|-------------|----------|
-| POST | `/api/user/avatar` | Bearer token | `{avatar: "data:image/..."}` | `{customAvatar}` |
-
-### 15.3 Server
-
-| Method | Endpoint | Auth | Request Body | Response |
-|--------|----------|------|-------------|----------|
-| POST | `/api/server/:serverId/icon` | Bearer token | `{icon: "data:image/..."}` | `{customIcon}` |
-
-### 15.4 Webhooks
-
-| Method | Endpoint | Auth | Request Body | Response |
-|--------|----------|------|-------------|----------|
-| POST | `/api/webhooks/:webhookId/:token` | Token in URL path | `{content, username?, avatar?, avatar_url?, embeds?, tts?, attachments?}` | `{id, success, username}` |
-
----
-
-## 16. Database Schema
-
-### 16.1 Tables
-
-1. **accounts** - User accounts with credentials and profile data
-   - `id` (UUID, PK), `username` (unique), `password_hash`, `salt`, `avatar`, `custom_avatar`, `color`, `bio`, `status`, `created_at`
-
-2. **tokens** - Authentication tokens
-   - `token` (PK), `account_id` (FK), `expires_at`, `created_at`
-
-3. **servers** - Server/guild definitions
-   - `id` (UUID, PK), `name`, `icon`, `custom_icon`, `owner_id` (FK), `description`, `created_at`
-
-4. **server_members** - Server membership records
-   - `id` (UUID, PK), `server_id` (FK), `account_id` (FK), `joined_at`
-
-5. **categories** - Channel categories within servers
-   - `id` (UUID, PK), `server_id` (FK), `name`, `position`
-
-6. **channels** - Text and voice channels
-   - `id` (UUID, PK), `server_id` (FK), `category_id` (FK), `name`, `type`, `description`, `topic`, `nsfw`, `is_private`, `created_at`
-
-7. **roles** - Server roles with permissions
-   - `id` (UUID, PK), `server_id` (FK), `name`, `color`, `position`, `permissions` (JSONB)
-
-8. **member_roles** - Role assignments
-   - `id` (UUID, PK), `server_id` (FK), `member_id` (FK), `role_id` (FK)
-
-9. **messages** - Chat messages with metadata
-   - `id` (UUID, PK), `channel_id` (FK), `author_id` (FK), `content`, `created_at`, `edited_at`, `reactions` (JSONB), `attachments` (JSONB)
-
-10. **dm_channels** - Direct message channel definitions
-    - `id` (UUID, PK), `participant_1` (FK), `participant_2` (FK), `name`, `is_group`, `created_at`
-
-11. **friendships** - Friend relationships and states
-    - `id` (UUID, PK), `user_id` (FK), `friend_id` (FK), `status` ('accepted'|'pending'|'blocked'), `created_at`
-
-12. **webhooks** - Webhook configurations
-    - `id` (UUID, PK), `channel_id` (FK), `name`, `avatar`, `token` (64-char hex, NOT NULL), `created_by` (FK), `created_at`
-
-13. **reports** - User reports
-    - `id` (UUID, PK), `reporter_id` (FK), `reported_id` (FK), `reason`, `created_at`
-
----
-
-## 17. Security Features
-
-### 17.1 Input Validation (validation.js)
-
-| Validator | Rules |
-|-----------|-------|
-| `validateUsername()` | 3-32 chars, alphanumeric + underscore/hyphen |
-| `validatePassword()` | Minimum 8 characters |
-| `validateMessage()` | Max 2000 chars, newline limiting |
-| `validateServerName()` | 3-32 characters |
-| `validateChannelName()` | 2-32 chars, lowercase + hyphen |
-| `validateRoleName()` | 2-32 characters |
-| `validateEmail()` | Standard email regex |
-| `validateColor()` | Hex format #RRGGBB |
-| `validateUUID()` | UUID format validation |
-| `validateAttachment()` | URL format checking |
-| `validateParticipantIds()` | Array of 2-50 valid UUIDs |
-| `sanitizeInput()` | Trim and length limiting |
-| `sanitizeGroupDMName()` | HTML escaping, character validation |
-
-### 17.2 Password Security
-
-- Hashing algorithm: HMAC-SHA256
-- Salt: 16 random bytes per password via `crypto.randomBytes(16)`
-- Passwords never stored or transmitted in plaintext after registration
-
-### 17.3 Rate Limiting
-
-| Limiter | Limit | Window |
-|---------|-------|--------|
-| API routes | 10 requests | 10 seconds (per IP) |
-| Messages | 30 messages | 10 seconds (per socket) |
-| Group DM creation | 5 | 1 minute |
-| Participant management | 20 | 1 minute |
-| Mark as read | 100 | 1 minute |
-
-### 17.4 CORS Configuration
-
-- Origin: restricted to CLIENT_URL only
-- Methods: GET, POST, PUT, DELETE, OPTIONS
-- Credentials: enabled
-- Allowed headers: Content-Type, Authorization
-
-### 17.5 HTTP Security Headers (Helmet.js)
-
-- Content Security Policy with strict source directives
-- X-Frame-Options: DENY
-- X-Content-Type-Options: nosniff
-- Strict-Transport-Security (HTTPS environments)
-- X-XSS-Protection: enabled
-- Referrer-Policy: no-referrer
-- Cross-Origin Embedder Policy: disabled for media compatibility
-
-### 17.6 Content Sanitization
-
-- Markdown rendered via react-markdown with rehype-sanitize
-- XSS prevention in user-generated content
-- HTML escaping for group DM names and user input
-- No eval() or dynamic code execution
-
----
-
-## 18. Styling & Theming
-
-### 18.1 CSS Custom Properties (Theme Variables)
+## 21. Themes & Appearance
+
+### 21.1 Built-in Themes (11)
+
+| Theme | Aesthetic |
+|-------|----------|
+| Dark (default) | Discord-style dark slate |
+| Retro | 3D borders, chunky UI |
+| Terminal | Monospace, green-on-black |
+| Light | Clean white background |
+| Neon | Neon glow effects |
+| Blue | Corporate blue |
+| Cherry | Pink/rose palette |
+| Amber | Warm amber tones |
+| Synthwave | Purple/pink gradient |
+| Vaporwave | Pastel retrowave |
+| Forest | Earthy greens |
+| Cyberpunk | High-contrast yellow/black |
+
+All themes pass WCAG AA contrast compliance checks.
+
+### 21.2 Custom Theme Editor
+
+- Color pickers for all semantic CSS variables
+- Live preview while editing
+- Themes saved to `localStorage`
+- Exportable as JSON for sharing
+
+### 21.3 CSS Custom Properties
 
 ```css
---bg-primary: #36393F        /* Main content background */
---bg-secondary: #2F3136      /* Sidebar background */
---bg-tertiary: #202225       /* Inputs and nested elements */
---bg-floating: #18191C       /* Floating menus and modals */
---bg-modifier-hover: ...     /* Hover state backgrounds */
---text-primary: #DCDDDE      /* Primary text */
---text-normal: #DCDDDE       /* Normal text */
---text-muted: #72767D        /* Dimmed/secondary text */
---header-primary: #FFFFFF    /* Header text */
---header-secondary: #B9BBBE  /* Subheader text */
---red: #ED4245               /* Errors and danger */
---green: #57F287             /* Success and online */
---blue: #3B82F6              /* Primary brand color */
---yellow: #FEE75C            /* Warnings */
---brand-500: ...             /* Primary action buttons */
---brand-600: ...             /* Hover state for brand */
---font-primary: ...          /* Primary font family */
---font-display: ...          /* Display/heading font */
+--bg-primary         /* Main content background */
+--bg-secondary       /* Sidebar background */
+--bg-tertiary        /* Inputs and nested elements */
+--bg-floating        /* Floating menus and modals */
+--text-primary       /* Primary text */
+--text-normal        /* Normal text */
+--text-muted         /* Dimmed/secondary text */
+--header-primary     /* Header text */
+--red                /* Errors, danger */
+--green              /* Success, online */
+--blue               /* Primary brand */
+--yellow             /* Warnings */
+--brand-500          /* Primary action buttons */
+--font-primary       /* UI font family */
 ```
-
-### 18.2 CSS Animations
-
-- `fadeIn`: Opacity 0 -> 1 (modal overlays)
-- `slideUp`: Translate Y + opacity (modal content)
-- Message highlight: 2-second yellow fade on scroll-to
-- Typing indicator animation
-- Status dot pulse animation
-- Hover transitions on buttons and interactive elements (0.15s ease)
-
-### 18.3 Responsive Breakpoints
-
-- **Desktop** (> 768px): Full 3-column layout
-- **Mobile** (768px and below): Single column with swipe navigation
 
 ---
 
-## 19. Performance Optimizations
+## 22. LAN Mode
 
-### 19.1 Frontend Optimizations
+Nexus can run fully offline on a local network with no external dependencies.
 
-- `React.memo()` on major components to prevent unnecessary re-renders
-- `useCallback()` for event handlers with proper dependency arrays
-- `useMemo()` for expensive computations (message grouping, filtering)
-- Message grouping logic reduces DOM elements (same author within 5 minutes)
-- Per-channel message caching in React state
-- Lazy loading ready for images
-- Position properties on channels prepared for virtualization
+- **Toggle**: per-server setting in Server Settings → Channels (owner/admin only)
+- **Stored**: `lan_mode` boolean column in `servers` table (migration 016)
+- **Effects when enabled**:
+  - GIF picker disabled (no Giphy calls)
+  - URL preview disabled (no external fetches)
+  - External STUN servers disabled
+- **Self-hosted fonts**: bundled locally; no Google Fonts
+- **Service worker**: caches the React app shell for offline availability
+- **Voice on LAN**: works on the same subnet without any STUN/TURN; cross-subnet voice requires coturn
 
-### 19.2 Backend Optimizations
+See `docs/STUN_TURN.md` for detailed LAN + coturn setup.
+
+---
+
+## 23. User Profiles & Settings
+
+### 23.1 Profile Fields
+
+- Username, display name
+- Custom avatar (base64 PNG/JPG/GIF)
+- Bio / about me text
+- Display color (hex)
+- Status: `online`, `idle`, `dnd` (Do Not Disturb), `invisible`
+
+### 23.2 Settings Tabs (16 tabs in SettingsModal)
+
+| Tab | Contents |
+|-----|---------|
+| Profile | Avatar, bio, display color |
+| Appearance | Theme selector, custom theme editor |
+| Audio | Input/output device, noise cancellation level, PTT keybind, mic test meter |
+| Notifications | Channel-level notification preferences |
+| Friends | Friend list, pending requests |
+| Servers | Joined servers list |
+| Server Settings | Name, icon, description, LAN mode, ICE config |
+| Channels | Create/edit/delete channels and categories |
+| Roles | Create/edit/delete roles, set permissions |
+| Members | View members, assign roles |
+| Webhooks | Create/delete webhooks, documentation |
+| Soundboard | Upload/manage server sounds |
+| Emoji | Upload/manage custom emoji |
+| Moderation | AutoMod rules, reports, bans, timeouts |
+| Platform Admin | (Admin only) User/server management |
+| About | Version, licenses |
+
+---
+
+## 24. Platform Admin
+
+Accessible only to the user set in the `PLATFORM_ADMIN` environment variable.
+
+| Operation | Socket Event |
+|-----------|-------------|
+| List all users | `admin:get-users` |
+| List all servers | `admin:get-servers` |
+| Delete a server | `admin:delete-server` |
+| Delete a user | `admin:delete-user` |
+| Reset password | `admin:reset-password` |
+| Orphaned stats | `admin:get-orphaned-stats` |
+| Assign ownerless servers | `admin:assign-ownerless-servers` |
+| Clean up empty DMs | `admin:cleanup-empty-dms` |
+
+The Platform Admin tab is hidden in the Settings UI for non-admin users.
+
+---
+
+## 25. Slash Commands
+
+Available in any text channel by typing `/`.
+
+| Command | Description |
+|---------|-------------|
+| `/roll [NdN]` | Dice roll (default d6, supports up to d1000) |
+| `/coinflip` | Heads or tails |
+| `/8ball [question]` | Magic 8-Ball |
+| `/choose [opt1\|opt2\|...]` | Random choice from pipe-separated options |
+| `/rps [rock\|paper\|scissors]` | Rock Paper Scissors vs bot |
+| `/poll` | Opens poll creation modal |
+| `/serverinfo` | Posts server stats (members, channels, created date) |
+| `/remindme [duration] [message]` | Set a reminder (max 1 week) |
+| `/criticize [@user]` | Daily roast of a user |
+| `/quack` | Random duck image |
+
+Commands render via the `CommandMessage` component.
+
+### Poll Features
+
+- Create a poll with `/poll` (opens modal with up to 10 options)
+- `poll:vote` socket event for vote casting
+- Real-time vote count updates broadcast to channel
+
+---
+
+## 26. Audit Log
+
+All moderation actions are recorded in the `audit_log` table.
+
+- Logged events: kick, ban, unban, timeout, message delete, channel create/delete, role changes
+- `audit:get-logs` — fetch paginated audit log (requires `manageServer`)
+- Log entries include: action type, actor ID, target ID, reason, timestamp
+
+---
+
+## 27. Metrics & Observability
+
+### 27.1 Metrics Endpoint
+
+`GET /api/metrics` — admin-only, returns:
+- Active WebSocket connections
+- Message rate (per second, rolling window)
+- API request rate
+- Error counts by category
+- System stats (memory, uptime)
+
+### 27.2 Structured Logging (Winston)
+
+- JSON-formatted logs with domain prefixes
+- Log levels: `error`, `warn`, `info`, `verbose`, `debug`
+- Daily rotation via `winston-daily-rotate-file`
+- Log files in `server/data/logs/`
+- Separate audit log stream for moderation events
+- Request context included in log lines (user ID, socket ID, server ID)
+
+---
+
+## 28. Security
+
+### 28.1 Authentication & Authorization
+
+- bcrypt password hashing (12 rounds) with automatic migration from legacy hashes
+- JWT sessions with configurable expiry; revoked on logout (token deleted from DB)
+- Every socket event validates the session token before processing
+- Server-side permission checks mirror client-side UI gating
+
+### 28.2 Input Validation
+
+- All user input validated in `validation.js` before reaching the database
+- Username, server name, channel name, message content — each has length/character constraints
+- Markdown rendered through `rehype-sanitize` (no raw HTML)
+
+### 28.3 Network Security
+
+- CORS restricted to `CLIENT_URL` origin
+- Helmet.js: CSP, `X-Frame-Options`, HSTS, and other headers
+- Rate limiting: 10 requests/10 s on `/api/*`, per-user message rate limiting via Socket.IO
+- Webhook endpoint rate limited separately: 10 requests/10 s per webhook
+- SSRF protection on `/api/og` URL preview (blocks private/loopback IP ranges)
+
+### 28.4 End-to-End Encryption
+
+See §11 for details. The server stores only ciphertext for E2E-encrypted DMs.
+
+### 28.5 Additional
+
+- CSP allows WASM compilation for libsodium and RNNoise
+- Service worker uses cache-first strategy (no network requests for app shell)
+- Error boundary prevents full-app crash on uncaught component errors
+
+---
+
+## 29. Cross-Platform Support
+
+| Platform | Method | Notes |
+|----------|--------|-------|
+| Web | Docker + Nginx | Primary target |
+| Windows / macOS / Linux | Tauri 2 | Auto-update, tray icon, native menus, global PTT shortcut |
+| Android | Capacitor | APK from CI releases |
+| iOS | Capacitor | Requires code-signing setup |
+| Desktop (fallback) | Electron | Secondary desktop option |
+
+Download pre-built binaries from the releases page.
+
+See `docs/CROSS_PLATFORM_PLAN.md` for build details.
+
+---
+
+## 30. Socket.IO Events Reference
+
+### Client → Server
+
+#### Auth & User
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `join` | `{ token, username }` | Authenticate and register socket |
+| `user:update` | `{ avatar, bio, color, status }` | Update profile fields |
+| `user:settings-update` | `{ settings }` | Save user preferences |
+| `user:change-password` | `{ currentPassword, newPassword }` | Change password |
+| `user:search` | `{ query }` | Find users by username |
+| `user:update-sounds` | `{ joinSoundId, leaveSoundId }` | Set intro/exit voice sounds |
+| `data:refresh` | — | Force-refresh all server data |
+
+#### Messaging
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `message:send` | `{ channelId, content, attachments, replyTo }` | Send a message |
+| `message:edit` | `{ messageId, content }` | Edit own message |
+| `message:delete` | `{ messageId }` | Delete message |
+| `message:react` | `{ messageId, emoji }` | Toggle reaction |
+| `message:pin` | `{ messageId, channelId }` | Pin message |
+| `message:unpin` | `{ messageId, channelId }` | Unpin message |
+| `message:save` | `{ messageId }` | Bookmark message |
+| `message:unsave` | `{ messageId }` | Remove bookmark |
+| `message:get-preview` | `{ messageId }` | Fetch message embed preview |
+| `messages:fetch-older` | `{ channelId, before }` | Paginate history |
+| `messages:get-pinned` | `{ channelId }` | Fetch pinned messages |
+| `messages:search` | `{ query, serverId, ... }` | Full-text search |
+| `typing:start` | `{ channelId }` | Start typing indicator |
+| `typing:stop` | `{ channelId }` | Stop typing indicator |
+| `poll:vote` | `{ messageId, optionIndex }` | Cast poll vote |
+
+#### Threads
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `thread:create` | `{ messageId }` | Start a thread on a message |
+| `thread:reply` | `{ threadId, content, attachments }` | Reply in thread |
+| `thread:get` | `{ threadId }` | Fetch thread and replies |
+| `thread:list` | `{ channelId }` | List threads in channel |
+
+#### Channels & Servers
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `channel:create` | `{ serverId, name, type, categoryId }` | Create channel |
+| `channel:update` | `{ channelId, ... }` | Edit channel |
+| `channel:delete` | `{ channelId }` | Delete channel |
+| `channel:join` | `{ channelId }` | Join a Socket.IO room |
+| `channel:reorder` | `{ serverId, channels }` | Reorder channels |
+| `category:create` | `{ serverId, name }` | Create category |
+| `category:update` | `{ categoryId, name }` | Rename category |
+| `category:delete` | `{ categoryId }` | Delete category |
+| `category:reorder` | `{ serverId, categories }` | Reorder categories |
+| `server:create` | `{ name }` | Create server |
+| `server:update` | `{ serverId, ... }` | Edit server |
+| `server:delete` | `{ serverId }` | Delete server |
+| `server:leave` | `{ serverId }` | Leave server |
+| `server:transfer-ownership` | `{ serverId, newOwnerId }` | Transfer ownership |
+| `server:get-ice-config` | `{ serverId }` | Get ICE server config |
+| `invite:create` | `{ serverId, maxUses, expiresAt }` | Create invite |
+| `invite:revoke` | `{ inviteCode }` | Revoke invite |
+| `invite:list` | `{ serverId }` | List invites |
+| `invite:peek` | `{ inviteCode }` | Preview server info |
+| `invite:use` | `{ inviteCode }` | Join via invite |
+
+#### Voice
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `voice:join` | `{ channelId }` | Join voice channel |
+| `voice:leave` | `{ channelId }` | Leave voice channel |
+| `voice:mute` | `{ muted }` | Set local mute |
+| `voice:deafen` | `{ deafened }` | Set local deafen |
+| `voice:force-mute` | `{ userId, serverId }` | Server-mute a user |
+| `voice:force-deafen` | `{ userId, serverId }` | Server-deafen a user |
+| `voice:move` | `{ userId, channelId }` | Move user to channel |
+| `voice:kick` | `{ userId }` | Kick from voice |
+| `voice:ice-config` | `{ serverId }` | Get ICE config |
+| `webrtc:offer` | `{ targetId, offer }` | WebRTC SDP offer |
+| `webrtc:answer` | `{ targetId, answer }` | WebRTC SDP answer |
+| `webrtc:ice` | `{ targetId, candidate }` | ICE candidate |
+| `screen:start` | `{ channelId }` | Begin screen share |
+| `screen:stop` | `{ channelId }` | End screen share |
+| `screen:watch` | `{ sharerId }` | Subscribe to a share stream |
+| `screen:unwatch` | `{ sharerId }` | Unsubscribe |
+| `screen:thumbnail` | `{ channelId, thumbnail }` | Send share thumbnail |
+
+#### DMs
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `dm:create` | `{ userId }` | Open or get 1:1 DM |
+| `dm:list` | — | List all DM channels |
+| `dm:close` | `{ channelId }` | Close DM |
+| `dm:delete` | `{ channelId }` | Delete DM |
+| `dm:mark-read` | `{ channelId }` | Mark DM as read |
+| `dm:unread-counts` | — | Get unread counts |
+| `dm:message-requests` | — | List message requests |
+| `dm:message-request:accept` | `{ channelId }` | Accept request |
+| `dm:message-request:reject` | `{ channelId }` | Reject request |
+| `dm:message-request:block` | `{ channelId }` | Block sender |
+| `dm:call-start` | `{ channelId }` | Initiate DM call |
+| `dm:call-decline` | `{ channelId }` | Decline incoming call |
+| `group-dm:create` | `{ userIds }` | Create group DM |
+| `group-dm:add-participant` | `{ channelId, userId }` | Add member |
+| `group-dm:remove-participant` | `{ channelId, userId }` | Remove member |
+
+#### Social
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `friend:request` | `{ username }` | Send friend request |
+| `friend:accept` | `{ userId }` | Accept request |
+| `friend:reject` | `{ userId }` | Reject request |
+| `friend:remove` | `{ userId }` | Remove friend |
+| `friend:list` | — | List friends + pending |
+| `block:user` | `{ userId }` | Block user |
+| `unblock:user` | `{ userId }` | Unblock user |
+| `blocked:list` | — | List blocked users |
+| `report:user` | `{ userId, reason }` | Report user |
+
+#### Moderation
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `server:kick-user` | `{ serverId, userId }` | Kick member |
+| `server:ban-user` | `{ serverId, userId }` | Ban member |
+| `server:unban-user` | `{ serverId, userId }` | Unban member |
+| `server:timeout-user` | `{ serverId, userId, duration }` | Apply timeout |
+| `server:remove-timeout` | `{ serverId, userId }` | Remove timeout |
+| `automod:create-rule` | `{ serverId, rule }` | Create AutoMod rule |
+| `automod:update-rule` | `{ ruleId, updates }` | Update rule |
+| `automod:delete-rule` | `{ ruleId }` | Delete rule |
+| `automod:get-rules` | `{ serverId }` | List rules |
+| `automod:test-rule` | `{ ruleId, content }` | Test rule against text |
+| `moderation:get-bans` | `{ serverId }` | List bans |
+| `moderation:get-timeouts` | `{ serverId }` | List active timeouts |
+| `moderation:get-reports` | `{ serverId }` | List reports |
+| `moderation:update-report` | `{ reportId, status }` | Resolve report |
+| `audit:get-logs` | `{ serverId, limit }` | Fetch audit log |
+
+#### Roles
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `role:create` | `{ serverId, name, color, permissions }` | Create role |
+| `role:update` | `{ roleId, ... }` | Update role |
+| `role:delete` | `{ roleId }` | Delete role |
+| `member:role` | `{ serverId, userId, roleId, action }` | Assign/remove role |
+
+#### Custom Emoji & Soundboard
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `emoji:upload` | `{ serverId, name, image }` | Upload emoji |
+| `emoji:get` | `{ serverId }` | List emoji |
+| `emoji:get-image` | `{ emojiId }` | Fetch image |
+| `emoji:update` | `{ emojiId, name }` | Rename emoji |
+| `emoji:delete` | `{ emojiId }` | Delete emoji |
+| `soundboard:upload` | `{ serverId, name, sound }` | Upload sound |
+| `soundboard:get-sounds` | `{ serverId }` | List sounds |
+| `soundboard:get-sound` | `{ soundId }` | Fetch sound |
+| `soundboard:play` | `{ soundId, channelId }` | Play to voice channel |
+| `soundboard:play-targeted` | `{ soundId, userId }` | Play to specific user |
+| `soundboard:update` | `{ soundId, name }` | Rename sound |
+| `soundboard:delete` | `{ soundId }` | Delete sound |
+| `user:update-sounds` | `{ joinSoundId, leaveSoundId }` | Set intro/exit sounds |
+| `user:get-sounds` | — | Get configured sounds |
+
+#### Webhooks
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `webhook:create` | `{ channelId, name }` | Create webhook |
+| `webhook:delete` | `{ webhookId }` | Delete webhook |
+
+#### Encryption
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `encryption:set-public-key` | `{ publicKey }` | Store E2E public key |
+| `encryption:get-public-key` | `{ userId }` | Retrieve user's public key |
+
+#### Bookmarks
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `bookmarks:list` | — | List saved messages |
+| `bookmarks:get-ids` | — | List bookmarked message IDs |
+
+#### MCP
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `mcp:token:create` | `{ name, scopes, serverIds, expiresInDays }` | Create bot token |
+| `mcp:token:list` | — | List tokens |
+| `mcp:token:delete` | `{ tokenId }` | Revoke token |
+| `mcp:bot:create` | `{ name, avatar, serverId }` | Create bot account |
+| `mcp:bot:list` | `{ serverId }` | List bots |
+| `mcp:bot:delete` | `{ botId }` | Delete bot |
+| `mcp:connection:create` | `{ serverId, ... }` | Register MCP server |
+| `mcp:connection:list` | `{ serverId }` | List connections |
+| `mcp:connection:delete` | `{ serverId, connectionId }` | Remove connection |
+| `mcp:connection:toggle` | `{ serverId, connectionId, enabled }` | Enable/disable |
+| `mcp:agent:create` | `{ serverId, ... }` | Create agent config |
+| `mcp:agent:list` | `{ serverId }` | List agents |
+| `mcp:agent:update` | `{ serverId, agentId, updates }` | Update agent |
+| `mcp:agent:delete` | `{ serverId, agentId }` | Delete agent |
+| `mcp:stream:start` | `{ channelId, messageId }` | Start streaming response |
+| `mcp:stream:chunk` | `{ channelId, messageId, content }` | Append chunk |
+| `mcp:stream:end` | `{ channelId, messageId, finalContent }` | Finalize stream |
+
+#### Admin
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `admin:get-users` | — | List all platform users |
+| `admin:get-servers` | — | List all servers |
+| `admin:delete-server` | `{ serverId }` | Delete any server |
+| `admin:delete-user` | `{ userId }` | Delete any user |
+| `admin:reset-password` | `{ userId, newPassword }` | Force password reset |
+| `admin:get-orphaned-stats` | — | Stats on ownerless servers |
+| `admin:assign-ownerless-servers` | `{ userId }` | Reassign orphaned servers |
+| `admin:cleanup-empty-dms` | — | Remove empty DM channels |
+
+---
+
+## 31. REST API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/auth/register` | None | Register new account |
+| `POST` | `/api/auth/login` | None | Login |
+| `POST` | `/api/auth/logout` | Token | Logout (revoke token) |
+| `POST` | `/api/user/avatar` | Token | Upload profile avatar |
+| `POST` | `/api/server/:serverId/icon` | Token | Upload server icon |
+| `POST` | `/api/webhooks/:webhookId/:token` | Webhook token | Post webhook message |
+| `GET` | `/api/gifs/search` | Token | Giphy search |
+| `GET` | `/api/gifs/trending` | Token | Giphy trending |
+| `GET` | `/api/og` | Token | Open Graph URL preview |
+| `GET` | `/api/health` | None | Health check |
+| `GET` | `/api/metrics` | Admin | Runtime metrics |
+
+---
+
+## 32. Database Schema
+
+19 migration files manage the schema across 24+ tables.
+
+| Table | Purpose |
+|-------|---------|
+| `accounts` | Users and bot accounts; E2E public keys; bcrypt hashes |
+| `tokens` | JWT session records |
+| `recovery_codes` | Account recovery codes (bcrypt hashed) |
+| `servers` | Server definitions; LAN mode flag; ICE config |
+| `server_members` | Membership with JSONB roles array |
+| `server_bans` | Persistent ban records |
+| `server_timeouts` | Timeout records with expiry |
+| `categories` | Channel groupings with position |
+| `channels` | Text and voice channels; permission overrides (JSONB) |
+| `roles` | Role definitions: name, color, position, permissions (JSONB) |
+| `messages` | Chat messages; reactions, attachments, mentions (JSONB) |
+| `threads` | Thread parent references |
+| `thread_names` | Optional thread titles |
+| `pins` | Pinned message records per channel |
+| `bookmarks` | Per-user saved messages |
+| `dm_channels` | DM and group DM channels |
+| `dm_participants` | DM membership records |
+| `dm_read_states` | Per-user last-read position in DMs |
+| `friendships` | Friend relationships and requests |
+| `invites` | Server invite codes with usage tracking |
+| `webhooks` | Webhook configurations (token stored as hash) |
+| `custom_emojis` | Per-server emoji definitions |
+| `automod_rules` | AutoMod rule configs per server |
+| `moderation_rules` | (alias for automod_rules in some contexts) |
+| `reports` | User reports with review status |
+| `audit_log` | Moderation action log |
+| `bot_tokens` | MCP bot API tokens (SHA-256 hashed) |
+| `mcp_connections` | External MCP server registrations |
+| `agent_configs` | AI agent configurations |
+| `agent_activity_log` | Per-invocation agent activity |
+
+---
+
+## 33. Performance Optimizations
+
+### 33.1 Frontend
+
+- `React.memo()` on all major components
+- `useCallback()` for event handlers, `useMemo()` for expensive derivations (message grouping, filtering)
+- Per-channel message cache in React state
+- Infinite scroll with 50-message pages
+- WebRTC audio processing offloaded to `AudioWorklet` (dedicated thread)
+
+### 33.2 Backend
 
 - PostgreSQL connection pooling (max 20 clients)
-- Indexed database queries with LIMIT clauses
-- Socket.IO room-based broadcasting (only to relevant users)
-- Rate limiting prevents abuse and resource exhaustion
-- In-memory state for fast lookups (messages, users, voice state)
+- Batch queries with JOINs (`getChannelMessagesWithAuthors`, `getDMChannelsWithDetails`) — no N+1 patterns
+- Indexed queries: `idx_messages_channel_id`, `idx_server_members_server_id`, `idx_audit_log_server_id`, etc.
+- Socket.IO room-based broadcasting — messages only sent to users in the relevant channel
 
-### 19.3 Network Optimizations
+### 33.3 Redis Message Cache
 
-- WebSocket transport for real-time (lower overhead than HTTP polling)
-- Base64 encoding for small images (avoids extra HTTP round-trips)
-- Message history pagination (50 messages per load)
-- Gzip compression support in Express/Nginx
+- Hot channels (high-traffic) have their latest messages cached in Redis sorted sets
+- Cache key: `channel:{channelId}:messages`
+- On send: message appended to cache and trimmed to last N messages
+- On edit/delete: cache invalidated for the channel
+- Cache miss: falls through to PostgreSQL
+
+### 33.4 Network
+
+- WebSocket transport (lower overhead than HTTP polling)
+- Gzip compression in Nginx and Express
+- Static asset caching with `Cache-Control` headers
+- Base64 for small images (avoids extra HTTP round-trips)
 
 ---
 
-## 20. File Structure
+## 34. File Structure
 
 ```
-nexus-chat/
-├── client/                              # React Frontend
+Nexus/
+├── client/
 │   ├── src/
+│   │   ├── App.js                     Root state management (77 KB)
+│   │   ├── config.js                  Server URL resolver (web/Capacitor/Tauri/Electron)
 │   │   ├── components/
-│   │   │   ├── App.js                  # Root component, state management
-│   │   │   ├── LoginScreen.js          # Authentication UI
-│   │   │   ├── ChatArea.js             # Message display + input
-│   │   │   ├── VoiceArea.js            # WebRTC video tiles + controls
-│   │   │   ├── ServerList.js           # Server icon rail
-│   │   │   ├── Sidebar.js              # Channel/DM sidebar
-│   │   │   ├── MemberList.js           # Online user list
-│   │   │   ├── SettingsModal.js        # Multi-tab settings
-│   │   │   ├── UserPanel.js            # User info bottom bar
-│   │   │   ├── DMList.js              # DM conversations list
-│   │   │   ├── MessageContextMenu.js   # Right-click message menu
-│   │   │   ├── UserContextMenu.js      # Right-click user menu
-│   │   │   ├── WebhookDocs.js          # Webhook documentation
-│   │   │   ├── ImageModal.js           # Image lightbox
-│   │   │   ├── icons/                  # SVG icon components
-│   │   │   │   ├── ChatIcon.js
-│   │   │   │   ├── MicrophoneIcon.js
-│   │   │   │   ├── FriendsIcon.js
-│   │   │   │   ├── SettingsIcon.js
-│   │   │   │   └── ... (additional icons)
-│   │   │   ├── App.css                 # Main application styles
-│   │   │   ├── Sidebar.css             # Sidebar-specific styles
-│   │   │   ├── DMList.css              # DM list styles
-│   │   │   ├── SettingsModal.css       # Settings modal styles
-│   │   │   └── ... (additional CSS)
+│   │   │   ├── ChatArea.js            Message display, input, attachments (65 KB)
+│   │   │   ├── VoiceArea.js           WebRTC tiles, soundboard, controls
+│   │   │   ├── Sidebar.js             Channel list (servers) or DM list (personal)
+│   │   │   ├── ServerList.js          Server icon rail
+│   │   │   ├── MemberList.js          Online/offline member list
+│   │   │   ├── SettingsModal.js       16-tab settings panel
+│   │   │   ├── GifPicker.js           Giphy integration
+│   │   │   ├── CommandMessage.js      Slash command renderer
+│   │   │   ├── PollCreator.js         Poll creation modal
+│   │   │   ├── URLEmbed.js            Open Graph preview cards
+│   │   │   ├── UserProfileModal.js    User profile popup
+│   │   │   ├── IncomingCallOverlay.js DM call notifications
+│   │   │   ├── ErrorBoundary.js       Graceful error recovery
+│   │   │   └── icons/                 SVG icon components
 │   │   ├── hooks/
-│   │   │   └── useWebRTC.js            # Voice/video/screen share hook
-│   │   └── index.js                    # React entry point
+│   │   │   ├── useWebRTC.js           Voice, video, screen share (53 KB)
+│   │   │   └── useLongPress.js        Mobile long-press gesture
+│   │   └── utils/
+│   │       └── encryption.js          E2E encryption (NaCl/libsodium)
 │   ├── public/
-│   │   └── index.html                  # HTML template with CSP meta
-│   ├── nginx.conf                      # Production Nginx config
-│   ├── Dockerfile                      # Multi-stage client build
-│   └── package.json
+│   │   ├── service-worker.js          Offline app shell
+│   │   └── audio-processor.js         AudioWorklet (noise gate, AGC, RNNoise)
+│   ├── scripts/
+│   │   ├── icon-master.svg            Master icon source
+│   │   └── generate-icons.mjs         Icon generation script
+│   ├── src-tauri/                     Tauri desktop app
+│   ├── nginx.conf                     Nginx config
+│   └── Dockerfile                     Multi-stage build
 │
-├── server/                              # Node.js Backend
-│   ├── index.js                        # Express + Socket.IO server
-│   ├── config.js                       # Environment configuration
-│   ├── db.js                           # PostgreSQL connection + queries
-│   ├── validation.js                   # Input validation & sanitization
-│   ├── docker-entrypoint.sh            # Container startup script
-│   ├── test-security.js                # Security test suite
-│   ├── migrations/
-│   │   └── 001_initial_schema.sql      # Full database schema
-│   ├── Dockerfile                      # Server container build
-│   ├── package.json
-│   ├── .env                            # Environment variables
-│   └── .env.example                    # Environment template
+├── server/
+│   ├── index.js                       Express + Socket.IO (~920 lines)
+│   ├── state.js                       Shared in-memory state + user index
+│   ├── helpers.js                     Utility functions (serializeServer, getUserPerms, etc.)
+│   ├── db.js                          PostgreSQL queries (100+ functions)
+│   ├── config.js                      Environment config with validation
+│   ├── validation.js                  Input validation and sanitization
+│   ├── metrics.js                     Runtime metrics
+│   ├── default-sounds.js              16 built-in WAV sounds
+│   ├── handlers/
+│   │   ├── auth.js                    join, disconnect, user updates
+│   │   ├── servers.js                 Server CRUD, kick/ban/timeout
+│   │   ├── channels.js                Channel/category CRUD
+│   │   ├── messages.js                Message send/edit/delete/reactions/pins/search/threads
+│   │   ├── roles.js                   Role CRUD, member assignment
+│   │   ├── dms.js                     DM channels, group DMs, message requests, calls
+│   │   ├── social.js                  Friends, blocks, reports, invites
+│   │   ├── voice.js                   Voice/WebRTC signaling, soundboard, screen sharing
+│   │   ├── webhooks.js                Webhook CRUD
+│   │   ├── emoji.js                   Custom emoji CRUD
+│   │   ├── automod.js                 AutoMod rule engine
+│   │   ├── bookmarks.js               Bookmark operations
+│   │   ├── audit.js                   Audit log retrieval
+│   │   ├── admin.js                   Platform admin operations
+│   │   └── mcp.js                     MCP bot framework
+│   └── migrations/                    19 sequential SQL files
 │
-├── docker-compose.yml                   # Production orchestration
-├── start.sh                            # Quick start script
-├── README.md                           # Project readme
-├── IMPLEMENTATION.md                   # Implementation details
-├── DOCKER_DEPLOYMENT.md                # Deployment guide
-├── STATUS.md                           # Project status
-└── FEATURES.md                         # This file
+├── tests/
+│   ├── automated/                     378 Jest tests (13+ suites)
+│   ├── manual/                        93 test cases (8 categories)
+│   └── stress/                        Performance and load tests
+│
+├── docs/
+│   ├── FEATURES.md                    This file
+│   ├── CHANGELOG.md                   Version history
+│   ├── THEMES.md                      Theme documentation
+│   ├── STUN_TURN.md                   STUN/TURN and LAN mode guide
+│   ├── CROSS_PLATFORM_PLAN.md         Build instructions for all platforms
+│   ├── DATA_PERSISTENCE.md            Database and storage details
+│   ├── PRODUCTION_HARDENING.md        Security hardening checklist
+│   ├── IMPLEMENTATION.md              Implementation notes
+│   └── deployment/
+│       └── DOCKER_DEPLOYMENT.md       Docker deployment guide
+│
+├── asc/                               ASC development framework artifacts
+├── docker-compose.yml                 Base orchestration
+├── docker-compose.prod.yml            Production overrides
+├── docker-compose.dev.yml             Development overrides
+├── docker-compose.coturn.yml          Self-hosted STUN/TURN overlay
+├── CLAUDE.md                          Developer guide for Claude Code
+└── NEXUS_ROADMAP.md                   Enhancement roadmap
 ```
 
 ---
 
-## 21. Feature Status Summary
+## 35. Feature Status Summary
 
-| # | Feature | Status | Key Files |
-|---|---------|--------|-----------|
-| 1 | User Registration & Login | Complete | LoginScreen.js, server/index.js |
-| 2 | Guest Mode | Complete | LoginScreen.js, server/index.js |
-| 3 | Session Persistence (localStorage + token) | Complete | App.js |
-| 4 | Text Messaging (send, edit, delete) | Complete | ChatArea.js |
-| 5 | Message Reactions (8 emoji) | Complete | ChatArea.js |
-| 6 | Reply / Thread System | Complete | ChatArea.js |
-| 7 | Image & GIF Attachments | Complete | ChatArea.js |
-| 8 | Image Lightbox Modal | Complete | ImageModal.js |
-| 9 | Drag-and-Drop File Upload | Complete | ChatArea.js |
-| 10 | Typing Indicators | Complete | ChatArea.js |
-| 11 | Message History (50 per channel) | Complete | server/index.js |
-| 12 | Message Grouping & Date Separators | Complete | ChatArea.js |
-| 13 | Voice Channels (WebRTC) | Complete | VoiceArea.js, useWebRTC.js |
-| 14 | Screen Sharing | Complete | useWebRTC.js |
-| 15 | Speaking Detection | Complete | useWebRTC.js |
-| 16 | Audio Join/Leave Cues | Complete | useWebRTC.js |
-| 17 | Per-User Volume Controls | Complete | VoiceArea.js |
-| 18 | Mute / Deafen Controls | Complete | VoiceArea.js |
-| 19 | Audio Device Selection | Complete | SettingsModal.js |
-| 20 | Server Creation with Defaults | Complete | SettingsModal.js |
-| 21 | Server Editing & Deletion | Complete | SettingsModal.js |
-| 22 | Custom Server Icons | Complete | SettingsModal.js |
-| 23 | Server Membership (join/leave) | Complete | server/index.js |
-| 24 | Channel Categories (collapsible) | Complete | Sidebar.js |
-| 25 | Text & Voice Channel Management | Complete | SettingsModal.js |
-| 26 | Private Channels | Complete | server/index.js |
-| 27 | Role System (12 permissions) | Complete | SettingsModal.js |
-| 28 | Role Assignment to Members | Complete | SettingsModal.js |
-| 29 | Permission Checking (server + channel level) | Complete | server/index.js |
-| 30 | Webhooks (create, delete, HTTP API) | Complete | SettingsModal.js, WebhookDocs.js |
-| 31 | Webhook Documentation (cURL, JS, Python) | Complete | WebhookDocs.js |
-| 32 | Direct Messaging (1-on-1) | Complete | DMList.js, Sidebar.js |
-| 33 | Group DMs | Foundation Ready | server/index.js |
-| 34 | New Conversation Button & Modal | Complete | DMList.js |
-| 35 | DM Search with Clear Button | Complete | DMList.js, Sidebar.js |
-| 36 | DM Unread Count Badges | Complete | DMList.js |
-| 37 | Friend System (add, accept, reject, remove) | Foundation Ready | server/index.js |
-| 38 | Block & Report Users | Foundation Ready | server/index.js |
-| 39 | User Profile Customization | Complete | SettingsModal.js |
-| 40 | Custom Avatar Upload | Complete | SettingsModal.js |
-| 41 | User Status (online, idle, dnd, invisible) | Complete | App.js |
-| 42 | Online User Tracking | Complete | MemberList.js |
-| 43 | Member List with Status Dots | Complete | MemberList.js |
-| 44 | Message Context Menu (right-click) | Complete | MessageContextMenu.js |
-| 45 | User Context Menu (right-click) | Complete | UserContextMenu.js |
-| 46 | Mobile Responsive Design | Complete | App.css |
-| 47 | Swipe Navigation (mobile) | Complete | App.js |
-| 48 | Search Inputs with Clear Buttons | Complete | DMList.css, Sidebar.css, SettingsModal.css |
-| 49 | Docker Multi-Container Deployment | Complete | docker-compose.yml |
-| 50 | PostgreSQL Database Schema | Complete | migrations/001_initial_schema.sql |
-| 51 | Redis Session/Cache Layer | Complete | docker-compose.yml |
-| 52 | Nginx Reverse Proxy with WSS | Complete | nginx.conf |
-| 53 | Rate Limiting (API + messages) | Complete | server/index.js |
-| 54 | Input Validation & Sanitization | Complete | validation.js |
-| 55 | Helmet.js Security Headers | Complete | server/index.js |
-| 56 | CORS Configuration | Complete | server/index.js |
-| 57 | Password Hashing (HMAC-SHA256) | Complete | server/index.js |
+| # | Feature | Status | Since |
+|---|---------|--------|-------|
+| 1 | User registration & login (bcrypt) | Complete | 1.0.0 |
+| 2 | Token-based session management | Complete | 1.0.0 |
+| 3 | Text messaging (send, edit, delete) | Complete | 1.0.0 |
+| 4 | Emoji reactions (8 quick-pick) | Complete | 1.0.0 |
+| 5 | Reply / thread system | Complete | 1.0.0 |
+| 6 | Full thread panel with replies | Complete | 1.0.4 |
+| 7 | Image & GIF attachments | Complete | 1.0.0 |
+| 8 | GIF picker (Giphy) | Complete | 1.0.0 |
+| 9 | Typing indicators | Complete | 1.0.0 |
+| 10 | Message history pagination (50/page) | Complete | 1.0.0 |
+| 11 | Message grouping & date separators | Complete | 1.0.0 |
+| 12 | NEW messages divider | Complete | 1.0.10 |
+| 13 | URL previews (Open Graph) | Complete | 1.0.0 |
+| 14 | Message link embeds | Complete | 1.0.11 |
+| 15 | Message pinning | Complete | 1.0.5 |
+| 16 | Message bookmarks (saved messages) | Complete | 1.0.5 |
+| 17 | Full-text message search with operators | Complete | 1.0.5 |
+| 18 | Slash commands (10 commands) | Complete | 1.0.0 |
+| 19 | Polls | Complete | 1.0.2 |
+| 20 | Voice channels (WebRTC) | Complete | 1.0.0 |
+| 21 | Speaking detection | Complete | 1.0.0 |
+| 22 | Mute / deafen controls | Complete | 1.0.0 |
+| 23 | Push-to-Talk (PTT) | Complete | 1.0.9 |
+| 24 | Voice persistence (auto-rejoin) | Complete | 1.0.9 |
+| 25 | Per-user volume controls | Complete | 1.0.0 |
+| 26 | Audio processing pipeline | Complete | 1.0.9 |
+| 27 | RNNoise ML noise cancellation | Complete | 1.0.9 |
+| 28 | AGC (leveler + limiter) | Complete | 1.0.9 |
+| 29 | Noise gate | Complete | 1.0.9 |
+| 30 | Join/leave audio cues | Complete | 1.0.0 |
+| 31 | Custom intro/exit sounds per user | Complete | 1.0.3 |
+| 32 | Soundboard (16 built-in + custom upload) | Complete | 1.0.3 |
+| 33 | Targeted soundboard | Complete | 1.0.3 |
+| 34 | Screen sharing | Complete | 1.0.0 |
+| 35 | Multi-sharer screen sharing | Complete | 1.0.11 |
+| 36 | Screen share thumbnails | Complete | 1.0.11 |
+| 37 | Direct messages (1:1) | Complete | 1.0.0 |
+| 38 | Group DMs | Complete | 1.0.1 |
+| 39 | DM message requests | Complete | 1.0.6 |
+| 40 | DM pinnable conversations | Complete | 1.0.3 |
+| 41 | DM voice/video calls | Complete | 1.0.7 |
+| 42 | End-to-end encryption (1:1 DMs) | Complete | 1.0.8 |
+| 43 | E2E key backup/recovery | Complete | 1.0.8 |
+| 44 | Multi-server support | Complete | 1.0.0 |
+| 45 | Server invite links | Complete | 1.0.0 |
+| 46 | Channel categories (collapsible) | Complete | 1.0.0 |
+| 47 | Private channels | Complete | 1.0.0 |
+| 48 | Channel reordering (drag & drop) | Complete | 1.0.0 |
+| 49 | Role system (18 permissions) | Complete | 1.0.0 |
+| 50 | Channel-level permission overrides | Complete | 1.0.0 |
+| 51 | Kick, ban, timeout | Complete | 1.0.0 |
+| 52 | Voice moderation (force mute/deafen/move/kick) | Complete | 1.0.2 |
+| 53 | Context menu moderation | Complete | 1.0.10 |
+| 54 | AutoMod (keyword, spam, invite link) | Complete | 1.0.9 |
+| 55 | User reports & review workflow | Complete | 1.0.2 |
+| 56 | Audit log | Complete | 1.0.5 |
+| 57 | Friend system | Complete | 1.0.1 |
+| 58 | User blocking | Complete | 1.0.1 |
+| 59 | Custom emoji (up to 50 per server) | Complete | 1.0.1 |
+| 60 | Webhooks (token-authenticated) | Complete | 1.0.0 |
+| 61 | MCP bot framework | Complete | 1.0.12 |
+| 62 | Bot accounts | Complete | 1.0.12 |
+| 63 | AI agent configurations | Complete | 1.0.12 |
+| 64 | Streaming bot responses | Complete | 1.0.12 |
+| 65 | 11 built-in themes + custom editor | Complete | 1.0.8 |
+| 66 | LAN mode (per-server offline toggle) | Complete | 1.0.8 |
+| 67 | Self-hosted STUN/TURN (coturn) | Complete | 1.0.8 |
+| 68 | Structured logging (Winston) | Complete | 1.0.9 |
+| 69 | Redis hot-channel message cache | Complete | 1.0.12 |
+| 70 | Platform admin panel | Complete | 1.0.0 |
+| 71 | Mobile responsive layout | Complete | 1.0.0 |
+| 72 | Mobile swipe navigation | Complete | 1.0.0 |
+| 73 | Mobile long-press context menu | Complete | 1.0.4 |
+| 74 | Mobile pull-to-refresh | Complete | 1.0.7 |
+| 75 | Tauri desktop app | Complete | 1.0.3 |
+| 76 | Capacitor mobile (Android/iOS) | Complete | 1.0.5 |
+| 77 | Service worker (offline app shell) | Complete | 1.0.8 |
+| 78 | Offline resilience & error boundary | Complete | 1.0.10 |
+| 79 | bcrypt password hashing (12 rounds) | Complete | 1.0.4 |
+| 80 | Rate limiting (API + messages + webhooks) | Complete | 1.0.0 |
+| 81 | SSRF protection on URL preview | Complete | 1.0.0 |
+| 82 | Helmet.js security headers | Complete | 1.0.0 |
+| 83 | Input validation & sanitization | Complete | 1.0.0 |
+| 84 | Runtime metrics endpoint | Complete | 1.0.9 |
 
 ---
 
-*Generated: February 16, 2026*
-*Total Features Documented: 57*
+*Generated: March 2026 | Version: 1.0.12 | Total Features Documented: 84*
