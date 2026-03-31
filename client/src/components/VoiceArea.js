@@ -382,7 +382,7 @@ const VoiceArea = React.memo(function VoiceArea({
 
   // Switch focus to a different sharer (unwatch current, watch new)
   const handleSwitchSharer = useCallback((newSharerId) => {
-    if (newSharerId === activeScreenSharerSocketId) return;
+    if (isWatchingScreen && newSharerId === activeScreenSharerSocketId) return;
     if (isWatchingScreen && activeScreenSharerSocketId) {
       onUnwatchScreen(activeScreenSharerSocketId);
     }
