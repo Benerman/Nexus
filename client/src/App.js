@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useReducer, useRef, useCallback, useEffect, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { useWebRTC } from './hooks/useWebRTC';
 import ServerList from './components/ServerList';
@@ -74,6 +74,40 @@ function applySavedServerOrder(serverList) {
   }
 }
 
+// ── Connection state machine (Stage 4) ──────────────────────────────────────
+// Explicit action types make all connection transitions auditable.
+function connectionReducer(state, action) {
+  switch (action.type) {
+    case 'CONNECTED':
+      // Socket connected (initial or reconnect)
+      return { ...state, connectionState: 'connected', serverUnreachable: false };
+    case 'DISCONNECTED':
+      // Socket disconnected
+      return { ...state, connectionState: 'disconnected', restoringSession: false };
+    case 'RECONNECT_ATTEMPT':
+      // Socket.IO auto-reconnect in progress
+      return { ...state, connectionState: 'connecting' };
+    case 'SHOW_CONNECTION_BANNER':
+      // Show "Reconnecting..." banner (after 5s delay timer fires)
+      return { ...state, showConnectionBanner: true };
+    case 'RECONNECTED':
+      // Reconnect succeeded — swap banners
+      return { ...state, showConnectionBanner: false, showReconnectedBanner: true };
+    case 'HIDE_RECONNECTED_BANNER':
+      return { ...state, showReconnectedBanner: false };
+    case 'SESSION_RESTORED':
+      // Auth handshake finished (init, error, connect_error, etc.)
+      return { ...state, restoringSession: false };
+    case 'SERVER_UNREACHABLE':
+      // Timeout with no successful connection — server is down
+      return { ...state, serverUnreachable: true, restoringSession: false };
+    case 'CLEAR_SERVER_UNREACHABLE':
+      return { ...state, serverUnreachable: false };
+    default:
+      return state;
+  }
+}
+
 export default function App() {
   if (process.env.NODE_ENV === 'development') {
     renderCount++;
@@ -81,110 +115,253 @@ export default function App() {
     console.log(`[App] RENDER #${renderCount} at ${timestamp}`);
   }
 
-  const [serverSetupNeeded, setServerSetupNeeded] = useState(() => needsServerSetup());
+  // ── Stage 1: grouped state (65 useState → 6 groups + flat voice/socket) ────────
+  // See: /NEXA/issues/NEXA-8#document-plan
+
+  // auth
+  const [auth, setAuth] = useState({
+    serverSetupNeeded: needsServerSetup(),
+    currentUser: null,
+  });
+
+  // socket (stays flat — passed directly to useWebRTC and socketRef)
   const [socket, setSocket] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [servers, setServers] = useState([]);
-  const [activeServerId, setActiveServerId] = useState(null);
-  const [serverData, setServerData] = useState({});
-  const [activeChannel, setActiveChannel] = useState(null);
-  const [activeChannelType, setActiveChannelType] = useState('text');
-  const [onlineUsers, setOnlineUsers] = useState([]);
+
+  // serverState
+  const [serverState, setServerState] = useState(() => ({
+    servers: [],
+    activeServerId: null,
+    serverData: {},
+    activeChannel: null,
+    activeChannelType: 'text',
+    messages: {},
+    channelHasMore: {},
+    typingUsers: {},
+    channelLastRead: (() => { try { return JSON.parse(localStorage.getItem('nexus_channel_last_read') || '{}'); } catch { return {}; } })(),
+    lastChannelPerServer: (() => { try { return JSON.parse(localStorage.getItem('nexus_last_channel') || '{}'); } catch { return {}; } })(),
+    pinnedMessages: {},
+    channelThreads: {},
+  }));
+
+  // social
+  const [social, setSocial] = useState(() => ({
+    friends: [],
+    pendingRequests: [],
+    messageRequests: [],
+    dmUnreadCounts: {},
+    onlineUsers: [],
+    pinnedDMs: (() => { try { return JSON.parse(localStorage.getItem('nexus_pinned_dms') || '[]'); } catch { return []; } })(),
+  }));
+
+  // notifications
+  const [notifications, setNotifications] = useState(() => ({
+    mutedServers: (() => { try { return JSON.parse(localStorage.getItem('nexus_muted_servers') || '{}'); } catch { return {}; } })(),
+    mutedChannels: (() => { try { return JSON.parse(localStorage.getItem('nexus_muted_channels') || '{}'); } catch { return {}; } })(),
+    mutedCategories: (() => { try { return JSON.parse(localStorage.getItem('nexus_muted_categories') || '{}'); } catch { return {}; } })(),
+    messageSoundsEnabled: localStorage.getItem('nexus_message_sounds_enabled') !== 'false',
+    notificationsEnabled: localStorage.getItem('nexus_notifications_enabled') !== 'false',
+    notificationsPausedUntil: (() => { const val = localStorage.getItem('nexus_notifications_paused_until'); return val ? parseInt(val) : 0; })(),
+  }));
+
+  // ui
+  const [ui, setUi] = useState(() => ({
+    settingsOpen: false,
+    settingsTab: 'profile',
+    errorMsg: null,
+    memberSidebarVisible: true,
+    // ✅ Phase 2: Removed dmChannels, activeDMChannel, viewingDMs - Personal server is just a server
+    contextMenu: null,
+    serverContextMenu: null,
+    channelContextMenu: null,
+    categoryContextMenu: null,
+    profileUser: null,         // user to show in profile modal
+    reportTarget: null,        // { userId, username, messageId?, messagePreview? }
+    confirmModal: null,
+    unreadDividerMessageId: null,
+    scrollToMessageId: null,   // message id to scroll to after channel switch
+    showTour: false,
+    developerMode: localStorage.getItem('nexus_developer_mode') === 'true',
+    sidebarWidth: (() => { const stored = localStorage.getItem('nexus_sidebar_width'); return stored ? parseInt(stored, 10) : 240; })(),
+    mobileSidebarOpen: false,
+    mobileMemberListOpen: false,
+    showPinnedPanel: false,
+    searchResults: null,
+    searchQuery: '',
+    showSearchPanel: false,
+    savedMessageIds: new Set(),
+    threadPanel: null,         // { channelId, threadId, parent, messages, threadName }
+    threadNameModal: null,     // { channelId, messageId }
+    showThreadsListPanel: false,
+    updateAvailable: null,     // { version, notes, install } — Tauri only
+  }));
+
+  // connection — Stage 4: useReducer state machine
+  const [connection, dispatchConnection] = useReducer(connectionReducer, {
+    connectionState: 'connecting', // 'connected' | 'connecting' | 'disconnected'
+    serverUnreachable: false,
+    showConnectionBanner: false,
+    showReconnectedBanner: false,
+    restoringSession: !!(localStorage.getItem('nexus_token') && localStorage.getItem('nexus_username')),
+  });
+
+  // voice-related state (stays flat — owned by WebRTC layer; will move to useWebRTC in a later stage)
   const [voiceChannelState, setVoiceChannelState] = useState({});
-  const [messages, setMessages] = useState({});
-  const [channelHasMore, setChannelHasMore] = useState({});
-  const [typingUsers, setTypingUsers] = useState({});
   const [screenSharerSocketIds, setScreenSharerSocketIds] = useState([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState('profile');
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [memberSidebarVisible, setMemberSidebarVisible] = useState(true);
-  // ✅ Phase 2: Removed dmChannels, activeDMChannel, viewingDMs - Personal server is just a server
-  const [contextMenu, setContextMenu] = useState(null);
-  const [serverContextMenu, setServerContextMenu] = useState(null);
-  const [channelContextMenu, setChannelContextMenu] = useState(null);
-  const [categoryContextMenu, setCategoryContextMenu] = useState(null);
-  const [friends, setFriends] = useState([]);
-  const [pendingRequests, setPendingRequests] = useState([]);
-  const [messageRequests, setMessageRequests] = useState([]); // pending DM message requests
-  const [dmUnreadCounts, setDmUnreadCounts] = useState({}); // channelId -> unread count
-  const [profileUser, setProfileUser] = useState(null); // user to show in profile modal
-  const [reportTarget, setReportTarget] = useState(null); // { userId, username, messageId?, messagePreview? }
-  const [confirmModal, setConfirmModal] = useState(null);
-  const [channelLastRead, setChannelLastRead] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('nexus_channel_last_read') || '{}'); } catch { return {}; }
-  });
-  const [pinnedDMs, setPinnedDMs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('nexus_pinned_dms') || '[]'); } catch { return []; }
-  });
-  const [unreadDividerMessageId, setUnreadDividerMessageId] = useState(null);
-  const unreadDividerTimerRef = useRef(null);
-  const [connectionState, setConnectionState] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
-  const [serverUnreachable, setServerUnreachable] = useState(false);
-  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
-  const [showReconnectedBanner, setShowReconnectedBanner] = useState(false);
-  const connectionBannerTimer = useRef(null);
   const [soundboardPlayed, setSoundboardPlayed] = useState(null); // { soundId, userId, username, _ts }
-  const [scrollToMessageId, setScrollToMessageId] = useState(null); // message id to scroll to after channel switch
-  const [showTour, setShowTour] = useState(false);
-
-  // Mute & notification state
-  const [mutedServers, setMutedServers] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('nexus_muted_servers') || '{}'); } catch { return {}; }
-  });
-  const [mutedChannels, setMutedChannels] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('nexus_muted_channels') || '{}'); } catch { return {}; }
-  });
-  const [mutedCategories, setMutedCategories] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('nexus_muted_categories') || '{}'); } catch { return {}; }
-  });
-  const [messageSoundsEnabled, setMessageSoundsEnabled] = useState(() => localStorage.getItem('nexus_message_sounds_enabled') !== 'false');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('nexus_notifications_enabled') !== 'false');
-  const [notificationsPausedUntil, setNotificationsPausedUntil] = useState(() => {
-    const val = localStorage.getItem('nexus_notifications_paused_until');
-    return val ? parseInt(val) : 0;
-  });
-
-  // Last channel per server (remember where user was)
-  const [lastChannelPerServer, setLastChannelPerServer] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('nexus_last_channel') || '{}'); } catch { return {}; }
-  });
-
-  // Developer mode
-  const [developerMode, setDeveloperMode] = useState(() => localStorage.getItem('nexus_developer_mode') === 'true');
-
-  // DM call state
   const [incomingCall, setIncomingCall] = useState(null); // { channelId, caller, isGroup }
   const [dmCallActive, setDmCallActive] = useState(null); // channelId of active DM call
 
-  // Sidebar width (draggable resize)
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const stored = localStorage.getItem('nexus_sidebar_width');
-    return stored ? parseInt(stored, 10) : 240;
-  });
-
-  // Mobile swipe state
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [mobileMemberListOpen, setMobileMemberListOpen] = useState(false);
+  // Refs that are interspersed with state (kept in original relative position)
+  const unreadDividerTimerRef = useRef(null);
+  const connectionBannerTimer = useRef(null);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const touchCurrentX = useRef(0);
   const touchCurrentY = useRef(0);
 
-  // Pinned messages, search, bookmarks, and thread state
-  const [pinnedMessages, setPinnedMessages] = useState({});  // channelId -> [messages]
-  const [showPinnedPanel, setShowPinnedPanel] = useState(false);
-  const [searchResults, setSearchResults] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchPanel, setShowSearchPanel] = useState(false);
-  const [savedMessageIds, setSavedMessageIds] = useState(new Set());
-  const [threadPanel, setThreadPanel] = useState(null);  // { channelId, threadId, parent, messages, threadName }
-  const [threadNameModal, setThreadNameModal] = useState(null);  // { channelId, messageId }
-  const [showThreadsListPanel, setShowThreadsListPanel] = useState(false);
-  const [channelThreads, setChannelThreads] = useState({});  // channelId -> [threads]
+  // ── Stage 1: read shims (flat variable names → group fields) ─────────────────
+  // auth
+  const serverSetupNeeded = auth.serverSetupNeeded;
+  const currentUser = auth.currentUser;
+  // serverState
+  const servers = serverState.servers;
+  const activeServerId = serverState.activeServerId;
+  const serverData = serverState.serverData;
+  const activeChannel = serverState.activeChannel;
+  const activeChannelType = serverState.activeChannelType;
+  const messages = serverState.messages;
+  const channelHasMore = serverState.channelHasMore;
+  const typingUsers = serverState.typingUsers;
+  const channelLastRead = serverState.channelLastRead;
+  const lastChannelPerServer = serverState.lastChannelPerServer;
+  const pinnedMessages = serverState.pinnedMessages;
+  const channelThreads = serverState.channelThreads;
+  // social
+  const friends = social.friends;
+  const pendingRequests = social.pendingRequests;
+  const messageRequests = social.messageRequests;
+  const dmUnreadCounts = social.dmUnreadCounts;
+  const onlineUsers = social.onlineUsers;
+  const pinnedDMs = social.pinnedDMs;
+  // notifications
+  const mutedServers = notifications.mutedServers;
+  const mutedChannels = notifications.mutedChannels;
+  const mutedCategories = notifications.mutedCategories;
+  const messageSoundsEnabled = notifications.messageSoundsEnabled;
+  const notificationsEnabled = notifications.notificationsEnabled;
+  const notificationsPausedUntil = notifications.notificationsPausedUntil;
+  // ui
+  const settingsOpen = ui.settingsOpen;
+  const settingsTab = ui.settingsTab;
+  const errorMsg = ui.errorMsg;
+  const memberSidebarVisible = ui.memberSidebarVisible;
+  const contextMenu = ui.contextMenu;
+  const serverContextMenu = ui.serverContextMenu;
+  const channelContextMenu = ui.channelContextMenu;
+  const categoryContextMenu = ui.categoryContextMenu;
+  const profileUser = ui.profileUser;
+  const reportTarget = ui.reportTarget;
+  const confirmModal = ui.confirmModal;
+  const unreadDividerMessageId = ui.unreadDividerMessageId;
+  const scrollToMessageId = ui.scrollToMessageId;
+  const showTour = ui.showTour;
+  const developerMode = ui.developerMode;
+  const sidebarWidth = ui.sidebarWidth;
+  const mobileSidebarOpen = ui.mobileSidebarOpen;
+  const mobileMemberListOpen = ui.mobileMemberListOpen;
+  const showPinnedPanel = ui.showPinnedPanel;
+  const searchResults = ui.searchResults;
+  const searchQuery = ui.searchQuery;
+  const showSearchPanel = ui.showSearchPanel;
+  const savedMessageIds = ui.savedMessageIds;
+  const threadPanel = ui.threadPanel;
+  const threadNameModal = ui.threadNameModal;
+  const showThreadsListPanel = ui.showThreadsListPanel;
+  const updateAvailable = ui.updateAvailable;
+  // connection
+  const connectionState = connection.connectionState;
+  const serverUnreachable = connection.serverUnreachable;
+  const showConnectionBanner = connection.showConnectionBanner;
+  const showReconnectedBanner = connection.showReconnectedBanner;
+  const restoringSession = connection.restoringSession;
 
-  // Auto-updater state (Tauri only)
-  const [updateAvailable, setUpdateAvailable] = useState(null); // { version, notes, install }
+  // ── Stage 2: write shims — explicit deps, no eslint suppressions needed ──────
+  // useState/useReducer setters are guaranteed stable references by React, so
+  // including them in deps satisfies exhaustive-deps without causing re-creation.
+  const { setServerSetupNeeded, setCurrentUser } = useMemo(() => {
+    const mk = (key) => (v) => setAuth(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
+    return { setServerSetupNeeded: mk('serverSetupNeeded'), setCurrentUser: mk('currentUser') };
+  }, [setAuth]);
+
+  const {
+    setServers, setActiveServerId, setServerData, setActiveChannel, setActiveChannelType,
+    setMessages, setChannelHasMore, setTypingUsers, setChannelLastRead,
+    setLastChannelPerServer, setPinnedMessages, setChannelThreads,
+  } = useMemo(() => {
+    const mk = (key) => (v) => setServerState(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
+    return {
+      setServers: mk('servers'), setActiveServerId: mk('activeServerId'),
+      setServerData: mk('serverData'), setActiveChannel: mk('activeChannel'),
+      setActiveChannelType: mk('activeChannelType'), setMessages: mk('messages'),
+      setChannelHasMore: mk('channelHasMore'), setTypingUsers: mk('typingUsers'),
+      setChannelLastRead: mk('channelLastRead'), setLastChannelPerServer: mk('lastChannelPerServer'),
+      setPinnedMessages: mk('pinnedMessages'), setChannelThreads: mk('channelThreads'),
+    };
+  }, [setServerState]);
+
+  const { setFriends, setPendingRequests, setMessageRequests, setDmUnreadCounts, setOnlineUsers, setPinnedDMs } = useMemo(() => {
+    const mk = (key) => (v) => setSocial(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
+    return {
+      setFriends: mk('friends'), setPendingRequests: mk('pendingRequests'),
+      setMessageRequests: mk('messageRequests'), setDmUnreadCounts: mk('dmUnreadCounts'),
+      setOnlineUsers: mk('onlineUsers'), setPinnedDMs: mk('pinnedDMs'),
+    };
+  }, [setSocial]);
+
+  const {
+    setMutedServers, setMutedChannels, setMutedCategories,
+    setMessageSoundsEnabled, setNotificationsEnabled, setNotificationsPausedUntil,
+  } = useMemo(() => {
+    const mk = (key) => (v) => setNotifications(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
+    return {
+      setMutedServers: mk('mutedServers'), setMutedChannels: mk('mutedChannels'),
+      setMutedCategories: mk('mutedCategories'), setMessageSoundsEnabled: mk('messageSoundsEnabled'),
+      setNotificationsEnabled: mk('notificationsEnabled'), setNotificationsPausedUntil: mk('notificationsPausedUntil'),
+    };
+  }, [setNotifications]);
+
+  const {
+    setSettingsOpen, setSettingsTab, setErrorMsg, setMemberSidebarVisible,
+    setContextMenu, setServerContextMenu, setChannelContextMenu, setCategoryContextMenu,
+    setProfileUser, setReportTarget, setConfirmModal, setUnreadDividerMessageId,
+    setScrollToMessageId, setShowTour, setDeveloperMode, setSidebarWidth,
+    setMobileSidebarOpen, setMobileMemberListOpen, setShowPinnedPanel,
+    setSearchResults, setSearchQuery, setShowSearchPanel, setSavedMessageIds,
+    setThreadPanel, setThreadNameModal, setShowThreadsListPanel, setUpdateAvailable,
+  } = useMemo(() => {
+    const mk = (key) => (v) => setUi(p => ({ ...p, [key]: typeof v === 'function' ? v(p[key]) : v }));
+    return {
+      setSettingsOpen: mk('settingsOpen'), setSettingsTab: mk('settingsTab'),
+      setErrorMsg: mk('errorMsg'), setMemberSidebarVisible: mk('memberSidebarVisible'),
+      setContextMenu: mk('contextMenu'), setServerContextMenu: mk('serverContextMenu'),
+      setChannelContextMenu: mk('channelContextMenu'), setCategoryContextMenu: mk('categoryContextMenu'),
+      setProfileUser: mk('profileUser'), setReportTarget: mk('reportTarget'),
+      setConfirmModal: mk('confirmModal'), setUnreadDividerMessageId: mk('unreadDividerMessageId'),
+      setScrollToMessageId: mk('scrollToMessageId'), setShowTour: mk('showTour'),
+      setDeveloperMode: mk('developerMode'), setSidebarWidth: mk('sidebarWidth'),
+      setMobileSidebarOpen: mk('mobileSidebarOpen'), setMobileMemberListOpen: mk('mobileMemberListOpen'),
+      setShowPinnedPanel: mk('showPinnedPanel'), setSearchResults: mk('searchResults'),
+      setSearchQuery: mk('searchQuery'), setShowSearchPanel: mk('showSearchPanel'),
+      setSavedMessageIds: mk('savedMessageIds'), setThreadPanel: mk('threadPanel'),
+      setThreadNameModal: mk('threadNameModal'), setShowThreadsListPanel: mk('showThreadsListPanel'),
+      setUpdateAvailable: mk('updateAvailable'),
+    };
+  }, [setUi]);
+
+  // connectionRef: lets async callbacks (setTimeout) read the latest connection state
+  // without being stale due to closure capture.
+  const connectionRef = useRef(connection);
+  connectionRef.current = connection;
 
   const webrtc = useWebRTC(socket, currentUser, activeServerId);
   const webrtcRef = useRef(webrtc);
@@ -200,11 +377,6 @@ export default function App() {
   const dmCallActiveRef = useRef(null);
   const channelLastReadRef = useRef(channelLastRead);
   const heartbeatRef = useRef(null);
-  const [restoringSession, setRestoringSession] = useState(() => {
-    // Check synchronously if we have a stored token (avoids login screen flash)
-    return !!(localStorage.getItem('nexus_token') && localStorage.getItem('nexus_username'));
-  });
-
   // Mute helpers
   const isServerMuted = useCallback((serverId) => {
     const entry = mutedServers[serverId];
@@ -571,8 +743,7 @@ export default function App() {
     s.on('connect', () => {
       console.log('[App]  Socket connected' + (isReconnect ? ' (reconnect)' : ''));
       socketEverConnected.current = true;
-      setConnectionState('connected');
-      setServerUnreachable(false);
+      dispatchConnection({ type: 'CONNECTED' });
 
       // Clear reconnection banner timer and show brief "Reconnected" message
       if (connectionBannerTimer.current) {
@@ -580,9 +751,8 @@ export default function App() {
         connectionBannerTimer.current = null;
       }
       if (isReconnect) {
-        setShowConnectionBanner(false);
-        setShowReconnectedBanner(true);
-        setTimeout(() => setShowReconnectedBanner(false), 4000);
+        dispatchConnection({ type: 'RECONNECTED' });
+        setTimeout(() => dispatchConnection({ type: 'HIDE_RECONNECTED_BANNER' }), 4000);
       }
 
       s.emit('join', { token, username });
@@ -603,7 +773,6 @@ export default function App() {
 
     s.on('disconnect', (reason) => {
       console.log('[App]  Socket disconnected:', reason);
-      setConnectionState('disconnected');
       // If server kicked us (io server disconnect), don't try to reconnect with stale token
       if (reason === 'io server disconnect') {
         console.log('[App]  Server disconnected us - clearing tokens');
@@ -618,23 +787,23 @@ export default function App() {
       } else {
         isReconnect = true;
       }
-      setRestoringSession(false);
+      dispatchConnection({ type: 'DISCONNECTED' });
     });
 
     s.on('reconnect_attempt', (attemptNumber) => {
       console.log(`[App]  Reconnect attempt #${attemptNumber}`);
-      setConnectionState('connecting');
+      dispatchConnection({ type: 'RECONNECT_ATTEMPT' });
       // Only show banner after 5 seconds of reconnection attempts
       if (!connectionBannerTimer.current) {
         connectionBannerTimer.current = setTimeout(() => {
-          setShowConnectionBanner(true);
+          dispatchConnection({ type: 'SHOW_CONNECTION_BANNER' });
         }, 5000);
       }
     });
 
     s.on('connect_error', (err) => {
       console.log('[App]  Connect error:', err.message);
-      setRestoringSession(false);
+      dispatchConnection({ type: 'SESSION_RESTORED' });
     });
 
     s.on('init', ({ user, server, servers, onlineUsers, voiceChannels }) => {
@@ -681,7 +850,7 @@ export default function App() {
         setPinnedDMs(user.settings.pinned_dms);
         localStorage.setItem('nexus_pinned_dms', JSON.stringify(user.settings.pinned_dms));
       }
-      setRestoringSession(false);
+      dispatchConnection({ type: 'SESSION_RESTORED' });
       setCurrentUser(user);
 
       // Detect first-time users: no regular servers and onboarding not yet completed
@@ -1324,7 +1493,7 @@ export default function App() {
 
     s.on('error', ({ message }) => {
       console.log('[App]  Server error:', message);
-      setRestoringSession(false);
+      dispatchConnection({ type: 'SESSION_RESTORED' });
 
       // If auth failed, clear stale tokens and disconnect socket so user can log in fresh
       if (message?.toLowerCase().includes('token') || message?.toLowerCase().includes('auth') || message?.toLowerCase().includes('expired') || message?.toLowerCase().includes('invalid')) {
@@ -1681,26 +1850,25 @@ export default function App() {
       socketEverConnected.current = false;
       authErrorReceived.current = false;
       const timeout = setTimeout(() => {
-        setRestoringSession(prev => {
-          if (!prev) return false;
-          if (socketEverConnected.current && authErrorReceived.current) {
-            // Server was reached but rejected our tokens — they're genuinely stale
-            console.log('[App]  Session restore timeout - auth rejected, clearing stale tokens');
-            localStorage.removeItem('nexus_token');
-            localStorage.removeItem('nexus_username');
-            if (socketRef.current) {
-              socketRef.current.removeAllListeners();
-              socketRef.current.disconnect();
-              socketRef.current = null;
-              setSocket(null);
-            }
-          } else {
-            // Never connected (network error) — keep tokens, show unreachable screen
-            console.log('[App]  Session restore timeout - server unreachable, keeping tokens');
-            setServerUnreachable(true);
+        // Read latest restoringSession via connectionRef to avoid stale closure
+        if (!connectionRef.current.restoringSession) return;
+        if (socketEverConnected.current && authErrorReceived.current) {
+          // Server was reached but rejected our tokens — they're genuinely stale
+          console.log('[App]  Session restore timeout - auth rejected, clearing stale tokens');
+          localStorage.removeItem('nexus_token');
+          localStorage.removeItem('nexus_username');
+          if (socketRef.current) {
+            socketRef.current.removeAllListeners();
+            socketRef.current.disconnect();
+            socketRef.current = null;
+            setSocket(null);
           }
-          return false;
-        });
+          dispatchConnection({ type: 'SESSION_RESTORED' });
+        } else {
+          // Never connected (network error) — keep tokens, show unreachable screen
+          console.log('[App]  Session restore timeout - server unreachable, keeping tokens');
+          dispatchConnection({ type: 'SERVER_UNREACHABLE' });
+        }
       }, 10000);
 
       // Clean up timeout if component unmounts
@@ -2422,7 +2590,7 @@ export default function App() {
             Retry Now
           </button>
           <div>
-            <button onClick={() => { localStorage.removeItem('nexus_token'); localStorage.removeItem('nexus_username'); if (socketRef.current) { socketRef.current.removeAllListeners(); socketRef.current.disconnect(); socketRef.current = null; setSocket(null); } setServerUnreachable(false); }}
+            <button onClick={() => { localStorage.removeItem('nexus_token'); localStorage.removeItem('nexus_username'); if (socketRef.current) { socketRef.current.removeAllListeners(); socketRef.current.disconnect(); socketRef.current = null; setSocket(null); } dispatchConnection({ type: 'CLEAR_SERVER_UNREACHABLE' }); }}
               style={{ background:'none', border:'none', color:'var(--text-muted, #949ba4)', fontSize:13, cursor:'pointer', textDecoration:'underline' }}>
               Sign Out
             </button>
@@ -2456,7 +2624,7 @@ export default function App() {
       {showReconnectedBanner && (
         <div className="connection-banner reconnected" role="status" aria-live="polite">
           <span>Reconnected</span>
-          <button className="banner-close" onClick={() => setShowReconnectedBanner(false)} aria-label="Dismiss reconnected banner">&times;</button>
+          <button className="banner-close" onClick={() => dispatchConnection({ type: 'HIDE_RECONNECTED_BANNER' })} aria-label="Dismiss reconnected banner">&times;</button>
         </div>
       )}
       {updateAvailable && (

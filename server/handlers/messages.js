@@ -466,6 +466,7 @@ module.exports = function(io, socket) {
 
     console.log(`[Message] ${user.username} reacted ${emoji} on ${messageId}`);
     io.to(`text:${channelId}`).emit('message:reaction', { messageId, reactions: msg.reactions });
+    redis.invalidateChannelMessages(channelId);
   });
 
   // ── Poll Voting ──
@@ -496,6 +497,7 @@ module.exports = function(io, socket) {
 
     console.log(`[Message] ${user.username} voted on poll ${messageId}`);
     io.to(`text:${channelId}`).emit('poll:updated', { channelId, messageId, commandData: poll });
+    redis.invalidateChannelMessages(channelId);
   });
 
   socket.on('message:delete', async ({ channelId, messageId }) => {
