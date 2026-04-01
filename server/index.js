@@ -1,4 +1,5 @@
 require('./logger');
+const path = require('path');
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
@@ -145,6 +146,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', name: 'Nexus' });
 });
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
+// ─── Account deletion page (app store compliance) ───────────────────────────
+app.get('/delete-account', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'delete-account.html'));
+});
 
 // ─── Metrics endpoint ──────────────────────────────────────────────────────
 app.get('/api/metrics', requireApiAuth, async (req, res) => {
