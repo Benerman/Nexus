@@ -138,12 +138,12 @@ async function makeBanner() {
   // Tagline — fits within TEXT_W at font-size 28
   const TAG_Y = TITLE_Y + 68;
   const TAG_SIZE = 28;
-  const TAGLINE = 'Your community. Your data. Open source.';
+  const TAGLINE = 'Your community. Your voice. Your servers.';
 
   // Sub-line
   const SUB_Y = TAG_Y + 46;
   const SUB_SIZE = 22;
-  const SUBLINE = 'Self-hostable Discord alternative with voice, video &amp; real-time messaging';
+  const SUBLINE = 'Real-time servers, voice chat, soundboard &amp; messaging — fully self-hosted';
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <!-- Background -->
