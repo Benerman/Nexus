@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delete Account — Nexus</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1e1f22;
+      color: #dbdee1;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #2b2d31;
+      border-radius: 12px;
+      padding: 40px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .logo-text { font-size: 20px; font-weight: 700; color: #fff; }
+    h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .subtitle { font-size: 14px; color: #949ba4; margin-bottom: 24px; line-height: 1.6; }
+    .warning {
+      background: rgba(237,66,69,0.12);
+      border: 1px solid rgba(237,66,69,0.35);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #f38ba8;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .warning strong { color: #ed4245; }
+    .data-section {
+      background: #1e1f22;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .data-section h3 {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 10px;
+    }
+    .data-section h3.deleted { color: #ed4245; }
+    .data-section h3.retained { color: #faa61a; }
+    .data-section ul { padding-left: 18px; }
+    .data-section ul + h3 { margin-top: 14px; }
+    .data-section li { color: #b5bac1; margin-bottom: 2px; }
+    .divider { height: 1px; background: #3f4147; margin: 20px 0; }
+    .steps { margin-bottom: 24px; }
+    .steps h3 { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 12px; }
+    .step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: #b5bac1;
+      line-height: 1.5;
+    }
+    .step-num {
+      background: #5865f2;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #b5bac1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      background: #1e1f22;
+      border: 1px solid #3f4147;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 15px;
+      color: #dbdee1;
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #5865f2; }
+    .btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-danger { background: #ed4245; color: #fff; }
+    .btn-danger:hover { background: #c53030; }
+    .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+    .message {
+      margin-top: 18px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+      line-height: 1.5;
+    }
+    .message.error {
+      background: rgba(237,66,69,0.15);
+      color: #f38ba8;
+      border: 1px solid rgba(237,66,69,0.3);
+      display: block;
+    }
+    .alt-link { margin-top: 20px; font-size: 13px; color: #949ba4; text-align: center; line-height: 1.6; }
+    #success-section { display: none; text-align: center; padding: 12px 0; }
+    #success-section .tick { font-size: 48px; margin-bottom: 16px; }
+    #success-section h2 { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    #success-section p { font-size: 14px; color: #949ba4; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="#2b2d31" stroke="#ed4245" stroke-width="6"/>
+      </svg>
+      <span class="logo-text">Nexus</span>
+    </div>
+
+    <div id="form-section">
+      <h1>Delete your account</h1>
+      <p class="subtitle">
+        Use this page to permanently delete your <strong>Nexus</strong> account and associated data.
+        Deletion is immediate and cannot be undone.
+      </p>
+
+      <div class="steps">
+        <h3>How to delete your account</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <span>Enter your Nexus username and password in the form below.</span>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <span>Click <strong>Delete my account</strong> to confirm. No further confirmation is required.</span>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <span>Your account will be deleted immediately. You will see a confirmation once complete.</span>
+        </div>
+        <div class="step" style="margin-top:4px; color:#949ba4; font-size:12px;">
+          <div class="step-num" style="background:#3f4147; font-size:10px;">✦</div>
+          <span>You can also delete your account from within the app: <strong>Settings → Profile → Delete my account</strong></span>
+        </div>
+      </div>
+
+      <div class="data-section">
+        <h3 class="deleted">Immediately deleted</h3>
+        <ul>
+          <li>Your account credentials (username, password hash)</li>
+          <li>Your profile information (avatar, bio, status)</li>
+          <li>All session tokens — you are logged out everywhere</li>
+          <li>Your server memberships and role assignments</li>
+          <li>Your friend relationships, blocks, and pending requests</li>
+          <li>Any servers you own that have no other members</li>
+          <li>Your bookmarks and personal notification settings</li>
+        </ul>
+        <h3 class="retained">Retained (anonymised)</h3>
+        <ul>
+          <li>Messages you sent in servers and DMs — these remain visible but display as <em>"Deleted User"</em> with no link to your account</li>
+          <li>Servers you owned are transferred to the next eligible member</li>
+        </ul>
+      </div>
+
+      <div class="warning">
+        <strong>This cannot be undone.</strong> Once deleted, your account and all data listed above are permanently removed. There is no grace period or recovery option.
+      </div>
+
+      <label for="username">Username</label>
+      <input type="text" id="username" autocomplete="username" placeholder="Your username" />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" placeholder="Your password" />
+
+      <button class="btn btn-danger" id="delete-btn" onclick="handleDelete()">Delete my account</button>
+
+      <div id="message" class="message"></div>
+    </div>
+
+    <div id="success-section">
+      <div class="tick">✓</div>
+      <h2>Account deleted</h2>
+      <p>Your account and associated data have been permanently deleted.<br>We're sorry to see you go.</p>
+    </div>
+  </div>
+
+  <script>
+    async function handleDelete() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('delete-btn');
+      const msg = document.getElementById('message');
+
+      msg.className = 'message';
+      msg.textContent = '';
+
+      if (!username || !password) {
+        msg.className = 'message error';
+        msg.textContent = 'Please enter your username and password.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Deleting\u2026';
+
+      try {
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const loginData = await loginRes.json();
+
+        if (!loginRes.ok || !loginData.token) {
+          msg.className = 'message error';
+          msg.textContent = loginData.error || 'Invalid username or password.';
+          btn.disabled = false;
+          btn.textContent = 'Delete my account';
+          return;
+        }
+
+        const deleteRes = await fetch('/api/auth/account', {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + loginData.token }
+        });
+        const deleteData = await deleteRes.json();
+
+        if (!deleteRes.ok) {
+          msg.className = 'message error';
+          msg.textContent = deleteData.error || 'Failed to delete account. Please try again.';
+          btn.disabled = false;
+          btn.textContent = 'Delete my account';
+          return;
+        }
+
+        document.getElementById('form-section').style.display = 'none';
+        document.getElementById('success-section').style.display = 'block';
+
+      } catch (err) {
+        msg.className = 'message error';
+        msg.textContent = 'Something went wrong. Please try again later.';
+        btn.disabled = false;
+        btn.textContent = 'Delete my account';
+      }
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') handleDelete();
+    });
+  </script>
+</body>
+</html>

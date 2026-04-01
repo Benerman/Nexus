@@ -1,6 +1,6 @@
 # Nexus Chat - Complete Feature Documentation
 
-**Version**: 1.0.0 | **Last Updated**: February 16, 2026
+**Version**: 1.0.12 | **Last Updated**: March 30, 2026
 
 ---
 
@@ -1356,5 +1356,236 @@ nexus-chat/
 
 ---
 
-*Generated: February 16, 2026*
-*Total Features Documented: 57*
+*Base features documented as of v1.0.0 — February 16, 2026*
+*Updated to v1.0.12 — March 30, 2026*
+*Total Features Documented: 84 (see section 22)*
+
+---
+
+## 22. Features Added in v1.0.1–v1.0.12
+
+The following features were added after the initial v1.0.0 release.
+
+### 22.1 Message Threads (v1.0.9)
+
+- Full-screen thread view with rich message previews and reply counts
+- Thread browser panel in channel header (list all threads in a channel)
+- Named threads (configurable thread title)
+- Thread navigation bar on mobile with back gesture
+- Context menu actions: create thread, open thread
+- Reactions and context menus on thread reply messages (v1.0.12)
+- Socket events: `thread:create`, `thread:reply`, `thread:list`, `thread:get`
+
+### 22.2 Message Search (v1.0.9)
+
+- Full-text search across message history
+- Gmail-style filter syntax:
+  - `from:<username>` — filter by author
+  - `in:<channel>` — filter by channel
+  - `has:attachment` / `has:link` — filter by content type
+  - `before:<date>` / `after:<date>` — date range filters
+  - `is:pinned` / `is:bookmarked` — filter by state
+- Socket event: `message:search`
+
+### 22.3 Pins & Bookmarks (v1.0.9)
+
+- **Pins**: admins can pin messages to a channel; all members see pinned messages panel
+- **Bookmarks**: users can privately bookmark messages; stored per-user
+- Pin/bookmark browser panel accessible from channel header
+- Socket events: `message:pin`, `message:unpin`, `bookmark:add`, `bookmark:remove`, `bookmark:list`
+
+### 22.4 AutoMod System (v1.0.10)
+
+- Keyword/phrase blocklist with configurable actions per rule
+- Spam detection (rapid repeat messages)
+- Actions: warn user, delete message, timeout user, ban user
+- Per-channel bypass rules (exempt specific roles or channels)
+- All AutoMod actions logged to the Audit Log
+- Configuration via Settings Modal (admin only)
+- Handler module: `server/handlers/automod.js`
+- Database table: migration 018_automod.sql
+
+### 22.5 E2E Encryption (v1.0.10)
+
+- End-to-end encryption for DMs using [libsodium](https://doc.libsodium.org/) (`libsodium-wrappers-sumo`)
+- Key exchange handshake on DM channel creation
+- Messages encrypted client-side before sending; decrypted client-side after receiving
+- Server never sees plaintext content of encrypted DMs
+- Database table: migration 017_e2e_encryption.sql
+
+### 22.6 LAN Mode (v1.0.10)
+
+- Local-network peer discovery without external STUN/TURN
+- Direct device-to-device connection on the same LAN
+- Configurable via server settings
+- Database table: migration 016_lan_mode.sql
+
+### 22.7 MCP Bot Integration (v1.0.10)
+
+- **Model Context Protocol (MCP)** support: AI assistants can manage servers via structured tool calls
+- 20+ tools available: send messages, create/edit/delete channels, kick/ban/timeout members, manage webhooks, list bans, and more
+- Scope separation: `read-only` vs `destructive` (irreversible actions require explicit destructive scope)
+- Rate limiting applied per MCP session
+- Handler module: `server/handlers/mcp.js`
+- Database table: migration 019_mcp_integration.sql
+
+### 22.8 Themes (v1.0.10)
+
+- Full CSS variable-based theme system
+- Built-in themes: Dark (default), Light, AMOLED, and more
+- Theme selector in user settings
+- Consistent semantic color variables across all components
+- Documented in `docs/THEMES.md`
+
+### 22.9 Push-to-Talk (v1.0.10)
+
+- Hold-to-activate microphone mode (PTT mode)
+- Configurable key binding in audio settings
+- Global shortcut support in Tauri and Electron desktop builds (`@tauri-apps/plugin-global-shortcut`)
+- Visual PTT status indicator in voice panel
+- Separate from standard mute/unmute toggle
+
+### 22.10 Advanced Audio Processing (v1.0.5–v1.0.10)
+
+- **AudioWorklet pipeline**: all audio processing runs off the main thread
+- **Noise gate**: configurable threshold with attack smoothing and inter-word pause detection
+- **RNNoise ML noise cancellation**: three aggressiveness levels (Low/Medium/High), WASM fallback via `@jitsi/rnnoise-wasm`
+- **AGC (Automatic Gain Control)**: leveler, limiter, VAD-gating, noise floor tracking
+- **Audio levels meter**: real-time mic level display in audio settings
+- All settings configurable per session; state persisted in localStorage
+
+### 22.11 Voice Persistence & Reconnection (v1.0.9–v1.0.10)
+
+- Voice channel state survives page navigation (does not disconnect on route change)
+- Auto-rejoin voice channel after page reload (stored in localStorage)
+- Offline resilience: reconnects with backoff after network interruption
+- Smart session restore on reconnect (rejoins channels, re-renders state)
+- Error boundary for unhandled disconnection states
+
+### 22.12 Multi-Sharer Screen Share (v1.0.11)
+
+- Multiple users can share their screen simultaneously in the same voice channel
+- Thumbnail previews for each sharer in the video panel
+- `screenSharers` array tracked per channel in server in-memory state
+- Socket events: `screen:start`, `screen:stop`, `screen:started`, `screen:stopped`
+
+### 22.13 DM Calls (v1.0.2)
+
+- Voice calls directly in DM channels (no server required)
+- Separate signaling from server voice channels
+- Call accept/decline UI
+- Handler module: `server/handlers/dms.js`
+
+### 22.14 Message Requests (v1.0.2)
+
+- Non-friends must request permission before sending DMs
+- Accept/decline message request UI
+- Requests visible in Settings under Friends tab
+- Database table: migration 011_message_requests.sql
+
+### 22.15 Custom Emojis (v1.0.2)
+
+- Per-server custom emoji upload (PNG/GIF)
+- Emoji picker extended with custom emoji section
+- Emoji usable in messages with `:emoji_name:` syntax
+- Handler module: `server/handlers/emoji.js`
+- Database table: migration 006_custom_emojis.sql
+
+### 22.16 Soundboard (v1.0.2)
+
+- Per-server audio clips uploaded by admins
+- Play soundboard clips to all users in voice channel
+- Rate limited to prevent abuse
+- Playback via Web Audio API
+- Included in `server/handlers/voice.js`
+
+### 22.17 Audit Log (v1.0.9)
+
+- Per-server log of admin and moderation actions
+- Entries: member kicks/bans/timeouts, channel create/edit/delete, role changes, message deletions by admin, AutoMod actions
+- Viewable in Settings Modal (admin only)
+- Handler module: `server/handlers/audit.js`
+- Database table: migration 013_pins_search_threads_bookmarks_audit.sql
+
+### 22.18 Metrics & Observability (v1.0.10)
+
+- `GET /api/metrics` endpoint (platform admin only) — connection counts, message rates, API rates, error counts, system stats
+- **Structured logging**: Winston with daily log rotation, JSON-structured output, domain-prefixed parsing
+- Log files written to `server/data/logs/`
+- Performance/stress test suite for load testing and latency benchmarking
+
+### 22.19 Mute Channels & Categories (v1.0.3)
+
+- Users can mute individual channels or entire categories
+- Muted channels/categories show a muted indicator in sidebar
+- Muted channels do not produce notification badges or sounds
+- State persisted per user in the database
+
+### 22.20 Webhook Embeds (v1.0.3)
+
+- Discord-compatible `embeds` array in webhook payloads
+- Fields: `title`, `description`, `color` (integer)
+- Up to 10 embeds per webhook message
+- Stored in `embeds` JSONB column (migration 012_webhook_embeds.sql)
+
+### 22.21 Recovery Codes (v1.0.2)
+
+- One-time-use backup codes generated at account creation or on demand
+- Stored hashed in the database
+- Used to recover account access when primary credentials are lost
+- Database table: migration 015_recovery_codes.sql
+
+### 22.22 Server-Level ICE Configuration (v1.0.2)
+
+- Server owners can configure custom STUN/TURN servers per Nexus server
+- ICE config sent to clients on voice channel join
+- Overrides global default STUN servers
+- Database table: migration 009_server_ice_config.sql
+
+---
+
+## 23. Architecture Reference (v1.0.12)
+
+### Handler Modules (15 total)
+
+| Module | Responsibility |
+|--------|---------------|
+| `auth.js` | Join, disconnect, user updates, password change |
+| `servers.js` | Server CRUD, kick/ban/timeout |
+| `channels.js` | Channel/category CRUD, moderation queries |
+| `messages.js` | Message send/edit/delete, reactions, pins, search, threads |
+| `roles.js` | Role CRUD, member role assignment |
+| `dms.js` | DM create/list/message, group DMs, message requests, calls |
+| `social.js` | Friends, blocks, reports, invites |
+| `voice.js` | Voice/WebRTC signaling, soundboard, screen sharing |
+| `webhooks.js` | Webhook create/delete |
+| `emoji.js` | Custom emoji CRUD |
+| `admin.js` | Platform admin operations |
+| `bookmarks.js` | Bookmark list/IDs |
+| `audit.js` | Audit log retrieval |
+| `automod.js` | AutoMod rule management and enforcement |
+| `mcp.js` | MCP bot integration tools |
+
+### Database Migrations (19 total)
+
+| # | File | Feature Added |
+|---|------|---------------|
+| 001 | `001_initial_schema.sql` | Base schema (users, servers, channels, messages, roles, etc.) |
+| 002 | `002_dm_read_states.sql` | DM unread tracking |
+| 003 | `003_group_dms.sql` | Group DM support |
+| 004 | `004_mentions.sql` | @mention tracking |
+| 005 | `005_command_data.sql` | Slash command persistence |
+| 006 | `006_custom_emojis.sql` | Per-server custom emojis |
+| 007 | `007_dm_unique_constraint.sql` | Prevent duplicate 1-on-1 DMs |
+| 008 | `008_webhook_token.sql` | Cryptographic webhook tokens |
+| 009 | `009_server_ice_config.sql` | Custom STUN/TURN per server |
+| 010 | `010_dm_preserve_on_delete.sql` | DM messages preserved when user deleted |
+| 011 | `011_message_requests.sql` | DM message request flow |
+| 012 | `012_webhook_embeds.sql` | Webhook embed payloads |
+| 013 | `013_pins_search_threads_bookmarks_audit.sql` | Pins, search index, threads, bookmarks, audit log |
+| 014 | `014_thread_names.sql` | Named threads |
+| 015 | `015_recovery_codes.sql` | Account recovery codes |
+| 016 | `016_lan_mode.sql` | LAN discovery mode |
+| 017 | `017_e2e_encryption.sql` | E2E encryption key storage |
+| 018 | `018_automod.sql` | AutoMod rules and logs |
+| 019 | `019_mcp_integration.sql` | MCP bot session tracking |

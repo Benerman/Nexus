@@ -1,4 +1,5 @@
 require('./logger');
+const path = require('path');
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
@@ -18,6 +19,9 @@ const {
   leaveVoice
 } = require('./helpers');
 const { DEFAULT_PERMS, hashPassword, hashPasswordLegacy, verifyPassword } = utils;
+
+// ─── Redis cache ─────────────────────────────────────────────────────────────
+const redis = require('./redis');
 
 // ─── MCP integration ────────────────────────────────────────────────────────
 const { createMcpRouter } = require('./mcp');
@@ -142,6 +146,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', name: 'Nexus' });
 });
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
+// ─── Account deletion page (app store compliance) ───────────────────────────
+app.get('/delete-account', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'delete-account.html'));
+});
 
 // ─── Metrics endpoint ──────────────────────────────────────────────────────
 app.get('/api/metrics', requireApiAuth, async (req, res) => {
@@ -775,6 +784,10 @@ const PORT = process.env.PORT || 3001;
     console.log('[Server] Initializing database...');
     await db.initializeDatabase();
     console.log('[Server] Database initialized successfully');
+
+    // Connect to Redis (non-blocking — failure just disables cache)
+    redis.connect().catch(() => {});
+
 
     console.log('[Server] Loading servers from database...');
     const allDbServers = await db.getAllServers();
