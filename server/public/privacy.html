@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Nexus</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1e1f22;
+      color: #dbdee1;
+      line-height: 1.7;
+      padding: 40px 24px 80px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 40px;
+    }
+    .logo-text { font-size: 20px; font-weight: 700; color: #fff; }
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .meta {
+      font-size: 13px;
+      color: #949ba4;
+      margin-bottom: 40px;
+    }
+    h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 40px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #3f4147;
+    }
+    p { margin-bottom: 14px; color: #b5bac1; font-size: 15px; }
+    ul, ol {
+      padding-left: 22px;
+      margin-bottom: 14px;
+    }
+    li { color: #b5bac1; font-size: 15px; margin-bottom: 6px; }
+    a { color: #5865f2; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: #dbdee1; }
+    .highlight {
+      background: #2b2d31;
+      border-left: 3px solid #5865f2;
+      border-radius: 0 6px 6px 0;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: #b5bac1;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      background: #2b2d31;
+      color: #fff;
+      font-weight: 600;
+      border-bottom: 1px solid #3f4147;
+    }
+    td {
+      padding: 10px 14px;
+      color: #b5bac1;
+      border-bottom: 1px solid #2b2d31;
+    }
+    tr:last-child td { border-bottom: none; }
+    .footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid #3f4147;
+      font-size: 13px;
+      color: #949ba4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="logo">
+      <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="#1e1f22" stroke="#ed4245" stroke-width="6"/>
+      </svg>
+      <span class="logo-text">Nexus</span>
+    </div>
+
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective date: April 1, 2026 &nbsp;·&nbsp; Benerman Productions &nbsp;·&nbsp; <a href="mailto:info@benerman.productions">info@benerman.productions</a></p>
+
+    <div class="highlight">
+      Nexus is a self-hosted communication platform. The server you connect to is operated by whoever deployed it — not necessarily Benerman Productions. This policy describes how data is handled by the Nexus software and by Benerman Productions when operating an official Nexus instance.
+    </div>
+
+    <h2>1. Who we are</h2>
+    <p>Nexus is developed and maintained by <strong>Benerman Productions</strong>. You can reach us at <a href="mailto:info@benerman.productions">info@benerman.productions</a> for any privacy-related questions.</p>
+    <p>If you are using a self-hosted instance of Nexus operated by a third party, the operator of that instance is responsible for the data collected on their server. Contact them directly for questions about their data practices.</p>
+
+    <h2>2. What data we collect</h2>
+    <p>When you create an account and use Nexus, the following information is stored on the server:</p>
+
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Username</strong></td><td>Identifies your account</td></tr>
+        <tr><td><strong>Password</strong> (hashed with bcrypt, never stored in plaintext)</td><td>Account authentication</td></tr>
+        <tr><td><strong>Profile information</strong> — avatar, bio, status, display color</td><td>Shown to other users in the platform</td></tr>
+        <tr><td><strong>Messages</strong> — content, timestamps, attachments, reactions</td><td>Core messaging functionality</td></tr>
+        <tr><td><strong>Server memberships and roles</strong></td><td>Access control and permissions</td></tr>
+        <tr><td><strong>Friend relationships, blocks, and reports</strong></td><td>Social features</td></tr>
+        <tr><td><strong>Direct messages</strong></td><td>Private communication between users</td></tr>
+        <tr><td><strong>Session tokens</strong></td><td>Keeping you logged in</td></tr>
+        <tr><td><strong>Notification and mute preferences</strong></td><td>Personalising your experience</td></tr>
+        <tr><td><strong>Bookmarks</strong></td><td>Saving messages for personal reference</td></tr>
+      </tbody>
+    </table>
+
+    <p>We do <strong>not</strong> collect:</p>
+    <ul>
+      <li>Your real name, email address, or phone number (unless you choose to include them in your profile)</li>
+      <li>Your location</li>
+      <li>Device identifiers or advertising IDs</li>
+      <li>Browsing history outside of Nexus</li>
+      <li>Voice or video call content — voice and video are transmitted peer-to-peer using WebRTC and are never routed through or recorded by the server</li>
+    </ul>
+
+    <h2>3. How we use your data</h2>
+    <p>Data collected is used solely to operate the Nexus platform:</p>
+    <ul>
+      <li>To authenticate you and maintain your session</li>
+      <li>To deliver messages and notifications to you and other users</li>
+      <li>To enforce server permissions and moderation rules</li>
+      <li>To display your profile to other users you interact with</li>
+    </ul>
+    <p>We do not sell your data, use it for advertising, or share it with third parties for marketing purposes.</p>
+
+    <h2>4. Third-party services</h2>
+    <p>Nexus integrates with the following optional third-party services:</p>
+    <ul>
+      <li><strong>Giphy</strong> — used for the GIF search feature. When you search for GIFs, your search query is sent to Giphy's API. Giphy's own <a href="https://support.giphy.com/hc/en-us/articles/360032872931" target="_blank" rel="noopener">privacy policy</a> applies to this data.</li>
+      <li><strong>STUN servers</strong> — used during WebRTC connection setup to help establish peer-to-peer voice and video connections. STUN servers only see your IP address transiently and do not store call content.</li>
+    </ul>
+    <p>If GIF search is not configured by the server operator, no data is sent to Giphy.</p>
+
+    <h2>5. Voice and video</h2>
+    <p>Voice and video calls in Nexus use <strong>WebRTC peer-to-peer connections</strong>. This means your audio and video travel directly between participants — the Nexus server does not receive, store, or record any call content. Screen share streams are likewise transmitted directly between participants.</p>
+
+    <h2>6. Data retention</h2>
+    <p>Your data is retained for as long as your account exists. Specifically:</p>
+    <ul>
+      <li><strong>Messages</strong> are stored indefinitely unless deleted by you or a server moderator.</li>
+      <li><strong>Session tokens</strong> expire after 30 days of inactivity and are revoked immediately on logout.</li>
+      <li><strong>Account data</strong> is deleted immediately when you delete your account (see Section 7).</li>
+    </ul>
+
+    <h2>7. Deleting your account and data</h2>
+    <p>You can permanently delete your account at any time in two ways:</p>
+    <ul>
+      <li><strong>In the app:</strong> Settings → Profile → Delete my account</li>
+      <li><strong>On the web:</strong> <a href="/delete-account">nexus.benerman.com/delete-account</a></li>
+    </ul>
+    <p>When you delete your account, the following is <strong>immediately and permanently deleted</strong>:</p>
+    <ul>
+      <li>Your username, password hash, and all credentials</li>
+      <li>Your profile information (avatar, bio, status)</li>
+      <li>All active session tokens — you are logged out on all devices</li>
+      <li>Your server memberships and role assignments</li>
+      <li>Your friend relationships, blocks, and pending requests</li>
+      <li>Your bookmarks and personal preferences</li>
+      <li>Any servers you own that have no other members</li>
+    </ul>
+    <p>The following is <strong>retained in anonymised form</strong>:</p>
+    <ul>
+      <li>Messages you sent in servers and direct message channels — these remain visible to other participants but display as <em>"Deleted User"</em> with no link to your former account. The content is not deleted because removing it would break the context of conversations for other users.</li>
+      <li>Servers you owned with existing members are transferred to the next eligible member.</li>
+    </ul>
+    <p>There is no grace period. Deletion is immediate and irreversible.</p>
+
+    <h2>8. Security</h2>
+    <p>Nexus takes reasonable technical measures to protect your data:</p>
+    <ul>
+      <li>Passwords are hashed using <strong>bcrypt with 12 rounds</strong> — plaintext passwords are never stored</li>
+      <li>All API communication is over HTTPS</li>
+      <li>Security headers (Helmet.js) and CORS restrictions are enforced</li>
+      <li>Rate limiting is applied to all API endpoints to prevent abuse</li>
+      <li>All user input is validated and sanitised before processing</li>
+    </ul>
+
+    <h2>9. Children's privacy</h2>
+    <p>Nexus is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has created an account, please contact us at <a href="mailto:info@benerman.productions">info@benerman.productions</a> and we will delete the account.</p>
+
+    <h2>10. Changes to this policy</h2>
+    <p>We may update this privacy policy from time to time. When we do, we will update the effective date at the top of this page. Continued use of Nexus after changes are posted constitutes acceptance of the updated policy.</p>
+
+    <h2>11. Contact</h2>
+    <p>For any privacy-related questions, requests, or concerns, contact us at:</p>
+    <p><strong>Benerman Productions</strong><br>
+    <a href="mailto:info@benerman.productions">info@benerman.productions</a></p>
+
+    <div class="footer">
+      &copy; 2026 Benerman Productions &nbsp;·&nbsp;
+      <a href="/delete-account">Delete my account</a>
+    </div>
+
+  </div>
+</body>
+</html>
