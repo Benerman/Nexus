@@ -22,3 +22,4 @@ export { default as EmojiIcon } from './EmojiIcon';
 export { default as ThreadIcon } from './ThreadIcon';
 export { default as PinIcon } from './PinIcon';
 export { default as BookmarkIcon } from './BookmarkIcon';
+export { default as PhoneOffIcon } from './PhoneOffIcon';
