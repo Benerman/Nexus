@@ -76,9 +76,21 @@ async function makeIcon() {
   }
 
   const pts = hexPts(R);
+  // "Nexus" text centred inside the hex
+  const TEXT_SIZE = Math.round(SIZE * 0.18); // ~92px at 512
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
   <rect width="${SIZE}" height="${SIZE}" fill="${BG}"/>
   <polygon points="${ptStr(pts)}" fill="none" stroke="${RED}" stroke-width="${STROKE}" stroke-linejoin="round"/>
+  <text
+    x="${cx}"
+    y="${cy}"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="${TEXT_SIZE}"
+    font-weight="700"
+    fill="${WHITE}"
+    text-anchor="middle"
+    dominant-baseline="central"
+  >Nexus</text>
 </svg>`;
 
   const outPath = path.join(OUT_DIR, 'play-store-icon-512.png');
