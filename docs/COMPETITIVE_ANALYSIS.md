@@ -1,6 +1,6 @@
-# Nexus Competitive Analysis
+# Nexus Feature Analysis
 
-Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and notable self-hosted alternatives. Last updated March 2026.
+Comprehensive feature comparison across communication platforms. Last updated April 2026.
 
 ---
 
@@ -8,8 +8,8 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 
 ### Messaging
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Text channels | Yes | Yes | Yes | Yes |
 | Message edit/delete | Yes | Yes | Yes | Yes |
 | Markdown rendering | Yes | Yes | Yes | Yes |
@@ -17,53 +17,51 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 | Message replies | Yes | Yes | Yes (threads) | Yes (threads) |
 | Threads | Yes | Yes | Yes | Yes |
 | Forum channels | No | Yes | No | No |
-| Message search | Yes (Gmail-style filters) | Yes | Yes (AI-powered) | Yes (Copilot) |
-| Pinned messages | Yes (50/channel) | Yes (50/channel) | Yes (bookmarks) | Yes |
-| Polls | Yes (/poll) | Yes (native) | Via integrations | Yes (Forms) |
-| Slash commands | Yes (10 built-in) | Yes (bot ecosystem) | Yes (apps) | Yes (apps) |
+| Message search | Yes (Gmail-style filters) | Yes | Yes | Yes |
+| Pinned messages | Yes (50/channel) | Yes | Yes | Yes |
+| Polls | Yes (/poll) | Yes (native) | Via integrations | Yes |
+| Slash commands | Yes (10 built-in) | Yes | Yes | Yes |
 | Scheduled messages | No | No | Yes | Yes |
 | Message forwarding | No | No | Yes | Yes |
 | Typing indicators | Basic | Yes | Yes | Yes |
 | Read receipts | No | No | No | Yes |
 | URL previews (OG) | Yes | Yes | Yes | Yes |
 | Message link embeds | Yes | No | Yes | No |
-| Attachments (multi) | Yes (4, 10MB) | Yes (25MB+) | Yes (plan-based) | Yes (SharePoint) |
-| GIF picker | Yes (Giphy) | Yes (native) | Yes | Yes |
-| Stickers | No | Yes (Nitro) | No | No |
+| Attachments (multi) | Yes (4, 10MB) | Yes | Yes | Yes |
+| GIF picker | Yes (Giphy) | Yes | Yes | Yes |
+| Stickers | No | Yes (subscription) | No | No |
 | Code blocks + syntax highlighting | Partial | Yes | Yes | Yes |
 | Message edit history | No | No | No | No |
 | Undo send | No | No | Yes | No |
 
 ### Voice & Video
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
-| Voice channels | Yes | Yes | Huddles | Calls/Meet Now |
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
+| Voice channels | Yes | Yes | Huddles | Yes |
 | Video calls | Yes | Yes | Huddles | Yes |
 | Screen sharing | Yes | Yes | Yes | Yes |
-| Noise suppression (ML) | Yes (RNNoise) | Yes (Krisp) | No | Yes (MS AI) |
+| Noise suppression (ML) | Yes (RNNoise) | Yes | No | Yes |
 | Noise gate | Yes | No | No | No |
 | Auto gain control | Yes (dual-stage) | Yes | No | Yes |
-| Soundboard | Yes (custom+built-in) | Yes (native) | No | No |
+| Soundboard | Yes (custom + built-in) | Yes | No | No |
 | Per-user volume | Yes | Yes | No | No |
 | Mute/deafen | Yes | Yes | Yes | Yes |
 | Push-to-talk | No | Yes | No | No |
-| Stage channels | No | Yes | No | Webinars |
-| Custom intro/exit sounds | Yes | Yes (soundboard) | No | No |
+| Stage channels | No | Yes | No | Yes (Webinars) |
+| Custom intro/exit sounds | Yes | Partial | No | No |
 | Voice activity detection | Yes | Yes | No | Yes |
 | Call recording | No | No | No | Yes |
 | Live captions | No | No | Yes | Yes |
 | Breakout rooms | No | No | No | Yes |
-| Bandwidth controls | No | No | No | Yes |
-| Codec preferences | No | Automatic | N/A | N/A |
-| SFU (>6 users) | No (P2P mesh) | Yes (SFU) | Yes | Yes |
+| SFU (>6 users) | No (P2P mesh) | Yes | Yes | Yes |
 
 ### Server / Workspace Organization
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Servers/workspaces | Yes | Yes | Yes | Yes |
-| Channel categories | Yes | Yes | Sections (personal) | No |
+| Channel categories | Yes | Yes | Personal sections | No |
 | Channel reordering | Yes | Yes | Personal sections | No |
 | Private channels | Yes | Yes | Yes | Yes |
 | Server invites (link) | Yes (expiry+limits) | Yes | Yes | Yes |
@@ -73,14 +71,13 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 | Slow mode | Yes | Yes | No | No |
 | NSFW channel flag | Yes | Yes | No | No |
 | Onboarding flow | No | Yes | No | No |
-| Community features | No | Yes | No | No |
 | Server discovery | No | Yes | No | No |
 
 ### Roles & Permissions
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
-| Custom roles | Yes | Yes | No (owner/admin/member/guest) | No (owner/member) |
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
+| Custom roles | Yes | Yes | No | No |
 | Role hierarchy | Yes (position-based) | Yes | N/A | N/A |
 | Granular permissions | Yes (16+) | Yes (40+) | Basic | Basic |
 | Channel-level overrides | Yes | Yes | Posting restrictions | No |
@@ -90,8 +87,8 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 
 ### Social
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Friend system | Yes | Yes | No | No |
 | User blocking | Yes | Yes | No | No |
 | Direct messages | Yes | Yes | Yes | Yes |
@@ -100,41 +97,41 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 | Custom status text | Yes | Yes | Yes | Yes |
 | Online/idle/DND/invisible | Yes | Yes | Yes | Yes |
 | User reports | Yes | Yes | No | No |
-| DM voice/video calls | Yes | Yes | Yes (Huddles) | Yes |
+| DM voice/video calls | Yes | Yes | Yes | Yes |
 | Pinnable DM conversations | Yes | No | Yes | Yes |
 | DM message requests | Yes | Yes | No | No |
 
 ### Moderation
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
-| Kick/ban | Yes | Yes | Remove (Slack) | Remove |
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
+| Kick/ban | Yes | Yes | Remove | Remove |
 | Timeouts | Yes | Yes | No | No |
 | Audit log | Yes | Yes | Enterprise only | Enterprise |
 | User reports | Yes | Yes | No | Via compliance |
-| AutoMod | No | Yes (AI + rules) | No | DLP policies |
-| Spam detection | Rate limiting only | Yes (AI) | No | No |
-| Verification levels | No | Yes (5 levels) | No | No |
+| AutoMod | No | Yes | No | DLP policies |
+| Spam detection | Rate limiting only | Yes | No | No |
+| Verification levels | No | Yes | No | No |
 | Raid protection | No | Yes | N/A | N/A |
-| Content filtering | No | Yes (keyword + AI) | DLP (enterprise) | DLP (Purview) |
-| Moderation bots | Via webhooks | Rich ecosystem | Via apps | Via apps |
+| Content filtering | No | Yes | Enterprise | Enterprise |
+| Moderation integrations | Via webhooks | Rich ecosystem | Via apps | Via apps |
 
 ### Customization
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Themes | Yes (12 built-in + custom) | Limited (dark/light) | Themes | Themes |
-| Custom theme creation | Yes (10-color editor) | No (client mods) | No | No |
+| Custom theme creation | Yes (10-color editor) | No | No | No |
 | Theme import/export | Yes (.nexus-theme.json) | No | No | No |
 | Custom emoji | Yes (50/server) | Yes (50-250/server) | Yes | Yes |
-| Emoji sharing across servers | Yes (configurable) | Nitro only | No | No |
+| Emoji sharing across servers | Yes (configurable) | Subscription only | No | No |
 | Custom soundboard | Yes | Yes | No | No |
 | Server profiles | Partial | Yes | Yes | Yes |
 
 ### Security
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Password hashing (bcrypt) | Yes (12 rounds) | Yes | Yes | N/A (SSO) |
 | JWT authentication | Yes | Yes | OAuth | OAuth/SAML |
 | Rate limiting | Yes (messages, API, webhooks) | Yes | Yes | Yes |
@@ -142,32 +139,32 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 | Security headers (Helmet) | Yes | Yes | Yes | Yes |
 | CORS restrictions | Yes | Yes | Yes | Yes |
 | SSRF protection | Yes | Yes | Yes | Yes |
-| 2FA/MFA | No | Yes | Yes | Yes (Entra ID) |
-| SSO/OAuth | No | No | Yes (SAML) | Yes (Azure AD) |
+| 2FA/MFA | No | Yes | Yes | Yes |
+| SSO/OAuth | No | No | Yes (SAML) | Yes |
 | E2E encryption | No | No | No | 1:1 calls only |
-| Data retention policies | No | No | Yes (paid) | Yes (Purview) |
+| Data retention policies | No | No | Yes (paid) | Yes |
 | Compliance certifications | No | SOC 2 | SOC 2, ISO, FedRAMP | SOC, ISO, FedRAMP, HIPAA |
 
 ### Integrations & Ecosystem
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Webhooks | Yes | Yes | Yes | Yes |
 | Bot API | No | Yes (rich) | Yes (rich) | Yes (rich) |
-| App store/directory | No | No (bots.gg etc.) | Yes (2600+) | Yes (thousands) |
-| Workflow automation | No | No (via bots) | Yes (Workflow Builder) | Yes (Power Automate) |
+| App store/directory | No | Partial | Yes (2600+) | Yes (thousands) |
+| Workflow automation | No | No | Yes | Yes |
 | OAuth2 for apps | No | Yes | Yes | Yes |
 | Activities/games | No | Yes | No | No |
-| Server monetization | No | Yes (Server Shops) | No | No |
+| Server monetization | No | Yes | No | No |
 
 ### Mobile & Desktop
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | Responsive web | Yes (768px breakpoint) | Yes | Yes | Yes |
 | iOS app | Yes (Capacitor) | Yes (native) | Yes (native) | Yes (native) |
 | Android app | Yes (Capacitor) | Yes (native) | Yes (native) | Yes (native) |
-| Desktop app | Yes (Tauri + Electron) | Yes (Electron) | Yes (Electron) | Yes (WebView2) |
+| Desktop app | Yes (Tauri + Electron) | Yes (Electron) | Yes (Electron) | Yes |
 | Swipe navigation | Yes | Yes | Yes | No |
 | Long-press context menus | Yes | Yes | Yes | Yes |
 | Pull-to-refresh | Yes | Yes | No | No |
@@ -176,8 +173,8 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 
 ### Accessibility
 
-| Feature | Nexus | Discord | Slack | Teams |
-|---------|:-----:|:-------:|:-----:|:-----:|
+| Feature | Nexus | Platform A | Platform B | Platform C |
+|---------|:-----:|:----------:|:----------:|:----------:|
 | ARIA labels | No | Partial | Yes | Yes |
 | Keyboard navigation | Basic | Yes | Yes | Yes |
 | Screen reader support | No | Partial | Yes | Yes |
@@ -189,95 +186,91 @@ Comprehensive feature comparison against Discord, Slack, Microsoft Teams, and no
 
 ---
 
-## Nexus Competitive Advantages
+## Nexus Advantages
 
-Features where Nexus equals or exceeds competitors:
+Areas where Nexus leads or differentiates:
 
-1. **Custom theme system** — 12 built-in themes + full custom theme editor with import/export. Discord only offers dark/light. Slack/Teams have limited themes. No competitor offers user-created themes.
-2. **Audio processing pipeline** — RNNoise ML noise cancellation + dual-stage AGC + noise gate exceeds Discord's built-in processing. Unique in the self-hosted space.
+1. **Custom theme system** — 12 built-in themes + full custom theme editor with import/export. No other platform offers a user-facing theme creation tool with import/export.
+2. **Audio processing pipeline** — RNNoise ML noise cancellation + dual-stage AGC + noise gate. Client-side only — no audio data leaves the user's device.
 3. **Soundboard depth** — Custom sound upload with trimming, per-sound volume, targeted playback to specific users, and custom user intro/exit sounds.
-4. **Self-hosted data sovereignty** — Full control over data, no vendor lock-in, no message history limits, no storage caps. Key differentiator vs all commercial platforms.
-5. **Cross-server emoji sharing** — Configurable per server. Discord requires Nitro subscription for this.
-6. **Gmail-style search operators** — `from:` `in:` `has:` `before:` `after:` `is:pinned` — more structured than Discord's search.
-7. **Message link embeds** — Cross-channel message previews. Discord doesn't render these inline.
-8. **Lightweight deployment** — Single `docker-compose up` deploys the entire stack. No cloud dependencies.
-
-## Competitor Shortcomings Relevant to Nexus
-
-Features where competitors fail that Nexus could capitalize on:
-
-| Competitor Weakness | Relevant? | Opportunity for Nexus |
-|---|---|---|
-| **Discord: No custom themes** — users resort to client mods (BetterDiscord) which violate TOS | Yes | Already implemented. Market this as a core differentiator. |
-| **Discord: Nitro paywall for emoji/uploads** — emoji sharing, larger uploads, HD streaming require $10/mo | Yes | Nexus has no paywalls. Emphasize in positioning. |
-| **Discord: No self-hosting** — privacy-conscious users/orgs have no option | Yes | Core Nexus value prop. |
-| **Slack: 90-day message history on free plan** — devastating for small teams | Yes | Nexus has unlimited history. |
-| **Slack: No native video meetings** — relies on Zoom/Google Meet integrations | Yes | Nexus has native WebRTC voice/video. |
-| **Slack: Expensive** — $8.75/user/month for Pro | Yes | Nexus is free, self-hosted. |
-| **Teams: UI complexity** — widely cited as cluttered and non-intuitive | Yes | Keep Nexus UI simple and Discord-familiar. |
-| **Teams: Copilot costs $30/user/month extra** — AI features paywalled | Partial | Could add local AI features without per-seat cost. |
-| **Discord: No forum channels alternative for self-hosted** | Yes | Add forum channels to differentiate. |
-| **Slack: No huddle recording** — teams can't review async | Partial | Low priority but could add call recording. |
-| **Discord: Soundboard limited to Nitro boosted servers** — limited sound slots | Yes | Nexus soundboard already has custom uploads with no paywall. |
-| **All: No real theme customization** — stuck with what the vendor provides | Yes | Already a Nexus strength. Push further. |
-| **Teams: No channel categories** — long channel lists are unmanageable | Yes | Nexus already has categories. |
-| **Discord: March 2025 UI overhaul backlash** — forced redesign angered users | Partial | Stability and user choice as values. |
-
-## Competitor Features Worth Adopting
-
-Prioritized by impact and feasibility:
-
-### High Priority (strong competitive gap)
-
-| Feature | Source | Effort | Why |
-|---|---|---|---|
-| **AutoMod (keyword filter + spam detection)** | Discord | Medium (3-4 days) | Every competitor has content filtering. Nexus has nothing beyond rate limiting. Critical for any community deployment. |
-| **2FA/MFA** | All competitors | Medium (2-3 days) | Table-stakes security feature. Nexus is the only platform without it. Blocks enterprise/security-conscious adoption. |
-| **Push-to-talk** | Discord | Low (1-2 hours) | Simple to implement, expected in any voice chat platform. Missing from Nexus. |
-| **Forum channels** | Discord, Guilded | High (5-7 days) | Post-based threaded discussions for Q&A, support, feedback. Discord's most successful channel type for communities. Slack and Teams lack this too. |
-| **Typing indicators** | All competitors | Low (1-2 hours) | Basic UX expectation. Nexus only has basic presence. |
-
-### Medium Priority (nice competitive differentiator)
-
-| Feature | Source | Effort | Why |
-|---|---|---|---|
-| **Scheduled messages** | Slack, Teams | Low (2-3 days) | Useful for async teams across timezones. Slack and Teams have it, Discord doesn't. |
-| **Message edit history** | None have it well | Low (1-2 days) | No competitor does this well. Could be a unique feature. |
-| **Keyboard shortcuts** | All competitors | Medium (2-3 days) | Power user expectation. Discord/Slack have comprehensive shortcut systems. |
-| **Auto-mod AI (spam/scam detection)** | Discord | High (1-2 weeks) | Discord's AI blocks 45M+ unwanted messages. ML-based content safety is becoming standard. |
-| **Stage channels / speaker queue** | Discord | Medium (3-4 days) | Town halls, AMAs, presentations. Discord popularized this. |
-
-### Low Priority (diminishing returns)
-
-| Feature | Source | Effort | Why |
-|---|---|---|---|
-| **Server discovery** | Discord | Medium | Only matters at scale with many public servers. |
-| **Activities/games** | Discord | Very high | Niche; Discord's own adoption is moderate. |
-| **Stickers** | Discord | Low | Nice-to-have cosmetic. Discord paywalls it behind Nitro. |
-| **Server monetization** | Discord | Very high | Only relevant for creator-focused deployments. |
-| **Bot API / OAuth2** | All competitors | Very high | Massive effort to build a developer platform. Webhooks cover 80% of use cases. |
-| **Localization (i18n)** | All competitors | High | Important at scale, but significant effort to retrofit. |
-| **SSO/OAuth** | Slack, Teams | Medium | Enterprise feature. Lower priority for self-hosted community use. |
+4. **Self-hosted data sovereignty** — Full control over data, no vendor lock-in, no message history limits, no storage caps.
+5. **Cross-server emoji sharing** — Configurable per server with no subscription requirement.
+6. **Gmail-style search operators** — `from:` `in:` `has:` `before:` `after:` `is:pinned` — more structured query syntax than most platforms.
+7. **Message link embeds** — Cross-channel message previews rendered inline.
+8. **Lightweight deployment** — Single `docker compose up` deploys the entire stack. No cloud account required.
+9. **Small binary footprint** — Tauri desktop app ~10MB vs Electron-based alternatives (~300MB).
 
 ---
 
-## Unique Nexus Opportunities
+## Market Gaps Nexus Can Address
 
-Features no competitor does well that Nexus could own:
-
-1. **Full theme customization** — Already implemented. No competitor offers user-created themes with a visual editor. Push further with community theme sharing.
-2. **Privacy-first voice processing** — All audio processing happens client-side (RNNoise, AGC, noise gate). No audio data leaves the user's machine. Competitors process server-side.
-3. **Zero-cost feature parity** — Every feature Discord locks behind Nitro ($10/mo) is free in Nexus: emoji sharing, larger uploads, soundboard, HD streaming.
-4. **Single-binary desktop app** — Tauri produces ~10MB binaries vs Discord's ~300MB Electron app. Performance and size advantage.
-5. **Transparent moderation** — Audit logs visible to server admins. Could add transparency features like public mod logs, appeal workflows.
+| User Pain Point | Nexus Approach |
+|---|---|
+| No self-hosting option on major platforms | Core value prop — full Docker deployment |
+| Theme customization locked or subscription-gated | Full custom theme editor, free |
+| Emoji sharing requires paid subscription | Cross-server emoji sharing, no paywall |
+| Message history limits on free plans | Unlimited history |
+| No native voice/video on some platforms | Full WebRTC voice/video/screen share |
+| Expensive per-seat pricing for teams | Free, self-hosted |
+| Lack of channel categories in some platforms | Categories with drag-and-drop reorder |
+| Limited audio processing | RNNoise + dual-stage AGC + noise gate |
 
 ---
 
-## Summary: Where Nexus Stands
+## Feature Gaps to Close
 
-| Metric | Score | Notes |
+Prioritized by user impact:
+
+### High Priority
+
+| Feature | Effort | Notes |
 |---|---|---|
-| **vs Discord** | ~70% parity | Strong in voice/themes/customization. Gaps in AutoMod, 2FA, forums, bot ecosystem. |
-| **vs Slack** | ~65% parity | Better voice, themes, moderation. Weaker in integrations, search AI, workflows. |
-| **vs Teams** | ~55% parity | Better UX simplicity, voice quality, customization. Weaker in enterprise features. |
-| **vs Self-hosted alternatives** | Leading | More features than Revolt, Mattermost. Comparable to Rocket.Chat. Better voice than all. |
+| **AutoMod (keyword filter + spam)** | Medium (3-4 days) | Essential for community moderation; rate limiting alone is insufficient |
+| **2FA/MFA** | Medium (2-3 days) | Table-stakes security; blocks security-conscious adoption |
+| **Push-to-talk** | Low (1-2 hours) | Expected in any voice chat platform |
+| **Forum channels** | High (5-7 days) | Post-based discussions for Q&A, support, feedback |
+| **Typing indicators** | Low (1-2 hours) | Basic UX expectation |
+
+### Medium Priority
+
+| Feature | Effort | Notes |
+|---|---|---|
+| **Scheduled messages** | Low (2-3 days) | Useful for async teams across timezones |
+| **Message edit history** | Low (1-2 days) | Transparency feature; no current platform does this well |
+| **Keyboard shortcuts** | Medium (2-3 days) | Power user expectation |
+| **Stage channels / speaker queue** | Medium (3-4 days) | Town halls, AMAs, presentations |
+
+### Low Priority
+
+| Feature | Effort | Notes |
+|---|---|---|
+| **Server discovery** | Medium | Only relevant at scale with many public servers |
+| **Stickers** | Low | Nice-to-have cosmetic |
+| **Server monetization** | Very high | Only relevant for creator-focused deployments |
+| **Bot API / OAuth2** | Very high | Webhooks cover 80% of automation use cases |
+| **Localization (i18n)** | High | Important at scale, significant effort to retrofit |
+| **SSO/OAuth** | Medium | Enterprise feature; lower priority for community deployments |
+
+---
+
+## Unique Opportunities
+
+Areas where Nexus can lead rather than follow:
+
+1. **Full theme customization** — Already implemented. Push further with community theme sharing.
+2. **Privacy-first audio processing** — All processing client-side. A genuine privacy differentiator.
+3. **Zero-paywall features** — Soundboard, emoji sharing, larger uploads, HD streaming — all free.
+4. **Transparent moderation** — Audit logs visible to admins. Could extend to public mod logs and appeal workflows.
+5. **True self-hosting** — No phone-home, no external dependencies required, air-gap capable.
+
+---
+
+## Summary
+
+| Dimension | Status | Key Gaps |
+|---|---|---|
+| **Feature completeness** | ~70% of target | AutoMod, 2FA, forums, bot ecosystem |
+| **Voice/audio quality** | Leading | Push-to-talk, SFU for large rooms |
+| **Customization** | Leading | Stage channels, server discovery |
+| **Security** | Good | 2FA, SSO, compliance certifications |
+| **Self-hosted alternatives** | Leading | More features + better voice than comparable projects |

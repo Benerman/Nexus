@@ -1,12 +1,12 @@
 # Nexus Enhancement Roadmap
 
-Comprehensive analysis of the Nexus codebase compared against Discord, Slack, and Microsoft Teams. Organized into prioritized phases with actionable items.
+Nexus enhancement roadmap organized into prioritized phases with actionable items.
 
 ---
 
 ## Current State Summary
 
-Nexus implements ~48/71 features compared to Discord/Slack/Teams (~67% parity). Core communication, voice/video, moderation, and custom content are solid. Key gaps are in messaging features (threads, search, pinning), platform ecosystem (bots, integrations), and infrastructure maturity (monitoring, scaling, testing).
+Core communication, voice/video, moderation, and custom content are solid. Key gaps are in messaging features (threads, search, pinning), platform ecosystem (bots, integrations), and infrastructure maturity (monitoring, scaling, testing).
 
 **Voice quality: 7.5/10** — RNNoise ML noise cancellation and dual-stage AGC are strong differentiators. Compressor tuning is the easiest quality win.
 
@@ -24,7 +24,7 @@ _Low effort, immediate impact. Can be done in a few days._
 - Change ratio from `4:1` to `2:1`
 - Change attack from `0.003` (3ms) to `0.010` (10ms)
 - Add soft knee of `10dB`
-- **Why:** Current settings audibly squash loud speech. Discord/Zoom use softer compression. Improves perceived voice quality by ~1 point.
+- **Why:** Current settings audibly squash loud speech. Softer compression improves perceived voice quality by ~1 point.
 
 ### 1.2 Fix AGC gate-state check (10 min)
 **File:** `client/public/audio-processor.js` ~line 233
@@ -52,7 +52,7 @@ _Low effort, immediate impact. Can be done in a few days._
 
 ## Phase 2: Critical Feature Gaps
 
-_High-impact features missing from every competitor. 1-2 weeks each._
+_High-impact features with significant user value. 1-2 weeks each._
 
 ### 2.1 Message Pinning
 **Effort:** Low (1-2 days)
@@ -92,7 +92,7 @@ _High-impact features missing from every competitor. 1-2 weeks each._
 
 **Client changes:**
 - "Reply in thread" option in message context menu
-- Thread panel (right sidebar, similar to Discord/Slack)
+- Thread panel (right sidebar)
 - Thread indicator on parent message showing reply count
 - Thread notifications in sidebar
 
@@ -450,25 +450,25 @@ _Lower priority, high polish._
 
 ## Feature Parity Summary
 
-| Category | Current | Target (Phase 1-5) | Discord |
-|----------|---------|---------------------|---------|
-| Messaging | 80% | 95% | 100% |
-| Voice/Video | 88% | 95% | 100% |
-| Social | 80% | 90% | 100% |
-| Moderation | 71% | 90% | 100% |
-| Organization | 80% | 95% | 100% |
-| Customization | 75% | 85% | 100% |
-| Integration | 25% | 35% | 100% |
-| Admin/Enterprise | 40% | 70% | 100% |
-| **Overall** | **67%** | **85%** | **100%** |
+| Category | Current | Target (Phase 1-5) |
+|----------|---------|---------------------|
+| Messaging | 80% | 95% |
+| Voice/Video | 88% | 95% |
+| Social | 80% | 90% |
+| Moderation | 71% | 90% |
+| Organization | 80% | 95% |
+| Customization | 75% | 85% |
+| Integration | 25% | 35% |
+| Admin/Enterprise | 40% | 70% |
+| **Overall** | **67%** | **85%** |
 
 ---
 
 ## Nexus Strengths to Double Down On
 
-These are areas where Nexus already meets or exceeds competitors:
+These are areas where Nexus already stands out:
 
-1. **Audio processing quality** — RNNoise ML noise cancellation + dual-stage AGC exceeds Discord's built-in processing
+1. **Audio processing quality** — RNNoise ML noise cancellation + dual-stage AGC lead in audio processing
 2. **Soundboard** — Full-featured with trimming, per-sound volume, targeted playback, user intro/exit sounds
 3. **Cross-platform** — Web, Tauri, Electron, Capacitor (iOS/Android) from single codebase
 4. **Self-hosted** — Full control over data, no vendor lock-in

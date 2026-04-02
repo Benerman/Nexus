@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nexus is a real-time communication platform (Discord-like) with text/voice channels, DMs, WebRTC voice/video, and cross-platform support. It uses a Docker-based architecture:
+Nexus is a real-time communication platform with text/voice channels, DMs, WebRTC voice/video, and cross-platform support. It uses a Docker-based architecture:
 
 ```
 Browser (Port 3000) → Nginx → Express + Socket.IO (Port 3001) → PostgreSQL + Redis
@@ -192,15 +192,19 @@ Nexus follows the Autonomous Software Creation (ASC) framework with 8 phases. Al
 
 ## TODO — Competitive Feature Gaps (High Priority)
 
-- [ ] **Forum channels** — New channel type `forum` with post-based threads. Each post has a title + initial message. Tags for categorization. Sort by recent activity or creation date. Discord's most successful channel type for communities.
+- [ ] **Forum channels** — New channel type `forum` with post-based threads. Each post has a title + initial message. Tags for categorization. Sort by recent activity or creation date.
 
 ## TODO — Competitive Feature Gaps (Medium Priority)
 
 - [ ] **Scheduled messages** — Store in `scheduled_messages` table with delivery timestamp. Job queue or interval check for reliable delivery. Calendar icon in message input with date/time picker.
-- [ ] **Message edit history** — Add `message_edits` table tracking old content + edit timestamp. Show "(edited)" badge on messages. Click to view previous versions. No competitor does this well — opportunity to lead.
+- [ ] **Message edit history** — Add `message_edits` table tracking old content + edit timestamp. Show "(edited)" badge on messages. Click to view previous versions.
 - [ ] **Keyboard shortcuts** — Comprehensive shortcut system for navigation, message actions, voice controls. Configurable bindings. Document in a shortcuts modal (Ctrl+/).
 - [ ] **Stage channels** — Speaker queue model for town halls, AMAs, presentations. Audience can "raise hand" to request speaking. Moderator approves/denies.
-- [ ] **Server onboarding** — Customizable welcome screen for new members. Select roles, read rules, pick channels. Discord's onboarding flow significantly improves new-member experience.
+- [ ] **Server onboarding** — Customizable welcome screen for new members. Select roles, read rules, pick channels. Improves new-member experience significantly.
+
+## TODO — Documentation / Knowledge Base
+
+- [ ] **Build KB from docs** — Convert `docs/` into structured knowledge base articles for the agent system. Key docs: `deployment/DOCKER_DEPLOYMENT.md`, `deployment/TRAEFIK.md`, `STUN_TURN.md`, `THEMES.md`, `ios-signing-setup.md`. Decision pending on `COMPETITIVE_ANALYSIS.md`.
 
 ## TODO — Infrastructure Gaps
 
