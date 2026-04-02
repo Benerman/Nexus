@@ -140,10 +140,12 @@ async function makeBanner() {
   const TAG_SIZE = 28;
   const TAGLINE = 'Your community. Your voice. Your servers.';
 
-  // Sub-line
+  // Sub-line (split into two lines)
   const SUB_Y = TAG_Y + 46;
   const SUB_SIZE = 22;
-  const SUBLINE = 'Real-time servers, voice chat, soundboard &amp; messaging — fully self-hosted';
+  const SUBLINE1 = 'Real-time servers, voice chat, soundboard &amp; messaging';
+  const SUBLINE2 = '— fully self-hosted';
+  const SUB2_Y = SUB_Y + 30;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <!-- Background -->
@@ -181,7 +183,7 @@ async function makeBanner() {
     text-anchor="start"
   >${TAGLINE}</text>
 
-  <!-- Sub-line -->
+  <!-- Sub-line 1 -->
   <text
     x="${TEXT_X}"
     y="${SUB_Y}"
@@ -190,7 +192,18 @@ async function makeBanner() {
     font-weight="400"
     fill="#b0b3b8"
     text-anchor="start"
-  >${SUBLINE}</text>
+  >${SUBLINE1}</text>
+
+  <!-- Sub-line 2 -->
+  <text
+    x="${TEXT_X}"
+    y="${SUB2_Y}"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="${SUB_SIZE}"
+    font-weight="400"
+    fill="#b0b3b8"
+    text-anchor="start"
+  >${SUBLINE2}</text>
 </svg>`;
 
   const outPath = path.join(OUT_DIR, 'play-store-banner-1024x500.png');
