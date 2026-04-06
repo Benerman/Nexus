@@ -107,4 +107,4 @@ Nexus is a self-hosted, real-time communication platform with text channels, voi
 - [FAQ](reference/faq.md) — Common issues and solutions
 - [Glossary](reference/glossary.md) — Nexus terminology
 - [Contributing](reference/contributing.md) — Development setup and contribution guide
-- [Changelog](../docs/CHANGELOG.md) — Release history
+- [Changelog](CHANGELOG.md) — Release history
