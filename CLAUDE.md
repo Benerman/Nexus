@@ -186,21 +186,6 @@ Requires `sharp` (listed as a devDependency). On macOS, `iconutil` (bundled with
 - **`dev.yml`** — Manual trigger for pre-release builds (Tauri, Electron, Capacitor)
 - **`release.yml`** — Manual trigger for versioned releases (reads version from `client/package.json`)
 
-## Development Cycle (ASC)
-
-Nexus follows the Autonomous Software Creation (ASC) framework with 8 phases. All artifacts live in `asc/`:
-
-| Phase | Directory | Purpose |
-|-------|-----------|---------|
-| 00 | `asc/00_intent_extraction/` | Problem statement, assumptions, stakeholders, priorities |
-| 01 | `asc/01_intent_and_constraints/` | Intent statement, constraints, acceptance contract |
-| 02 | `asc/02_design_generation/` | Architecture, technical contracts, design decisions |
-| 03 | `asc/03_parallel_implementation/` | Component map, build verification |
-| 04 | `asc/04_continuous_verification/` | Test strategy, security, performance |
-| 05 | `asc/05_zero_touch_deployment/` | Pipeline docs, rollback procedures, post-deploy checks |
-| 06 | `asc/06_autonomous_operations/` | Observability, incident playbooks, capacity management |
-| 07 | `asc/07_feedback_synthesis/` | Signal sources, development cycle process |
-
 **Gate validation** is enforced in CI:
 - `unit-tests.yml`: npm audit (`--audit-level=high`, blocking) + coverage threshold (90%)
 - `deploy-prod.yml` / `deploy-dev.yml`: Post-deploy metrics verification + deployment event logging
