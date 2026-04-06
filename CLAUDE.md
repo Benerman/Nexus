@@ -126,6 +126,23 @@ See `.env.example` and `server/.env.example` for full list.
 - Cross-platform: web is primary; Capacitor (mobile), Tauri (desktop), Electron (fallback) are secondary
 - Git workflow: `develop` is the primary development branch. Feature branches should be created from and merged into `develop` via PR. `main` is the production branch — merge `develop` into `main` for releases. Never commit directly to `main` or `develop`.
 
+## Documentation Updates
+
+When making codebase changes, keep the `docs/` directory in sync:
+
+- **Adding or changing a feature** — Update the relevant file in `docs/user-guide/`, `docs/server-admin/`, or `docs/audio/`. If no file exists for the feature, create one following the existing structure.
+- **Changing configuration options or environment variables** — Update `docs/deployment/environment-variables.md` and any other affected deployment docs.
+- **Changing REST API endpoints** — Update `docs/api-reference/rest-api.md`.
+- **Changing Socket.IO events** — Update `docs/api-reference/socket-events.md`.
+- **Changing webhook behavior** — Update `docs/api-reference/webhook-api.md` and `docs/server-admin/webhooks.md`.
+- **Changing Docker/deployment setup** — Update `docs/deployment/docker.md` and related deployment guides.
+- **Changing database schema** — Update `docs/api-reference/database-schema.md`.
+- **Changing the permission system** — Update `docs/server-admin/roles-and-permissions.md`.
+- **Changing theme/CSS variables** — Update `docs/customization/css-variable-reference.md`.
+- **Changing validation rules or limits** — Update `docs/security/input-validation.md`.
+
+The docs index is `docs/README.md` — update it if you add or remove documentation files.
+
 ## Version Bumping
 
 When bumping the version, update all of these locations:
@@ -204,7 +221,7 @@ Nexus follows the Autonomous Software Creation (ASC) framework with 8 phases. Al
 
 ## TODO — Documentation / Knowledge Base
 
-- [ ] **Build KB from docs** — Convert `docs/` into structured knowledge base articles for the agent system. Key docs: `deployment/DOCKER_DEPLOYMENT.md`, `deployment/TRAEFIK.md`, `STUN_TURN.md`, `THEMES.md`, `ios-signing-setup.md`. Decision pending on `COMPETITIVE_ANALYSIS.md`.
+- [x] **Build KB from docs** — Existing docs (`DOCKER_DEPLOYMENT.md`, `TRAEFIK.md`, `STUN_TURN.md`, `THEMES.md`, `ios-signing-setup.md`) absorbed into structured `docs/` section with 60 files across 12 categories. `COMPETITIVE_ANALYSIS.md` excluded per plan.
 
 ## TODO — Infrastructure Gaps
 
