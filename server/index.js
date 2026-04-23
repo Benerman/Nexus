@@ -147,9 +147,12 @@ app.get('/api/health', (req, res) => {
 });
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
-// ─── Account deletion page (app store compliance) ───────────────────────────
+// ─── Static compliance pages (app store / legal) ────────────────────────────
 app.get('/delete-account', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'delete-account.html'));
+});
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
 });
 
 // ─── Metrics endpoint ──────────────────────────────────────────────────────

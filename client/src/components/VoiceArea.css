@@ -326,8 +326,28 @@
 }
 
 .voice-user-tile.speaking {
-  border-color: var(--green);
-  transition: none;
+  transition: box-shadow 0.12s ease;
+}
+
+/* Five-tier audio indicator: thin, opacity-based rings that grow subtly with volume */
+.voice-user-tile.speaking-quiet {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--green) 38%, transparent);
+}
+
+.voice-user-tile.speaking-low {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 58%, transparent);
+}
+
+.voice-user-tile.speaking-medium {
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--green) 78%, transparent);
+}
+
+.voice-user-tile.speaking-loud {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 92%, transparent);
+}
+
+.voice-user-tile.speaking-very-loud {
+  box-shadow: 0 0 0 3.5px var(--green);
 }
 
 .voice-users-grid.with-screen .voice-user-tile {
@@ -413,8 +433,8 @@
 }
 
 .video-tile.speaking {
-  border-color: var(--green);
-  transition: none;
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--green) 80%, transparent);
+  transition: box-shadow 0.12s ease;
 }
 
 .video-tile video {

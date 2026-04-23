@@ -1,0 +1,153 @@
+name: Orchestrate Code Review
+
+# Triggers the Paperclip Orchestrator on pull requests to `develop`.
+# The Orchestrator maps changed files to feature specs and dispatches
+# Reviewer, Tester, and/or SecurityAuditor as appropriate.
+#
+# Required GitHub secrets:
+#   PAPERCLIP_API_URL      - Paperclip instance URL (e.g. http://your-host:3100)
+#   PAPERCLIP_API_KEY      - Paperclip agent API key with issue-create permissions
+#   PAPERCLIP_COMPANY_ID   - Nexus company UUID in Paperclip
+#
+# Optional GitHub secrets:
+#   PAPERCLIP_GOAL_ID      - Goal ID to attach tasks to (defaults to Nexus platform goal)
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [opened, synchronize, reopened]
+
+jobs:
+  orchestrate:
+    name: Dispatch to Orchestrator
+    runs-on: ubuntu-latest
+    # Skip if secrets are not configured (prevents workflow failures on forks)
+    if: vars.PAPERCLIP_ENABLED == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate diff
+        id: diff
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          DIFF=$(git diff "${BASE_SHA}...${HEAD_SHA}" -- 2>/dev/null)
+
+          if [ -z "$DIFF" ]; then
+            echo "No diff found. Skipping orchestration."
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Truncate to 20k chars to stay within Paperclip task limits
+          MAX=20000
+          DIFF_LEN=${#DIFF}
+          if [ "$DIFF_LEN" -gt "$MAX" ]; then
+            DIFF="${DIFF:0:$MAX}"$'\n\n[TRUNCATED — diff exceeded limit]'
+          fi
+
+          # Write to temp file to avoid shell escaping issues
+          echo "$DIFF" > /tmp/diff.txt
+          echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          echo "base_sha=${BASE_SHA:0:8}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA:0:8}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Orchestrator task
+        if: steps.diff.outputs.has_diff == 'true'
+        env:
+          PAPERCLIP_API_URL: ${{ secrets.PAPERCLIP_API_URL }}
+          PAPERCLIP_API_KEY: ${{ secrets.PAPERCLIP_API_KEY }}
+          PAPERCLIP_COMPANY_ID: ${{ secrets.PAPERCLIP_COMPANY_ID }}
+          PAPERCLIP_GOAL_ID: ${{ secrets.PAPERCLIP_GOAL_ID }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+        run: |
+          DIFF=$(cat /tmp/diff.txt)
+          ORCHESTRATOR_AGENT_ID="50750663-3cb9-4b0c-817d-2ad2cce3bb0e"
+          GOAL_ID="${PAPERCLIP_GOAL_ID:-9f57e035-3ca0-43a4-b3bf-35ef8bdcf722}"
+
+          TITLE="Orchestrate: PR #${PR_NUMBER} — ${PR_TITLE:0:50}"
+
+          DESCRIPTION=$(python3 - <<PYEOF
+import json, sys, os
+
+diff = open('/tmp/diff.txt').read()
+title = os.environ['TITLE']
+pr_url = os.environ['PR_URL']
+pr_number = os.environ['PR_NUMBER']
+base_sha = os.environ['BASE_SHA']
+head_sha = os.environ['HEAD_SHA']
+
+desc = f"""## Diff to Orchestrate
+
+**PR:** [#{pr_number}]({pr_url})
+**Base:** \`{base_sha}\` → **Head:** \`{head_sha}\`
+
+Please analyze this diff and:
+1. Map changed files to features in \`nexus-specs/features/\`
+2. Produce a dispatch plan (which of Reviewer, Tester, SecurityAuditor to trigger)
+3. Create Paperclip tasks for each agent in the dispatch plan
+4. Flag any cross-cutting concerns or manual review items
+
+\`\`\`diff
+{diff}
+\`\`\`
+"""
+print(desc)
+PYEOF
+          )
+
+          PAYLOAD=$(python3 -c "
+import json, sys, os
+payload = {
+    'title': os.environ['TITLE'],
+    'description': open('/tmp/description.txt').read() if __import__('os').path.exists('/tmp/description.txt') else os.environ.get('DESCRIPTION',''),
+    'assigneeAgentId': '50750663-3cb9-4b0c-817d-2ad2cce3bb0e',
+    'goalId': os.environ.get('GOAL_ID', '9f57e035-3ca0-43a4-b3bf-35ef8bdcf722'),
+    'status': 'todo',
+    'priority': 'high'
+}
+print(json.dumps(payload))
+")
+
+          # Write description to file to avoid escaping issues
+          echo "$DESCRIPTION" > /tmp/description.txt
+
+          PAYLOAD=$(python3 -c "
+import json, os
+payload = {
+    'title': os.environ['TITLE'],
+    'description': open('/tmp/description.txt').read(),
+    'assigneeAgentId': '50750663-3cb9-4b0c-817d-2ad2cce3bb0e',
+    'goalId': os.environ.get('PAPERCLIP_GOAL_ID', '9f57e035-3ca0-43a4-b3bf-35ef8bdcf722'),
+    'status': 'todo',
+    'priority': 'high'
+}
+print(json.dumps(payload))
+")
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${PAPERCLIP_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "${PAPERCLIP_API_URL}/api/companies/${PAPERCLIP_COMPANY_ID}/issues")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            ISSUE_ID=$(echo "$BODY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('identifier','unknown'))" 2>/dev/null || echo "unknown")
+            echo "Orchestrator task created: ${ISSUE_ID}"
+          else
+            echo "Error creating task (HTTP ${HTTP_CODE}): ${BODY}"
+            exit 1
+          fi

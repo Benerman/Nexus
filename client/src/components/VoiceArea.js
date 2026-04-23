@@ -3,6 +3,17 @@ import './VoiceArea.css';
 import { MicrophoneIcon, HeadphoneIcon, ScreenShareIcon, PhoneIcon, VolumeIcon, SettingsIcon } from './icons';
 import { isCapacitorApp } from '../config';
 
+// Maps normalized audio level [0,1] to a CSS class suffix for the speaking indicator.
+// Five tiers: quiet → low → medium → loud → very-loud
+function getSpeakingTierClass(isSpeaking, audioLevel) {
+  if (!isSpeaking || !(audioLevel > 0)) return '';
+  if (audioLevel < 0.15) return 'speaking-quiet';
+  if (audioLevel < 0.35) return 'speaking-low';
+  if (audioLevel < 0.60) return 'speaking-medium';
+  if (audioLevel < 0.80) return 'speaking-loud';
+  return 'speaking-very-loud';
+}
+
 // Convert a data URI (data:audio/wav;base64,...) to ArrayBuffer without fetch
 function dataUriToArrayBuffer(dataUri) {
   const base64 = dataUri.split(',')[1];
@@ -127,12 +138,10 @@ const UserTile = React.memo(function UserTile({
   // Volume display: 0-150 slider, shown as percentage
   const displayVol = userVolume ?? 100;
 
+  const tierClass = getSpeakingTierClass(isSpeaking, audioLevel);
   return (
     <div
-      className={`voice-user-tile ${isSpeaking ? 'speaking' : ''}`}
-      style={isSpeaking && audioLevel > 0 ? {
-        boxShadow: `0 0 0 ${2 + (audioLevel || 0) * 6}px var(--green)`
-      } : undefined}
+      className={`voice-user-tile ${isSpeaking ? 'speaking' : ''} ${tierClass}`}
       onContextMenu={onContextMenu}
     >
       {stream && stream.getVideoTracks().length > 0 ? (
