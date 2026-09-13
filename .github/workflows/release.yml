@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Read version from package.json
         id: version
@@ -78,7 +78,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
 
@@ -130,7 +130,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
 
@@ -196,7 +196,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup macOS environment
         run: |
@@ -220,7 +220,7 @@ jobs:
         working-directory: client
 
       - name: Add iOS platform and sync
-        run: rm -rf ios && npx cap add ios && npx cap sync ios
+        run: rm -rf ios && npx cap add ios --packagemanager CocoaPods && npx cap sync ios
         working-directory: client
 
       - name: Install CocoaPods dependencies
@@ -305,14 +305,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
