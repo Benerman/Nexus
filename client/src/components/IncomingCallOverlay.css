@@ -125,7 +125,7 @@
 
 @media (max-width: 768px) {
   .incoming-call-overlay {
-    top: env(safe-area-inset-top, 10px);
+    top: var(--safe-area-inset-top, env(safe-area-inset-top, 10px));
     left: 10px;
     right: 10px;
   }

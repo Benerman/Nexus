@@ -366,13 +366,13 @@
 @supports (padding: env(safe-area-inset-top)) {
   @media (max-width: 768px) {
     .server-list {
-      padding-top: env(safe-area-inset-top) !important;
+      padding-top: var(--safe-area-inset-top, env(safe-area-inset-top)) !important;
     }
     .main-content {
-      padding-bottom: env(safe-area-inset-bottom) !important;
+      padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom)) !important;
     }
     .chat-side-panel {
-      padding-bottom: env(safe-area-inset-bottom) !important;
+      padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom)) !important;
     }
   }
 }
