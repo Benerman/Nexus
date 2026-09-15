@@ -18,14 +18,14 @@ jobs:
     outputs:
       tag: dev-build-${{ github.run_number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
 
       - name: Create pre-release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: dev-build-${{ github.run_number }}
           name: "Dev Build #${{ github.run_number }}"
@@ -45,15 +45,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: client/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Verify Linux dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
         working-directory: client
 
       - name: Build with Tauri
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI: false
@@ -99,20 +99,20 @@ jobs:
             rust_targets: ""
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: client/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.rust_targets }}
 
       - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: client/src-tauri -> target
 
@@ -127,7 +127,7 @@ jobs:
         working-directory: client
 
       - name: Build with Tauri
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI: false
@@ -152,9 +152,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
 
@@ -204,24 +204,34 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
       - name: Export IPA (ad-hoc / development)
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # If signing is configured, export a signed IPA
-          if [ -n "${{ secrets.IOS_CERTIFICATE_BASE64 }}" ]; then
-            # Decode and install certificate
-            echo "${{ secrets.IOS_CERTIFICATE_BASE64 }}" | base64 -d > /tmp/certificate.p12
-            security create-keychain -p "" build.keychain
-            security default-keychain -s build.keychain
-            security unlock-keychain -p "" build.keychain
-            security import /tmp/certificate.p12 -k build.keychain -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          if [ -n "$IOS_CERTIFICATE_BASE64" ]; then
+            # Signing material goes in $RUNNER_TEMP (wiped after every job) and a
+            # throwaway keychain that is appended to the search list, never made
+            # the default. "Remove signing keychain" below deletes it even on failure.
+            KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+            KEYCHAIN_PW=$(openssl rand -base64 24)
+            echo "$IOS_CERTIFICATE_BASE64" | base64 -d > "$RUNNER_TEMP/certificate.p12"
+            security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+            security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
+            security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
             # Decode provisioning profile
-            echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 -d > /tmp/profile.mobileprovision
+            echo "$IOS_PROVISION_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/profile.mobileprovision"
             mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-            cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+            cp "$RUNNER_TEMP/profile.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/
 
             # Create export options plist
-            cat > /tmp/ExportOptions.plist << 'PLIST'
+            cat > "$RUNNER_TEMP/ExportOptions.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -229,18 +239,15 @@ jobs:
               <key>method</key>
               <string>ad-hoc</string>
               <key>teamID</key>
-              <string>${{ secrets.APPLE_TEAM_ID }}</string>
+              <string>${APPLE_TEAM_ID}</string>
           </dict>
           </plist>
           PLIST
 
             xcodebuild -exportArchive \
               -archivePath build/Nexus.xcarchive \
-              -exportOptionsPlist /tmp/ExportOptions.plist \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
               -exportPath build/export
-
-            # Clean up keychain
-            security delete-keychain build.keychain
           else
             echo "No signing certificates configured - creating unsigned archive only"
             # Package the .app from the archive for distribution
@@ -249,8 +256,14 @@ jobs:
             zip -r ../../../export/Nexus-iOS-unsigned.zip *.app
           fi
 
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/build.keychain-db" ]; then security delete-keychain "$RUNNER_TEMP/build.keychain-db"; fi
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
       - name: Find and upload build artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.create-release.outputs.tag }}
           files: |
@@ -263,21 +276,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: client/package-lock.json
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: 17
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
 
       - name: Install client dependencies
         run: npm ci
@@ -300,17 +313,24 @@ jobs:
           node scripts/generate-icons.mjs
 
       - name: Decode keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > client/android/nexus-release.keystore
+        # $RUNNER_TEMP is wiped at the start and end of every job, so the
+        # keystore never outlives this run on the self-hosted runner.
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/nexus-release.keystore"
 
       - name: Build signed release APK
         working-directory: client/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=$(pwd)/nexus-release.keystore \
-            -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/nexus-release.keystore" \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias=nexus-key \
-            -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
+            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
 
       - name: Find and rename APK
         id: find-apk
@@ -321,7 +341,7 @@ jobs:
           echo "apk_path=$APK_RAW" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.create-release.outputs.tag }}
           files: ${{ steps.find-apk.outputs.apk_path }}
