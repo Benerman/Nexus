@@ -809,8 +809,8 @@
     max-width: none;
     max-height: none;
     border-radius: 0;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+    padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   }
   .settings-sidebar-wrap {
     position: relative;
@@ -891,7 +891,7 @@
   }
   .settings-floating-save {
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 16px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 1005;

@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends BridgeActivity {
-    private static final int MEDIA_PERMISSION_REQUEST_CODE = 1001;
+    private static final int PERMISSION_REQUEST_CODE = 1001;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -21,8 +21,9 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Request microphone, camera, notification, and file access permissions at startup
-     * so WebRTC getUserMedia() calls and file uploads succeed without delay.
+     * Request microphone, camera, and notification permissions at startup so
+     * WebRTC getUserMedia() calls succeed without delay. File uploads go through
+     * the system picker, which needs no storage permission on Android 13+.
      */
     private void requestAllPermissions() {
         List<String> needed = new ArrayList<>();
@@ -41,30 +42,18 @@ public class MainActivity extends BridgeActivity {
             needed.add(Manifest.permission.POST_NOTIFICATIONS);
         }
 
-        // File access for uploading attachments
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ uses granular media permissions
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
-                    != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.READ_MEDIA_IMAGES);
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO)
-                    != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.READ_MEDIA_VIDEO);
-            }
-        } else {
-            // Android 12 and below
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
+        // Android 12 and below: file uploads read from shared storage
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.READ_EXTERNAL_STORAGE);
         }
 
         if (!needed.isEmpty()) {
             ActivityCompat.requestPermissions(
                     this,
                     needed.toArray(new String[0]),
-                    MEDIA_PERMISSION_REQUEST_CODE
+                    PERMISSION_REQUEST_CODE
             );
         }
     }

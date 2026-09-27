@@ -1249,7 +1249,7 @@
     gap: 4px;
     flex-wrap: nowrap;
     justify-content: center;
-    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
   .voice-ctrl-btn {
     min-width: 0;
