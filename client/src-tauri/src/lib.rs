@@ -4,6 +4,82 @@ use tauri::menu::{AboutMetadata, CheckMenuItemBuilder, MenuBuilder, MenuItemBuil
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::utils::config::BackgroundThrottlingPolicy;
 
+/// Windows taskbar theme, read from the registry. This is the "Choose your
+/// default Windows mode" setting, which is separate from the app theme.
+#[cfg(target_os = "windows")]
+mod taskbar_theme {
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegGetValueW, RegNotifyChangeKeyValue, RegOpenKeyExW, HKEY,
+        HKEY_CURRENT_USER, KEY_NOTIFY, REG_NOTIFY_CHANGE_LAST_SET, RRF_RT_REG_DWORD,
+    };
+
+    const PERSONALIZE_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    pub fn is_light() -> bool {
+        let key = wide(PERSONALIZE_KEY);
+        let value = wide("SystemUsesLightTheme");
+        let mut data: u32 = 0;
+        let mut size = std::mem::size_of::<u32>() as u32;
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                value.as_ptr(),
+                RRF_RT_REG_DWORD,
+                std::ptr::null_mut(),
+                &mut data as *mut u32 as *mut _,
+                &mut size,
+            )
+        };
+        status == ERROR_SUCCESS && data == 1
+    }
+
+    /// Calls `on_change` each time a value under the Personalize key changes.
+    /// Blocks forever, so run it on its own thread.
+    pub fn watch(mut on_change: impl FnMut()) {
+        let key = wide(PERSONALIZE_KEY);
+        let mut hkey: HKEY = std::ptr::null_mut();
+        if unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, key.as_ptr(), 0, KEY_NOTIFY, &mut hkey) }
+            != ERROR_SUCCESS
+        {
+            return;
+        }
+        while unsafe {
+            RegNotifyChangeKeyValue(hkey, 0, REG_NOTIFY_CHANGE_LAST_SET, std::ptr::null_mut(), 0)
+        } == ERROR_SUCCESS
+        {
+            on_change();
+        }
+        unsafe { RegCloseKey(hkey) };
+    }
+}
+
+/// Tray glyph that stays visible against the taskbar / menu bar.
+fn tray_icon_image() -> tauri::Result<tauri::image::Image<'static>> {
+    // macOS recolors template images to match the menu bar.
+    #[cfg(target_os = "macos")]
+    let bytes: &[u8] = include_bytes!("../icons/tray-icon@2x.png");
+
+    #[cfg(target_os = "windows")]
+    let bytes: &[u8] = if taskbar_theme::is_light() {
+        include_bytes!("../icons/tray-icon-black@2x.png")
+    } else {
+        include_bytes!("../icons/tray-icon@2x.png")
+    };
+
+    // Linux panels don't follow the desktop theme (GNOME's top bar stays dark
+    // in light mode), so use the full-color icon, which reads on either.
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let bytes: &[u8] = include_bytes!("../icons/128x128.png");
+
+    tauri::image::Image::from_bytes(bytes)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Disable DMA-BUF renderer in WebKitGTK — the default renderer causes
@@ -144,9 +220,9 @@ pub fn run() {
                 .build()?;
 
             let app_handle = app.handle().clone();
-            TrayIconBuilder::new()
-                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon@2x.png"))?)
-                .icon_as_template(true)
+            let tray = TrayIconBuilder::new()
+                .icon(tray_icon_image()?)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("Nexus")
                 .menu(&tray_menu)
                 .on_menu_event(move |_app, event| {
@@ -179,6 +255,23 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Swap the tray glyph when the taskbar switches between light and dark
+            #[cfg(target_os = "windows")]
+            std::thread::spawn(move || {
+                let mut light = taskbar_theme::is_light();
+                taskbar_theme::watch(|| {
+                    let now = taskbar_theme::is_light();
+                    if now != light {
+                        light = now;
+                        if let Ok(icon) = tray_icon_image() {
+                            let _ = tray.set_icon(Some(icon));
+                        }
+                    }
+                });
+            });
+            #[cfg(not(target_os = "windows"))]
+            let _ = tray;
 
             // ── Build Application Menu ──────────────────────────────
 

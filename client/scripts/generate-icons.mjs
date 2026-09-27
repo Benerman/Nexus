@@ -67,8 +67,9 @@ async function generateRoundedPng(size, outputPath) {
   console.log(`  ✓ ${outputPath} (${size}x${size}, rounded)`);
 }
 
-async function generateTrayPng(size, outputPath) {
-  await sharp(traySvgBuffer)
+async function generateTrayPng(size, outputPath, color = '#ffffff') {
+  const svg = Buffer.from(traySvgBuffer.toString().replace('stroke="#ffffff"', `stroke="${color}"`));
+  await sharp(svg)
     .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toFile(outputPath);
@@ -290,10 +291,14 @@ async function main() {
   // macOS ICNS (with rounded corners)
   await generateIcns(join(TAURI_ICONS_DIR, 'icon.icns'));
 
-  // macOS tray icons (white hexagon on transparent, template images)
+  // Tray icons: white hexagon on transparent. macOS treats it as a template
+  // image and recolors it; Windows uses it on a dark taskbar and the black
+  // variant on a light one.
   console.log('\nTray icons (client/src-tauri/icons/):');
   await generateTrayPng(22, join(TAURI_ICONS_DIR, 'tray-icon.png'));
   await generateTrayPng(44, join(TAURI_ICONS_DIR, 'tray-icon@2x.png'));
+  await generateTrayPng(22, join(TAURI_ICONS_DIR, 'tray-icon-black.png'), '#1a1a1a');
+  await generateTrayPng(44, join(TAURI_ICONS_DIR, 'tray-icon-black@2x.png'), '#1a1a1a');
 
   // --- Android icons ---
   await generateAndroidIcons();
