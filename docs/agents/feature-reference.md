@@ -178,7 +178,7 @@ Global rate limit: 10 req / 10s on `/api`.
 
 ### Commits
 - Imperative mood: `Add forum channel type`, `Fix voice reconnect on mobile`, `Remove deprecated webhook endpoint`
-- Must include co-author line when automated: `Co-Authored-By: Paperclip <noreply@paperclip.ing>`
+- Must include a co-author line when automated, naming the tool that made the commit
 
 ### Git Workflow
 - `develop` — primary development branch; all feature branches branch from and merge into here

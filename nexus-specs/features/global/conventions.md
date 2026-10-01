@@ -44,7 +44,7 @@ REST endpoints are only for: `POST /api/auth/*`, file uploads (`POST /api/user/a
 
 ## Files to Watch (Cross-Cutting Impact)
 
-Changes to these files affect the entire system and require Reviewer, Tester, and SecurityAuditor coverage across all features:
+Changes to these files affect the entire system and require review, test, and security coverage across all features:
 
 | File | Impact |
 |------|--------|
