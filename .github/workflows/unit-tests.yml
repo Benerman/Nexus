@@ -48,7 +48,9 @@ jobs:
         run: npm audit --audit-level=critical
 
       - name: Run unit tests with coverage
-        run: npx jest --config tests/jest.config.js --coverage --ci --forceExit --coverageThreshold='{"global":{"lines":90,"branches":80,"functions":90,"statements":90}}'
+        # No root package.json, so `npx jest` downloads the latest jest from the
+        # registry instead of the pinned 29.x, and jest 30.5 ignores --config here.
+        run: node server/node_modules/jest/bin/jest.js --config tests/jest.config.js --coverage --ci --forceExit --coverageThreshold='{"global":{"lines":90,"branches":80,"functions":90,"statements":90}}'
         env:
           NODE_ENV: test
 
