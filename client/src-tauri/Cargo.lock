@@ -2228,6 +2228,7 @@ dependencies = [
  "tauri-plugin-updater",
  "webkit2gtk",
  "webview2-com",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
