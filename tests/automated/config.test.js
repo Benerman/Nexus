@@ -11,7 +11,7 @@ const originalEnv = { ...process.env };
 // Env vars managed by these tests — deleted before each test so config.js
 // picks up its hardcoded defaults instead of values from .env files.
 const managedVars = [
-  'NODE_ENV', 'PORT', 'LOG_LEVEL', 'DATABASE_URL', 'DATABASE_SSL',
+  'NODE_ENV', 'PORT', 'LOG_LEVEL', 'DATABASE_URL', 'DATABASE_SSL', 'POSTGRES_PASSWORD',
   'REDIS_URL', 'CLIENT_URL', 'JWT_SECRET', 'SESSION_EXPIRY', 'REFRESH_EXPIRY',
   'MAX_MESSAGE_LENGTH', 'MAX_ATTACHMENTS', 'MAX_ATTACHMENT_SIZE',
   'ENABLE_GUEST_MODE', 'RATE_LIMIT_MESSAGES', 'RATE_LIMIT_WINDOW',
@@ -207,5 +207,68 @@ describe('config.admin defaults', () => {
   test('preserves case from env var', () => {
     const config = requireCleanConfig({ PLATFORM_ADMIN: 'AdminUser' });
     expect(config.admin.platformAdminUsername).toBe('AdminUser');
+  });
+});
+
+describe('production fail-fast checks', () => {
+  const prodSecrets = {
+    NODE_ENV: 'production',
+    JWT_SECRET: 'a-real-production-secret',
+    DATABASE_URL: 'postgresql://user:pw@db:5432/nexus_db',
+    POSTGRES_PASSWORD: 'pw',
+  };
+
+  let exitSpy;
+  let errorSpy;
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('exits when all required secrets are missing in production', () => {
+    requireCleanConfig({ NODE_ENV: 'production' });
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const message = errorSpy.mock.calls[0][0];
+    expect(message).toContain('Missing required environment variables for production');
+    expect(message).toContain('JWT_SECRET');
+    expect(message).toContain('DATABASE_URL');
+    expect(message).toContain('POSTGRES_PASSWORD');
+  });
+
+  test('names only the secrets that are actually missing', () => {
+    const { JWT_SECRET, ...rest } = prodSecrets;
+    requireCleanConfig(rest);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const message = errorSpy.mock.calls[0][0];
+    expect(message).toContain('JWT_SECRET');
+    expect(message).not.toContain('DATABASE_URL');
+    expect(message).not.toContain('POSTGRES_PASSWORD');
+  });
+
+  test('exits when production still uses the default JWT_SECRET', () => {
+    requireCleanConfig({ ...prodSecrets, JWT_SECRET: 'dev-secret-key' });
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'JWT_SECRET must be changed from default value in production'
+    );
+  });
+
+  test('starts up cleanly when production secrets are all set', () => {
+    const config = requireCleanConfig(prodSecrets);
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(config.server.env).toBe('production');
+    expect(config.security.jwtSecret).toBe('a-real-production-secret');
+  });
+
+  test('skips the fail-fast checks outside production', () => {
+    requireCleanConfig({ NODE_ENV: 'development' });
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });
